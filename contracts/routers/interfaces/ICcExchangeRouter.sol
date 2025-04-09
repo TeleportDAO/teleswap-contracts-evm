@@ -392,6 +392,13 @@ interface ICcExchangeRouter {
         address[] memory _path
     ) external payable returns(bool);
 
+    function wrapAndSwapWithCustomBridgeFee(
+        TxAndProof memory _txAndProof,
+        bytes calldata _lockerLockingScript,
+        address[] memory _path,
+        uint256 _customBridgeFee
+    ) external payable returns(bool);
+
     // function fillTx(
     //     bytes32 _txId,
     //     address _recipient,
