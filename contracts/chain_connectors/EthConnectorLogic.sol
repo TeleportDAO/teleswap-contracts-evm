@@ -48,6 +48,13 @@ contract EthConnectorLogic is
         _setAcross(_across);
     }
 
+    /// @notice Setter for Across Admin
+    function setAcrossAdmin(
+        address _acrossAdmin
+    ) external onlyOwner {
+        acrossAdmin = _acrossAdmin;
+    }
+
     /// @notice Setter for TargetChainConnectorProxy
     function setTargetChainConnectorProxy(
         address _targetChainConnectorProxy
@@ -181,19 +188,28 @@ contract EthConnectorLogic is
         }
 
         // Call across for transferring token and msg
+        bytes memory callData = abi.encodeWithSignature(
+            "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
+            acrossAdmin, // depositor
+            targetChainConnectorProxy, // recipient
+            _token, // inputToken
+            address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
+            _amount, // inputAmount
+            _amount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18, // outputAmount
+            targetChainId, // destinationChainId
+            address(0), // exclusiveRelayer (none for now)
+            uint32(block.timestamp), // quoteTimestamp
+            uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+            0, // exclusivityDeadline
+            _message // message
+        );
+
+        // Append integrator identifier
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
+
         Address.functionCallWithValue(
             across,
-            abi.encodeWithSignature(
-                "deposit(address,address,uint256,uint256,int64,uint32,bytes,uint256)",
-                targetChainConnectorProxy,
-                _token,
-                _amount,
-                targetChainId,
-                _relayerFeePercentage,
-                uint32(block.timestamp),
-                _message,
-                115792089237316195423570985008687907853269984665640564039457584007913129639935
-            ),
+            finalCallData,
             msg.value
         );
     }

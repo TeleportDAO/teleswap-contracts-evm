@@ -17,4 +17,5 @@ abstract contract EthConnectorStorage is IEthConnector {
     uint public uniqueCounter;
     uint256 public currChainId;
     uint256 public unwrapFee;
+    address public acrossAdmin;
 }

@@ -32,5 +32,5 @@ abstract contract PolyConnectorStorage is IPolyConnector {
     // New variables for RUNE
     address public override runeRouterProxy;
 
-    address public retryerAdmin;
+    address public acrossAdmin;
 }

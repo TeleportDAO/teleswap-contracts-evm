@@ -14,6 +14,7 @@ import "../lockersManager/interfaces/ILockersManager.sol";
 import "./PolyConnectorStorage.sol";
 import "./interfaces/IPolyConnector.sol";
 import "../rune_router/interfaces/IRuneRouter.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 contract PolyConnectorLogic is
     IPolyConnector,
@@ -74,11 +75,11 @@ contract PolyConnectorLogic is
         across = _across;
     }
 
-    /// @notice Setter for Retyer Admin
-    function setRetyerAdmin(
-        address _retryerAdmin
+    /// @notice Setter for Across Admin
+    function setAcrossAdmin(
+        address _acrossAdmin
     ) external onlyOwner {
-        retryerAdmin = _retryerAdmin;
+        acrossAdmin = _acrossAdmin;
     }
 
     /// @notice Process requests coming from Ethereum (using Across V3)
@@ -313,7 +314,7 @@ contract PolyConnectorLogic is
         int64 _relayerFeePercentage
     ) external override nonReentrant {
         require(
-            msg.sender == retryerAdmin || msg.sender == owner(),
+            msg.sender == acrossAdmin || msg.sender == owner(),
             "PolygonConnectorLogic: not authorized"
         );
 
@@ -602,19 +603,30 @@ contract PolyConnectorLogic is
         uint256 _amount,
         int64 _relayerFeePercentage
     ) internal {
-        bytes memory nullData;
         IERC20(_token).approve(across, _amount);
 
-        SpokePoolInterface(across).depositFor(
-            _user,
-            _user,
-            _token,
-            _amount,
-            _chainId,
-            _relayerFeePercentage,
-            uint32(block.timestamp),
-            nullData,
-            115792089237316195423570985008687907853269984665640564039457584007913129639935
+        bytes memory callData = abi.encodeWithSignature(
+            "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
+            acrossAdmin, // depositor
+            _user, // recipient
+            _token, // inputToken
+            address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
+            _amount, // inputAmount
+            _amount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18, // outputAmount
+            _chainId, // destinationChainId
+            address(0), // exclusiveRelayer (none for now)
+            uint32(block.timestamp), // quoteTimestamp
+            uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+            0, // exclusivityDeadline
+            "0x" // message
+        );
+
+        // Append integrator identifier
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
+
+        Address.functionCall(
+            across,
+            finalCallData
         );
     }
 

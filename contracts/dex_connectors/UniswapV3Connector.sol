@@ -98,8 +98,22 @@ contract UniswapV3Connector is
         }
     }
 
+    function convertedPathReversed(
+        address[] memory _path
+    ) public view returns (bytes memory packedData) {
+        packedData = abi.encodePacked(_path[_path.length - 1]);
+
+        for (uint i = _path.length - 1; i > 0; i--) {
+            address firstToken = _path[i];
+            address secondToken = _path[i - 1];
+            uint24 _feeTier = feeTier[firstToken][secondToken];
+            packedData = abi.encodePacked(packedData, _feeTier, secondToken);
+        }
+    }
+
     /// @notice Return the needed input amount to get the output amount
-    /// @dev Return (false, 0) if DEX cannot give the output amount
+    /// @dev Return (false, 0) if DEX cannot give the output amount. 
+    ///      Note: No need to reverse the path for this function
     function getExactOutput(
         address[] memory _path,
         uint256 _amountOut
@@ -108,7 +122,7 @@ contract UniswapV3Connector is
             return (false, 0);
         }
         (uint amountIn, , , ) = IQuoterV2(quoterAddress).quoteExactOutput(
-            convertedPath(_path),
+            convertedPathReversed(_path),
             _amountOut
         );
         return (true, amountIn);
