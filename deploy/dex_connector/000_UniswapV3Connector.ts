@@ -1,7 +1,6 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import verify from "../../helper-functions";
-import config from "config";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const { deployments, getNamedAccounts, network } = hre;
@@ -12,9 +11,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         network.name == "hardhat" ||
         network.name != "bob"
     ) {
-        const uniswapV3SwapRouter = config.get("uniswap_v3_swap_router");
-        const uniswapV3Quoter = config.get("uniswap_v3_quoter");
-
         const deployedContract = await deploy("UniswapV3Connector", {
             from: deployer,
             log: true,
