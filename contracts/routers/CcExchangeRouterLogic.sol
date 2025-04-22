@@ -577,51 +577,30 @@ contract CcExchangeRouterLogic is
         uint256 _acrossRelayerFee
     ) private {
         IERC20(_token).approve(across, _amount);
-        SpokePoolInterface(across).deposit(
-            _user,
-            _token,
-            _amount,
-            getDestChainId(_chainId),
-            int64(uint64(_acrossRelayerFee)),
-            uint32(block.timestamp),
-            "0x", // Null data
-            115792089237316195423570985008687907853269984665640564039457584007913129639935
+        bytes memory callData = abi.encodeWithSignature(
+            "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
+            acrossAdmin, // depositor
+            _user, // recipient
+            _token, // inputToken
+            address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
+            _amount, // inputAmount
+            _amount * (1e18 - _acrossRelayerFee) / 1e18, // outputAmount
+            getDestChainId(_chainId), // destinationChainId
+            address(0), // exclusiveRelayer (none for now)
+            uint32(block.timestamp), // quoteTimestamp
+            uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+            0, // exclusivityDeadline
+            "0x" // message (null data)
+        );
+
+        // Append integrator identifier
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
+
+        Address.functionCall(
+            across,
+            finalCallData
         );
     }
-
-    // /// @notice Send tokens to the destination using Across
-    // function _sendTokenToOtherChain(
-    //     uint256 _chainId,
-    //     address _token,
-    //     uint256 _amount,
-    //     address _user,
-    //     uint256 _acrossRelayerFee
-    // ) private {
-    //     IERC20(_token).approve(across, _amount);
-    //     bytes memory callData = abi.encodeWithSignature(
-    //         "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
-    //         acrossAdmin, // depositor
-    //         _user, // recipient
-    //         _token, // inputToken
-    //         address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
-    //         _amount, // inputAmount
-    //         _amount * (1e18 - uint256(uint64(_acrossRelayerFee))) / 1e18, // outputAmount
-    //         getDestChainId(_chainId), // destinationChainId
-    //         address(0), // exclusiveRelayer (none for now)
-    //         uint32(block.timestamp), // quoteTimestamp
-    //         uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
-    //         0, // exclusivityDeadline
-    //         "0x" // message (null data)
-    //     );
-
-    //     // Append integrator identifier
-    //     bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
-
-    //     Address.functionCall(
-    //         across,
-    //         finalCallData
-    //     );
-    // }
 
     function _wrapAndSwap(
         address _exchangeConnector,
