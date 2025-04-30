@@ -209,8 +209,8 @@ const config: HardhatUserConfig = {
 				network: "bob",
 				chainId: 60808,
 				urls: {
-					apiURL: "https://explorer.gobob.xyz/api",
-					browserURL: "https://explorer.gobob.xyz/"
+					apiURL: "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/BOB",
+					browserURL: "https://www.oklink.com/bob"
 				}
 			},
 			{

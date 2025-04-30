@@ -414,6 +414,9 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: already filled"
         );
 
+        // Record the filler address
+        fillerAddress[_txId][_recipient][_token][_amount][_destinationChainId][_bridgeFee] = _msgSender();
+
         if (_destinationChainId == chainId) { // Requests that belongs to the current chain
             if (_token == NATIVE_TOKEN) {
                 // Native token is sent to the recipient

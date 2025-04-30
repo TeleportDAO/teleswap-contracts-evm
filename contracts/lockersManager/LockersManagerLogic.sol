@@ -919,6 +919,54 @@ contract LockersManagerLogic is
     /// @notice Decreases collateral of the locker
     /// @param _removingCollateralTokenAmount Amount of removed collateral
     /// @return True if collateral is removed successfully
+    function removeCollateralByOwner(
+        address _lockerTargetAddress,
+        uint256 _removingCollateralTokenAmount
+    )
+        external
+        payable
+        onlyOwner
+        nonZeroValue(_removingCollateralTokenAmount)
+        nonReentrant
+        returns (bool)
+    {
+        LockersManagerLib.removeFromCollateral(
+            lockersMapping[_lockerTargetAddress],
+            libConstants,
+            libParams,
+            lockerReliabilityFactor[_lockerTargetAddress],
+            lockerCollateralToken[_lockerTargetAddress],
+            collateralDecimal[lockerCollateralToken[_lockerTargetAddress]],
+            _removingCollateralTokenAmount
+        );
+
+
+        if (lockerCollateralToken[_lockerTargetAddress] == NATIVE_TOKEN) {
+            Address.sendValue(
+                payable(_msgSender()),
+                _removingCollateralTokenAmount
+            );
+        } else {
+            IERC20(lockerCollateralToken[_lockerTargetAddress]).safeTransfer(
+                _msgSender(),
+                _removingCollateralTokenAmount
+            );
+        }
+
+        emit CollateralRemoved(
+            _lockerTargetAddress,
+            lockerCollateralToken[_lockerTargetAddress],
+            _removingCollateralTokenAmount,
+            lockersMapping[_lockerTargetAddress].collateralTokenLockedAmount,
+            block.timestamp
+        );
+
+        return true;
+    }
+
+    /// @notice Decreases collateral of the locker
+    /// @param _removingCollateralTokenAmount Amount of removed collateral
+    /// @return True if collateral is removed successfully
     function removeCollateral(
         uint256 _removingCollateralTokenAmount
     )
