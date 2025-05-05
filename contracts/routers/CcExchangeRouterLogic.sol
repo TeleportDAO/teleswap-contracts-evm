@@ -403,6 +403,12 @@ contract CcExchangeRouterLogic is
         uint _destinationChainId,
         uint _bridgeFee
     ) external payable nonReentrant {
+        // Checks that the request has not been processed before normally
+        require(
+            !ccExchangeRequests[_txId].isUsed,
+            "ExchangeRouter: already processed"
+        );
+
         /* 
             If another filler has filled the request with the same parameters,
             the request will be rejected
@@ -435,6 +441,15 @@ contract CcExchangeRouterLogic is
                 );
             }
         } else { // Requests that belongs to the other chain
+            // Transfer the token from the filler to the contract
+            require(
+                IERC20(_token).transferFrom(
+                    _msgSender(),
+                    address(this),
+                    _amount
+                ),
+                "ExchangeRouter: no allowance"
+            );
             _sendTokenToOtherChain(
                 _destinationChainId,
                 _token,
