@@ -834,8 +834,8 @@ contract BurnRouterLogic is
 
         remainingAmount = _amount - _protocolFee - _thirdPartyFee - bitcoinFee;
 
-        // Note: to avoid dust amount, we require remainingAmount to be greater than 1000
-        require(remainingAmount >= 1000, "BurnRouterLogic: low amount");
+        // Note: to avoid dust amount, we require remainingAmount to be greater than DUST_SATOSHI_AMOUNT
+        require(remainingAmount >= DUST_SATOSHI_AMOUNT, "BurnRouterLogic: low amount");
 
         // Send protocol fee
         if (_protocolFee > 0) {
