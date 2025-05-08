@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0 <=0.8.4;
 
-import "@across-protocol/contracts-v2/contracts/interfaces/SpokePoolInterface.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -82,6 +81,13 @@ contract PolyConnectorLogic is
         acrossAdmin = _acrossAdmin;
     }
 
+    /// @notice Setter for Gas Limit
+    function setGasLimit(
+        uint256 _gasLimit
+    ) external onlyOwner {
+        gasLimit = _gasLimit;
+    }
+
     /// @notice Process requests coming from Ethereum (using Across V3)
     function handleV3AcrossMessage(
         address _tokenSent,
@@ -90,7 +96,7 @@ contract PolyConnectorLogic is
         bytes memory _message
     ) external override nonReentrant {
         // To avoid gas limit issues
-        require(gasleft() >= 1800000, "PolygonConnectorLogic: low gas");
+        require(gasleft() >= gasLimit, "PolygonConnectorLogic: low gas");
 
         // Check the msg origin
         require(msg.sender == across, "PolygonConnectorLogic: not across");

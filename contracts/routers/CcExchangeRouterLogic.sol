@@ -13,7 +13,6 @@ import "../routers/BurnRouterStorage.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "solidity-bytes-utils/contracts/BytesLib.sol";
-import "@across-protocol/contracts-v2/contracts/interfaces/SpokePoolInterface.sol";
 
 contract CcExchangeRouterLogic is
     CcExchangeRouterStorage,
@@ -169,19 +168,6 @@ contract CcExchangeRouterLogic is
         _setChainIdMapping(_destinationChain, _mappedId);
     }
 
-    /// @notice Support a new chain
-    /// @dev Users can only submit exchange requests for supported chains.
-    function supportChain(uint256 _chainId) external override onlyOwner {
-        emit ChainAdded(_chainId);
-        isChainSupported[_chainId] = true;
-    }
-
-    /// @notice Remove a chain from supported chains
-    function removeChain(uint256 _chainId) external override onlyOwner {
-        emit ChainRemoved(_chainId);
-        isChainSupported[_chainId] = false;
-    }
-
     /// @notice Setter for Across Admin
     function setAcrossAdmin(address _acrossAdmin) external onlyOwner {
         acrossAdmin = _acrossAdmin;
@@ -252,6 +238,11 @@ contract CcExchangeRouterLogic is
         // Find destination chain Id (the final chain that user gets its token on it)
         uint256 destinationChainId = getDestChainId(
             extendedCcExchangeRequests[txId].chainId
+        );
+
+        require(
+            destinationChainId != 0,
+            "ExchangeRouter: invalid chain id"
         );
 
         ccExchangeRequest memory request = ccExchangeRequests[txId];
@@ -402,7 +393,7 @@ contract CcExchangeRouterLogic is
         uint _amount,
         uint _destinationChainId,
         uint _bridgeFee
-    ) external payable nonReentrant {
+    ) external payable nonReentrant override {
         // Checks that the request has not been processed before normally
         require(
             !ccExchangeRequests[_txId].isUsed,

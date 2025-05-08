@@ -113,24 +113,6 @@ interface ICcExchangeRouter {
 
     // Events
 
-    event TokenAdded(
-        uint chainId,
-        address newToken
-    );
-
-    event TokenRemoved(
-        uint chainId,
-        address oldToken
-    );
-
-    event ChainAdded(
-        uint newChain
-    );
-
-    event ChainRemoved(
-        uint oldChain
-    );
-
     event AcrossUpdated(
         address oldAcross,
         address newAcross
@@ -139,11 +121,6 @@ interface ICcExchangeRouter {
     event BurnRouterUpdated(
         address oldBurnRouter,
         address newBurnRouter
-    );
-
-	event NewFillerWithdrawInterval(
-        uint oldFillerWithdrawInterval, 
-        uint newFillerWithdrawInterval
     );
 
     /// @notice Emits when a new filler fills a request
@@ -165,26 +142,6 @@ interface ICcExchangeRouter {
         address filler,
         bytes32 txId,
         uint amount
-    );
-
-    /// @notice Emits when filler withdraws teleBTC
-    /// @param amount Total sent tokens
-    /// @param remainingAmount Amount of unused token
-    /// @param token that filler sent
-    /// @param filler Address of filler
-    /// @param fillIdx Index of filling
-    /// @param txId that filler filled
-    /// @param reqMintedTeleBtc Total teleBTC minted by txId
-    /// @param sentTeleBtc Share of this filler from total minted teleBTC
-    event FillerTeleBtcSent(
-        uint amount,
-        uint remainingAmount,
-        address token,
-        address filler,
-        uint fillIdx,
-        bytes32 txId,
-        uint reqMintedTeleBtc,
-        uint sentTeleBtc
     );
 
     /// @notice Emits when a cc exchange request gets done
@@ -372,8 +329,6 @@ interface ICcExchangeRouter {
 
 	function setProtocolPercentageFee(uint _protocolPercentageFee) external;
 
-    // function setFillerWithdrawInterval(uint _fillerWithdrawInterval) external;
-
     function setAcross(address _across) external;
 
     function setBurnRouter(address _burnRouter) external;
@@ -399,21 +354,14 @@ interface ICcExchangeRouter {
         uint256 _customBridgeFee
     ) external payable returns(bool);
 
-    // function fillTx(
-    //     bytes32 _txId,
-    //     address _recipient,
-    //     address _token,
-    //     uint _amount,
-    //     uint _requestAmount
-    // ) external payable;
-
-    // function getTeleBtcForFill(
-    //    bytes32 _txId
-    // ) external returns (bool);
-
-    function supportChain(uint _chainId) external;
-
-    function removeChain(uint _chainId) external;
+    function fillTx(
+        bytes32 _txId,
+        address _recipient,
+        address _token,
+        uint _amount,
+        uint _destinationChainId,
+        uint _bridgeFee
+    ) external payable;
 
     function refundByOwnerOrAdmin(
         bytes32 _txId,

@@ -33,4 +33,6 @@ abstract contract PolyConnectorStorage is IPolyConnector {
     address public override runeRouterProxy;
 
     address public acrossAdmin;
+
+    uint256 public gasLimit;
 }
