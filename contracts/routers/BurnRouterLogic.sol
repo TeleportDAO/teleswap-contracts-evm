@@ -769,7 +769,7 @@ contract BurnRouterLogic is
                         burnRequests[_lockerTargetAddress][_burnReqIndex]
                             .scriptType
                     );
-
+                    
                 // Checks that locker has sent required teleBTC amount
                 if (
                     burnRequests[_lockerTargetAddress][_burnReqIndex]

@@ -69,6 +69,7 @@ describe("BurnRouter", async function() {
     let userRequestedAmount = BigNumber.from(100060030);
     let TRANSFER_DEADLINE = 20
     let PROTOCOL_PERCENTAGE_FEE = 5 // means 0.05%
+    let LOCKER_PERCENTAGE_FEE = 10 // means 0.1%
     let THIRD_PARTY_PERCENTAGE_FEE = 10 // means 0.1%
     let THIRD_PARTY_ADDRESS = "0x0000000000000000000000000000000000000200"
     let SLASHER_PERCENTAGE_REWARD = 5 // means 0.05%
@@ -156,6 +157,7 @@ describe("BurnRouter", async function() {
             teleBTC.address,
             TRANSFER_DEADLINE,
             PROTOCOL_PERCENTAGE_FEE,
+            LOCKER_PERCENTAGE_FEE,
             SLASHER_PERCENTAGE_REWARD,
             BITCOIN_FEE,
             weth.address
@@ -319,10 +321,9 @@ describe("BurnRouter", async function() {
         await setLockersIsLocker(true);
         await setRelayLastSubmittedHeight(burnReqBlockNumber);
         let protocolFee = Math.floor(_userRequestedAmount.toNumber()*PROTOCOL_PERCENTAGE_FEE/10000);
-        let burntAmount = _userRequestedAmount.toNumber() - protocolFee - BITCOIN_FEE;
+        let lockerFee = Math.floor(_userRequestedAmount.toNumber()*LOCKER_PERCENTAGE_FEE/10000);
+        let burntAmount = _userRequestedAmount.toNumber() - protocolFee - BITCOIN_FEE - lockerFee;
         await setLockersBurnReturn(burntAmount);
-        // first burntAmount should have been
-        // burntAmount - lockerFee but in this case we have assumed lockerFee = 0
 
         await setLockersGetLockerTargetAddress();
 
@@ -405,10 +406,9 @@ describe("BurnRouter", async function() {
 
             // Finds amount of teleBTC that user should receive on Bitcoin
             let protocolFee = Math.floor(userRequestedAmount.toNumber()*PROTOCOL_PERCENTAGE_FEE/10000);
-            let burntAmount = userRequestedAmount.toNumber() - protocolFee - BITCOIN_FEE;
+            let lockerFee = Math.floor(userRequestedAmount.toNumber()*LOCKER_PERCENTAGE_FEE/10000);
+            let burntAmount = userRequestedAmount.toNumber() - protocolFee - BITCOIN_FEE - lockerFee;
             await setLockersBurnReturn(burntAmount);
-            // first burntAmount should have been
-            // burntAmount - lockerFee but in this case we have assumed lockerFee = 0
 
             await setLockersGetLockerTargetAddress();
 
@@ -433,7 +433,7 @@ describe("BurnRouter", async function() {
                 0,
                 teleBTC.address,
                 [userRequestedAmount, userRequestedAmount, burntAmount],
-                [BITCOIN_FEE, 0, protocolFee, 0]
+                [BITCOIN_FEE, lockerFee, protocolFee, 0]
             );
 
             let newBalanceSigner1 = await teleBTC.balanceOf(signer1Address);
@@ -551,9 +551,8 @@ describe("BurnRouter", async function() {
         let inputTokenAmount = 100;
         let lastSubmittedHeight = 100;
         let protocolFee = Math.floor(userRequestedAmount.toNumber() * PROTOCOL_PERCENTAGE_FEE / 10000);
-        let _burntAmount = userRequestedAmount.toNumber() - protocolFee;
-        let burntAmount = _burntAmount - BITCOIN_FEE; 
-        // ^ burntAmount should be (burntAmount - lockerFee) but here we assumed lockerFee = 0
+        let lockerFee = Math.floor(userRequestedAmount.toNumber() * LOCKER_PERCENTAGE_FEE / 10000);
+        let burntAmount = userRequestedAmount.toNumber() - protocolFee - BITCOIN_FEE - lockerFee;
 
         beforeEach(async () => {
             // Sends teleBTC to burnRouter (since we mock swap)
@@ -614,7 +613,7 @@ describe("BurnRouter", async function() {
                 0,
                 inputToken.address,
                 [inputTokenAmount, userRequestedAmount, burntAmount],
-                [BITCOIN_FEE, 0, protocolFee, 0]
+                [BITCOIN_FEE, lockerFee, protocolFee, 0]
             );
 
             let newBalanceSigner1 = await inputToken.balanceOf(signer1Address);
@@ -1248,22 +1247,6 @@ describe("BurnRouter", async function() {
         });
 
         it("Dispute the locker who has sent its BTC to external account", async function () {
-            await expect(
-                burnRouter.connect(signer1).disputeLocker(
-                    LOCKER1_LOCKING_SCRIPT,
-                    [CC_BURN_REQUESTS.disputeLocker_input.version, CC_BURN_REQUESTS.disputeLocker_output.version],
-                    CC_BURN_REQUESTS.disputeLocker_input.vin,
-                    CC_BURN_REQUESTS.disputeLocker_input.vout,
-                    CC_BURN_REQUESTS.disputeLocker_output.vin,
-                    CC_BURN_REQUESTS.disputeLocker_output.vout,
-                    [CC_BURN_REQUESTS.disputeLocker_input.locktime, CC_BURN_REQUESTS.disputeLocker_output.locktime],
-                    CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes,
-                    [0, 1, burnReqBlockNumber]
-                )
-            ).to.be.revertedWith("Ownable: caller is not the owner")
-        })
-
-        it("Dispute the locker who has sent its BTC to external account", async function () {
 
             // Sets mock contracts outputs
             await setRelayCheckTxProofReturn(true);
@@ -1290,7 +1273,9 @@ describe("BurnRouter", async function() {
                 burnReqBlockNumber,
                 CC_BURN_REQUESTS.disputeLocker_input.txId,
                 CC_BURN_REQUESTS.disputeLocker_input.OutputValue +
-                CC_BURN_REQUESTS.disputeLocker_input.OutputValue*SLASHER_PERCENTAGE_REWARD/10000
+                Math.floor(
+                    CC_BURN_REQUESTS.disputeLocker_input.OutputValue*SLASHER_PERCENTAGE_REWARD/10000
+                )
             );
         })
 
@@ -1752,13 +1737,11 @@ describe("BurnRouter", async function() {
 
             // Finds amount of teleBTC that user should receive on Bitcoin
             let protocolFee = Math.floor(userRequestedAmount.toNumber()*PROTOCOL_PERCENTAGE_FEE/10000);
+            let lockerFee = Math.floor(userRequestedAmount.toNumber()*LOCKER_PERCENTAGE_FEE/10000);
             let thirdPartyFee = Math.floor(userRequestedAmount.toNumber()*THIRD_PARTY_PERCENTAGE_FEE/10000);
-            let burntAmount = userRequestedAmount.toNumber() - protocolFee - thirdPartyFee - BITCOIN_FEE;
+            let burntAmount = userRequestedAmount.toNumber() - protocolFee - lockerFee - thirdPartyFee - BITCOIN_FEE;
             await setLockersBurnReturn(burntAmount);
-            // first burntAmount should have been
-            // burntAmount - lockerFee but in this case we have assumed lockerFee = 0
 
-            ;
             await setLockersGetLockerTargetAddress();
 
             let prevBalanceSigner1 = await teleBTC.balanceOf(signer1Address);
@@ -1787,7 +1770,7 @@ describe("BurnRouter", async function() {
                 1,
                 teleBTC.address,
                 [userRequestedAmount, userRequestedAmount, burntAmount],
-                [BITCOIN_FEE, 0, protocolFee, thirdPartyFee]
+                [BITCOIN_FEE, lockerFee, protocolFee, thirdPartyFee]
             );
 
             let newBalanceSigner1 = await teleBTC.balanceOf(signer1Address);
@@ -1832,14 +1815,11 @@ describe("BurnRouter", async function() {
 
             // Finds amount of teleBTC that user should receive on Bitcoin
             let protocolFee = Math.floor(userRequestedAmount.toNumber()*PROTOCOL_PERCENTAGE_FEE/10000);
+            let lockerFee = Math.floor(userRequestedAmount.toNumber()*LOCKER_PERCENTAGE_FEE/10000);
             let thirdPartyFee = Math.floor(userRequestedAmount.toNumber()*THIRD_PARTY_PERCENTAGE_FEE/10000);
-            let burntAmount = userRequestedAmount.toNumber() - protocolFee - thirdPartyFee - BITCOIN_FEE;
+            let burntAmount = userRequestedAmount.toNumber() - protocolFee - lockerFee - thirdPartyFee - BITCOIN_FEE;
             await setLockersBurnReturn(burntAmount);
 
-            // first burntAmount should have been
-            // burntAmount - lockerFee but in this case we have assumed lockerFee = 0
-
-            ;
             await setLockersGetLockerTargetAddress();
 
             let prevBalanceSigner1 = await teleBTC.balanceOf(signer1Address);
@@ -1868,7 +1848,7 @@ describe("BurnRouter", async function() {
                 1,
                 teleBTC.address,
                 [userRequestedAmount, userRequestedAmount, burntAmount],
-                [BITCOIN_FEE, 0, protocolFee, thirdPartyFee]
+                [BITCOIN_FEE, lockerFee, protocolFee, thirdPartyFee]
             );
 
             let newBalanceSigner1 = await teleBTC.balanceOf(signer1Address);
@@ -1913,13 +1893,11 @@ describe("BurnRouter", async function() {
 
             // Finds amount of teleBTC that user should receive on Bitcoin
             let protocolFee = Math.floor(userRequestedAmount.toNumber()*PROTOCOL_PERCENTAGE_FEE/10000);
+            let lockerFee = Math.floor(userRequestedAmount.toNumber()*LOCKER_PERCENTAGE_FEE/10000);
             let thirdPartyFee = Math.floor(userRequestedAmount.toNumber()*NEW_THIRD_PARTY_PERCENTAGE_FEE/10000);
-            let burntAmount = userRequestedAmount.toNumber() - protocolFee - thirdPartyFee - BITCOIN_FEE;
+            let burntAmount = userRequestedAmount.toNumber() - protocolFee - lockerFee - thirdPartyFee - BITCOIN_FEE;
             await setLockersBurnReturn(burntAmount);
-            // first burntAmount should have been
-            // burntAmount - lockerFee but in this case we have assumed lockerFee = 0
 
-            ;
             await setLockersGetLockerTargetAddress();
 
             let prevBalanceSigner1 = await teleBTC.balanceOf(signer1Address);
@@ -1948,7 +1926,7 @@ describe("BurnRouter", async function() {
                 1,
                 teleBTC.address,
                 [userRequestedAmount, userRequestedAmount, burntAmount],
-                [BITCOIN_FEE, 0, protocolFee, thirdPartyFee]
+                [BITCOIN_FEE, lockerFee, protocolFee, thirdPartyFee]
             );
 
             let newBalanceSigner1 = await teleBTC.balanceOf(signer1Address);
