@@ -259,6 +259,14 @@ contract BurnRouterLogic is
         wrappedNativeToken = _wrappedNativeToken;
     }
 
+    /// @notice Setter for reward distributor
+    /// @dev This contract distributes locker fee between locker and stakers
+    function setRewardDistributor(
+        address _rewardDistributor
+    ) external override onlyOwner {
+        rewardDistributor = _rewardDistributor;
+    }
+
     /// @notice Records users burn request
     /// @dev After submitting the burn request, Locker has a limited time
     ///      to send BTC and provide burn proof

@@ -202,9 +202,9 @@ contract RuneRouterLogic is
         across = _across;
     }
 
-    /// @notice Setter for Retyer Admin
-    function setRetyerAdmin(address _retryerAdmin) external onlyOwner {
-        retryerAdmin = _retryerAdmin;
+    /// @notice Setter for Across Admin
+    function setAcrossAdmin(address _acrossAdmin) external onlyOwner {
+        acrossAdmin = _acrossAdmin;
     }
 
     /// @notice Deploy wrapped Rune token contract
@@ -599,7 +599,7 @@ contract RuneRouterLogic is
         bytes memory _userScript
     ) external override nonReentrant {
         require(
-            msg.sender == retryerAdmin || msg.sender == owner(),
+            msg.sender == acrossAdmin || msg.sender == owner(),
             "ExchangeRouter: not authorized"
         );
 
@@ -761,15 +761,28 @@ contract RuneRouterLogic is
     ) private {
         IRune(_token).approve(across, _amount);
 
-        SpokePoolInterface(across).deposit(
-            _user,
-            _token,
-            _amount,
-            _chainId,
-            int64(uint64(_acrossRelayerFee)),
-            uint32(block.timestamp),
-            "0x", // Null data
-            115792089237316195423570985008687907853269984665640564039457584007913129639935
+        bytes memory callData = abi.encodeWithSignature(
+            "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
+            acrossAdmin, // depositor
+            _user, // recipient
+            _token, // inputToken
+            address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
+            _amount, // inputAmount
+            _amount * (1e18 - _acrossRelayerFee) / 1e18, // outputAmount
+            _chainId, // destinationChainId
+            address(0), // exclusiveRelayer (none for now)
+            uint32(block.timestamp), // quoteTimestamp
+            uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+            0, // exclusivityDeadline
+            "0x" // message (null data)
+        );
+
+        // Append integrator identifier
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
+
+        Address.functionCall(
+            across,
+            finalCallData
         );
     }
 }

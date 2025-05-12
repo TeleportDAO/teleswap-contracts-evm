@@ -342,6 +342,8 @@ interface ICcExchangeRouter {
     function setWrappedNativeToken(address _wrappedNativeToken) external;
 
     function setChainIdMapping(uint _destinationChain, uint _mappedId) external;
+
+    function setRewardDistributor(address _rewardDistributor) external;
     
     function wrapAndSwap(
         TxAndProof memory _txAndProof,

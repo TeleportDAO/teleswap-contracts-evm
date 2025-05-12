@@ -158,14 +158,6 @@ contract LockersManagerLogic is
                 .isLocker;
     }
 
-    /// @notice Setter for reward distributor
-    /// @dev This contract distributes locker fee between locker and stakers
-    function setRewardDistributor(
-        address _rewardDistributor
-    ) external override onlyOwner {
-        rewardDistributor = _rewardDistributor;
-    }
-
     /// @notice Update TST contract address
     function setTST(address _TST) public override onlyOwner {
         emit NewTST(TeleportSystemToken, _TST);

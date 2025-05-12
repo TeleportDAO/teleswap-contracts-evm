@@ -195,6 +195,8 @@ interface IBurnRouter {
 
     function setNetworkFeeOracle(address _networkFeeOracle) external;
 
+    function setRewardDistributor(address _rewardDistributor) external;
+
     function setThirdPartyAddress(
         uint _thirdPartyId,
         address _thirdPartyAddress

@@ -39,5 +39,5 @@ abstract contract RuneRouterStorage is IRuneRouter {
     
     address public across;
 
-    address public retryerAdmin;
+    address public acrossAdmin;
 }

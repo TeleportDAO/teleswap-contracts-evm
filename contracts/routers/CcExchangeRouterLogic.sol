@@ -182,6 +182,14 @@ contract CcExchangeRouterLogic is
         acrossAdmin = _acrossAdmin;
     }
 
+    /// @notice Setter for reward distributor
+    /// @dev This contract distributes locker fee between locker and stakers
+    function setRewardDistributor(
+        address _rewardDistributor
+    ) external override onlyOwner {
+        rewardDistributor = _rewardDistributor;
+    }
+
     /// @notice Check if a request has been processed
     /// @dev It prevents re-submitting a processed request
     /// @param _txId The transaction ID of request on Bitcoin
