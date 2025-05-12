@@ -35,7 +35,7 @@ describe("Lockers", async function() {
     let btcAmountToSlash = BigNumber.from(10).pow(8).mul(1)
     let collateralRatio = 20000;
     let liquidationRatio = 15000;
-    const LOCKER_PERCENTAGE_FEE = 20; // Means %0.2
+    const LOCKER_PERCENTAGE_FEE = 0;
     const PRICE_WITH_DISCOUNT_RATIO = 9500; // Means %95
     const INACTIVATION_DELAY = 10000;
     const ONE_HOUNDRED_PERCENT = 10000;
@@ -175,8 +175,6 @@ describe("Lockers", async function() {
 
         // whitelist exchange token
         await lockers.addCollateralToken(exchangeToken.address, await exchangeToken.decimals())
-
-
     });
 
     beforeEach(async () => {
@@ -590,7 +588,7 @@ describe("Lockers", async function() {
             await lockers.pauseLocker()
 
             await expect(
-                lockerSigner1.liquidateLocker(
+                lockers.liquidateLocker(
                     signer1Address,
                     10000
                 )
@@ -599,7 +597,7 @@ describe("Lockers", async function() {
             await lockers.unPauseLocker()
 
             await expect(
-                lockerSigner1.liquidateLocker(
+                lockers.liquidateLocker(
                     signer1Address,
                     10000
                 )
@@ -2026,7 +2024,7 @@ describe("Lockers", async function() {
             let lockerSigner1 = lockers.connect(signer1)
 
             await expect(
-                lockerSigner1.slashThiefLocker(
+                lockers.slashThiefLocker(
                     signer1Address,
                     0,
                     deployerAddress,
@@ -2237,7 +2235,7 @@ describe("Lockers", async function() {
             let lockerSigner1 = lockers.connect(signer1)
 
             await expect(
-                lockerSigner1.buySlashedCollateralOfLocker(
+                lockers.buySlashedCollateralOfLocker(
                     signer1Address,
                     10
                 )
@@ -2248,7 +2246,7 @@ describe("Lockers", async function() {
             let lockerSigner1 = lockers.connect(signer1)
 
             await expect(
-                lockerSigner1.buySlashedCollateralOfLocker(
+                lockers.buySlashedCollateralOfLocker(
                     ZERO_ADDRESS,
                     10
                 )
@@ -2300,7 +2298,7 @@ describe("Lockers", async function() {
             // Someone buys slashed collateral with discount
             let lockerSigner2 = lockers.connect(signer2)
             await expect(
-                lockerSigner2.buySlashedCollateralOfLocker(
+                lockers.buySlashedCollateralOfLocker(
                     signer1Address,
                     TNTAmount * liquidationRatio + 1
                 )
@@ -3612,11 +3610,11 @@ describe("Lockers", async function() {
 
             await lockers.addLocker(signer1Address, 10000);
 
-            let oldCapacity = await lockers.getLockerCapacity(LOCKER1_PUBKEY__HASH)
+            let oldCapacity = await lockers.getLockerCapacity(signer1Address)
 
             await lockers.setLockerReliabilityFactor(signer1Address, 5000)
 
-            let newCapicity = await lockers.getLockerCapacity(LOCKER1_PUBKEY__HASH)
+            let newCapicity = await lockers.getLockerCapacity(signer1Address)
 
             await expect(
                 oldCapacity
@@ -3653,7 +3651,7 @@ describe("Lockers", async function() {
 
             let lockerSigner2 = lockers.connect(signer2)
 
-            let amount = (await lockers.getLockerCapacity(LOCKER1_PUBKEY__HASH));
+            let amount = (await lockers.getLockerCapacity(signer1Address));
 
             await lockers.setLockerReliabilityFactor(signer1Address, 20000)
 
@@ -3720,7 +3718,7 @@ describe("Lockers", async function() {
                 lockerSigner1.removeCollateral(
                     (minRequiredNativeTokenLockedAmount.div(2))
                 )
-            ).to.be.revertedWith("LockerActive")
+            ).to.be.revertedWithCustomError(lockerSigner1, "LockerActive")
 
         })
 

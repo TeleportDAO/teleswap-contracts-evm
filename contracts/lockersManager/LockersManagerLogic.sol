@@ -695,7 +695,7 @@ contract LockersManagerLogic is
         uint256 _rewardAmount,
         address _slasher,
         uint256 _amount
-    ) external override nonReentrant whenNotPaused onlyOwner returns (bool) {
+    ) external override nonReentrant whenNotPaused returns (bool) {
         address collateralToken = lockerCollateralToken[_lockerTargetAddress];
         (
             uint256 rewardInCollateralToken,
@@ -762,7 +762,6 @@ contract LockersManagerLogic is
         nonZeroValue(_collateralAmount)
         nonReentrant
         whenNotPaused
-        onlyOwner
         returns (bool)
     {
         uint256 neededTeleBTC = LockersManagerLib.liquidateLocker(
@@ -839,7 +838,6 @@ contract LockersManagerLogic is
         nonZeroValue(_collateralAmount)
         nonReentrant
         whenNotPaused
-        onlyOwner
         returns (bool)
     {
         uint256 neededTeleBTC = LockersManagerLib.buySlashedCollateralOfLocker(

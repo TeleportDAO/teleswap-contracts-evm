@@ -8,7 +8,6 @@ import "./BurnRouterLib.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "./BurnRouterStorageV2.sol";
-import "hardhat/console.sol";
 
 contract BurnRouterLogic is
     BurnRouterStorage,

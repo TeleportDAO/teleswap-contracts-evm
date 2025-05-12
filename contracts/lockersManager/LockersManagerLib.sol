@@ -3,7 +3,6 @@ pragma solidity >=0.8.0 <=0.8.4;
 
 import "../oracle/interfaces/IPriceOracle.sol";
 import "../lockersManager/interfaces/ILockersManager.sol";
-import "hardhat/console.sol";
 
 library LockersManagerLib {
     error NotBurnRouter();
