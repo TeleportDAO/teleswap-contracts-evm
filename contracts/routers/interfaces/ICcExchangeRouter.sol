@@ -329,6 +329,8 @@ interface ICcExchangeRouter {
 
 	function setProtocolPercentageFee(uint _protocolPercentageFee) external;
 
+    function setLockerPercentageFee(uint _lockerPercentageFee) external;
+
     function setAcross(address _across) external;
 
     function setBurnRouter(address _burnRouter) external;

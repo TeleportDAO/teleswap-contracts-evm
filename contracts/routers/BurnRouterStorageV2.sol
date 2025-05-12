@@ -8,4 +8,6 @@ abstract contract BurnRouterStorageV2 is IBurnRouter {
     mapping(uint => address) public thirdPartyAddress;
     address public wrappedNativeToken;
     uint constant public DUST_SATOSHI_AMOUNT = 1000;
+    uint public lockerPercentageFee;
+    address public rewardDistributor;
 }

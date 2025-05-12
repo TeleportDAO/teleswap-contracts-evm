@@ -50,6 +50,7 @@ contract BurnRouterLogic is
         address _teleBTC,
         uint256 _transferDeadline,
         uint256 _protocolPercentageFee,
+        uint256 _lockerPercentageFee,
         uint256 _slasherPercentageReward,
         uint256 _networkFee,
         address _wrappedNativeToken
@@ -63,6 +64,7 @@ contract BurnRouterLogic is
         setTeleBTC(_teleBTC);
         setTransferDeadline(_transferDeadline);
         setProtocolPercentageFee(_protocolPercentageFee);
+        setLockerPercentageFee(_lockerPercentageFee);
         setSlasherPercentageReward(_slasherPercentageReward);
         setNetworkFeeOracle(owner());
         setNetworkFee(_networkFee);
@@ -163,7 +165,7 @@ contract BurnRouterLogic is
         uint256 _protocolPercentageFee
     ) public override onlyOwner {
         require(
-            MAX_PROTOCOL_FEE >= _protocolPercentageFee,
+            MAX_PERCENTAGE_FEE >= _protocolPercentageFee,
             "BurnRouterLogic: invalid fee"
         );
         emit NewProtocolPercentageFee(
@@ -173,6 +175,16 @@ contract BurnRouterLogic is
         protocolPercentageFee = _protocolPercentageFee;
     }
 
+    function setLockerPercentageFee(
+        uint256 _lockerPercentageFee
+    ) public override onlyOwner {
+        require(
+            MAX_PERCENTAGE_FEE >= _lockerPercentageFee,
+            "BurnRouterLogic: invalid fee"
+        );
+        lockerPercentageFee = _lockerPercentageFee;
+    }
+
     /// @notice Updates slasher percentage reward for disputing lockers
     /// @dev Only owner can call this
     /// @param _slasherPercentageReward The new slasher percentage reward
@@ -180,7 +192,7 @@ contract BurnRouterLogic is
         uint256 _slasherPercentageReward
     ) public override onlyOwner {
         require(
-            MAX_SLASHER_REWARD >= _slasherPercentageReward,
+            MAX_PERCENTAGE_FEE >= _slasherPercentageReward,
             "BurnRouterLogic: invalid reward"
         );
         emit NewSlasherPercentageFee(
@@ -256,21 +268,21 @@ contract BurnRouterLogic is
     /// @param _scriptType User script type
     /// @param _lockerLockingScript	of locker that should execute the burn request
     /// @param thirdParty Third party id
-    /// @return Amount of BTC that user receives
+    /// @return burntAmount Amount of BTC that user receives
     function unwrap(
         uint256 _amount,
         bytes memory _userScript,
         ScriptTypes _scriptType,
         bytes calldata _lockerLockingScript,
         uint256 thirdParty
-    ) external override nonReentrant returns (uint256) {
+    ) external override nonReentrant returns (uint256 burntAmount) {
         // Transfers user's teleBTC to contract
         require(
             IWETH(teleBTC).transferFrom(_msgSender(), address(this), _amount),
             "BurnRouterLogic: transferFrom failed"
         );
 
-        uint256 burntAmount = _unwrap(
+        burntAmount = _unwrap(
             teleBTC,
             _amount,
             _amount,
@@ -279,8 +291,6 @@ contract BurnRouterLogic is
             _lockerLockingScript,
             thirdParty
         );
-
-        return burntAmount;
     }
 
     /// @notice Exchanges input token for teleBTC then burns it
@@ -444,7 +454,7 @@ contract BurnRouterLogic is
             ILockersManager(lockers).slashIdleLocker(
                 _lockerTargetAddress,
                 (burnRequests[_lockerTargetAddress][_indices[i]].amount *
-                    slasherPercentageReward) / MAX_SLASHER_REWARD, // Slasher reward
+                    slasherPercentageReward) / MAX_PERCENTAGE_FEE, // Slasher reward
                 _msgSender(), // Slasher address
                 burnRequests[_lockerTargetAddress][_indices[i]].amount,
                 burnRequests[_lockerTargetAddress][_indices[i]].sender // User address
@@ -542,7 +552,7 @@ contract BurnRouterLogic is
     }
 
     /// @notice Burns teleBTC and records the burn request
-    /// @return _burntAmount Amount of BTC that user receives
+    /// @return remainingAmount Amount of BTC that user receives
     function _unwrap(
         address _inputToken,
         uint256 _inputAmount,
@@ -551,7 +561,7 @@ contract BurnRouterLogic is
         ScriptTypes _scriptType,
         bytes calldata _lockerLockingScript,
         uint256 thirdParty
-    ) private returns (uint256 _burntAmount) {
+    ) private returns (uint256 remainingAmount) {
         // Checks validity of user script
         BurnRouterLib.checkScriptTypeAndLocker(
             _userScript,
@@ -560,27 +570,28 @@ contract BurnRouterLogic is
             _lockerLockingScript
         );
 
+        uint256 protocolFee;
+        uint256 thirdPartyFee;
+        uint256 lockerFee;
+
         // Gets the target address of locker
         (
-            uint256 remainingAmount,
-            uint256 protocolFee,
-            uint256 thirdPartyFee
+            remainingAmount,
+            protocolFee,
+            thirdPartyFee,
+            lockerFee
         ) = _getFees(_amount, _lockerLockingScript, thirdParty);
 
-        // Burns remained teleBTC
+        // Burns remaining TeleBTC
         IWETH(teleBTC).approve(lockers, remainingAmount);
-
-        // Reduces the Bitcoin fee to find the amount that user receives (called burntAmount)
-        _burntAmount = (
-            ILockersManager(lockers).burn(_lockerLockingScript, remainingAmount)
-        );
+        ILockersManager(lockers).burn(_lockerLockingScript, remainingAmount);
 
         address _lockerTargetAddress = ILockersManager(lockers)
             .getLockerTargetAddress(_lockerLockingScript);
 
         _saveBurnRequest(
             _amount,
-            _burntAmount,
+            remainingAmount,
             _userScript,
             _scriptType,
             BurnRouterLib.lastSubmittedHeight(relay),
@@ -588,10 +599,10 @@ contract BurnRouterLogic is
         );
 
         address inputToken = _inputToken;
-        uint256[3] memory amounts = [_inputAmount, _amount, _burntAmount];
+        uint256[3] memory amounts = [_inputAmount, _amount, remainingAmount];
         uint256[4] memory fees = [
             bitcoinFee,
-            remainingAmount - _burntAmount,
+            lockerFee,
             protocolFee,
             thirdPartyFee
         ];
@@ -686,7 +697,7 @@ contract BurnRouterLogic is
 
         ILockersManager(lockers).slashThiefLocker(
             _lockerTargetAddress,
-            (totalValue * slasherPercentageReward) / MAX_SLASHER_REWARD, // Slasher reward
+            (totalValue * slasherPercentageReward) / MAX_PERCENTAGE_FEE, // Slasher reward
             _msgSender(), // Slasher address
             totalValue
         );
@@ -699,7 +710,7 @@ contract BurnRouterLogic is
             _inputTxId,
             totalValue +
                 (totalValue * slasherPercentageReward) /
-                MAX_SLASHER_REWARD
+                MAX_PERCENTAGE_FEE
         );
     }
 
@@ -823,16 +834,18 @@ contract BurnRouterLogic is
         returns (
             uint256 remainingAmount,
             uint256 _protocolFee,
-            uint256 _thirdPartyFee
+            uint256 _thirdPartyFee,
+            uint256 _lockerFee
         )
     {
         // Find protocol and third-party fee
-        _protocolFee = (_amount * protocolPercentageFee) / MAX_PROTOCOL_FEE;
+        _protocolFee = (_amount * protocolPercentageFee) / MAX_PERCENTAGE_FEE;
         _thirdPartyFee =
             (_amount * thirdPartyFee[_thirdParty]) /
-            MAX_PROTOCOL_FEE;
+            MAX_PERCENTAGE_FEE;
+        _lockerFee = (_amount * lockerPercentageFee) / MAX_PERCENTAGE_FEE;
 
-        remainingAmount = _amount - _protocolFee - _thirdPartyFee - bitcoinFee;
+        remainingAmount = _amount - _protocolFee - _thirdPartyFee - _lockerFee - bitcoinFee;
 
         // Note: to avoid dust amount, we require remainingAmount to be greater than DUST_SATOSHI_AMOUNT
         require(remainingAmount >= DUST_SATOSHI_AMOUNT, "BurnRouterLogic: low amount");
@@ -864,6 +877,34 @@ contract BurnRouterLogic is
                 IWETH(teleBTC).transfer(_lockerTargetAddress, bitcoinFee),
                 "BurnRouterLogic: network fee transfer failed"
             );
+        }
+
+        if (_lockerFee > 0) {
+            _sendLockerFee(
+                ILockersManager(lockers).getLockerTargetAddress(_lockerLockingScript),
+                _lockerFee,
+                _thirdParty
+            );
+        }
+    }
+
+    function _sendLockerFee(address _locker, uint _lockerFee, uint _thirdParty) internal {
+        if (_lockerFee > 0) {
+            if (rewardDistributor == address(0) || _thirdParty != 0) {
+                // Send reward directly to locker
+                IWETH(teleBTC).transfer(_locker, _lockerFee);
+            } else {
+                // Call reward distributor to distribute reward
+                IWETH(teleBTC).approve(rewardDistributor, _lockerFee);
+                Address.functionCall(
+                    rewardDistributor,
+                    abi.encodeWithSignature(
+                        "depositReward(address,uint256)",
+                        _locker,
+                        _lockerFee
+                    )
+                );
+            }
         }
     }
 }

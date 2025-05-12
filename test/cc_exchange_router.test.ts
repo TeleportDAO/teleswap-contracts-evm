@@ -77,6 +77,7 @@ describe("CcExchangeRouter", async function() {
     const NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001"
     const NATIVE_TOKEN_DECIMAL = 18;
     const ONE_HOUNDRED_PERCENT = 10000;
+    const BITCOIN_FEE = 10;
 
     // Mock burn amount
     const BURN_AMOUNT = 10;
@@ -276,8 +277,9 @@ describe("CcExchangeRouter", async function() {
             teleBTC.address,
             10,
             PROTOCOL_PERCENTAGE_FEE,
+            LOCKER_PERCENTAGE_FEE,
             10,
-            10,
+            BITCOIN_FEE,
             weth.address
         );
 
@@ -318,6 +320,7 @@ describe("CcExchangeRouter", async function() {
         await ccExchangeRouter.initialize(
             STARTING_BLOCK_NUMBER,
             PROTOCOL_PERCENTAGE_FEE,
+            LOCKER_PERCENTAGE_FEE,
             CHAIN_ID,
             lockers.address,
             mockBitcoinRelay.address,
@@ -629,10 +632,10 @@ describe("CcExchangeRouter", async function() {
                 await teleBTC.balanceOf(TREASURY)
             ).to.equal(0);
 
-            // Locker received the fee
+            // Locker hasn't received any fee
             await expect(
                 await teleBTC.balanceOf(lockerAddress)
-            ).to.equal(lockerFee);
+            ).to.equal(0);
 
             // Extra TeleBTC hasn't been minted
             await expect(newTotalSupplyTeleBTC).to.equal(
@@ -987,7 +990,7 @@ describe("CcExchangeRouter", async function() {
                 cc_exchange_request_txId,
                 CC_EXCHANGE_REQUESTS.normalCCExchange_highSlippage.appId,
                 0,
-                [0, lockerFee, 0, 0, 0],
+                [0, 0, 0, 0, 0],
                 CC_EXCHANGE_REQUESTS.normalCCExchange_highSlippage.chainId
             ).and.not.emit(ccExchangeRouter, 'NewWrapAndSwap');
 
@@ -1046,7 +1049,7 @@ describe("CcExchangeRouter", async function() {
                 cc_exchange_request_txId,
                 CC_EXCHANGE_REQUESTS.normalCCExchange_fixedInput.appId,
                 0,
-                [0, lockerFee, 0, 0, 0],
+                [0, 0, 0, 0, 0],
                 CC_EXCHANGE_REQUESTS.normalCCExchange_fixedInput.chainId
             )
 
@@ -1105,7 +1108,7 @@ describe("CcExchangeRouter", async function() {
                 cc_exchange_request_txId,
                 CC_EXCHANGE_REQUESTS.normalCCExchange_fixedInput.appId,
                 0,
-                [0, lockerFee, 0, 0, 0],
+                [0, 0, 0, 0, 0],
                 CC_EXCHANGE_REQUESTS.normalCCExchange_fixedInput.chainId
             ).and.not.emit(ccExchangeRouter, 'NewWrapAndSwap');
 
@@ -2031,7 +2034,7 @@ describe("CcExchangeRouter", async function() {
                 cc_exchange_request_txId,
                 CC_EXCHANGE_REQUESTS.normalCCExchangeToOtherChain_fixedInput.appId,
                 0,
-                [0, lockerFee, 0, 0, 0],
+                [0, 0, 0, 0, 0],
                 CC_EXCHANGE_REQUESTS.normalCCExchangeToOtherChain_fixedInput.chainId
             )
         })
@@ -2050,7 +2053,7 @@ describe("CcExchangeRouter", async function() {
             );
 
             // Calculates fees
-            let [lockerFee, ,] = calculateFees(
+            let [lockerFee, teleporterFee, protocolFee] = calculateFees(
                 CC_EXCHANGE_REQUESTS.normalCCExchangeToOtherChain_fixedInput
             );
 
@@ -2069,7 +2072,10 @@ describe("CcExchangeRouter", async function() {
                 [teleBTC.address, deployerAddress]
             )
 
-            let remainingAmount = CC_EXCHANGE_REQUESTS.normalCCExchangeToOtherChain_fixedInput.bitcoinAmount - lockerFee;
+            let burntAmount = CC_EXCHANGE_REQUESTS.normalCCExchangeToOtherChain_fixedInput.bitcoinAmount - 
+                BITCOIN_FEE - 
+                lockerFee - 
+                protocolFee;
 
             // Refund TeleBTC
             await expect(
@@ -2082,8 +2088,8 @@ describe("CcExchangeRouter", async function() {
             ).to.emit(ccExchangeRouter, 'RefundProcessed').withArgs(
                 cc_exchange_request_txId,
                 deployerAddress,
-                remainingAmount,
-                BURN_AMOUNT,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToOtherChain_fixedInput.bitcoinAmount,
+                burntAmount,
                 USER_SCRIPT_P2PKH,
                 USER_SCRIPT_P2PKH_TYPE,
                 LOCKER_TARGET_ADDRESS,

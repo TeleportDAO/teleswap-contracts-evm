@@ -344,19 +344,15 @@ library LockersManagerLib {
 
         require(theLocker.isLocker, "Lockers: no locker");
 
-
         if (_collateralToken == libConstants.NativeToken) {
             _addingCollateralTokenAmount = msg.value;
         } else {
             require(msg.value == 0, "Lockers: wrong msg value");
         }
 
-
         theLocker.collateralTokenLockedAmount =
             theLocker.collateralTokenLockedAmount +
             _addingCollateralTokenAmount;
-
-        
     }
 
     function removeFromCollateral(

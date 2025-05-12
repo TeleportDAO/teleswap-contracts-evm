@@ -187,6 +187,8 @@ interface IBurnRouter {
 
     function setProtocolPercentageFee(uint _protocolPercentageFee) external;
 
+    function setLockerPercentageFee(uint _lockerPercentageFee) external;
+
     function setSlasherPercentageReward(uint _slasherPercentageReward) external;
 
     function setNetworkFee(uint _networkFee) external;

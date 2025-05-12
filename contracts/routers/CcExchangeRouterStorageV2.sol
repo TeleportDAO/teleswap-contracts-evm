@@ -46,4 +46,8 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     uint constant REGULAR_SLIPPAGE = 1500; // Not used
 
     address public acrossAdmin;
+
+    uint public lockerPercentageFee;
+
+    address public rewardDistributor;
 }

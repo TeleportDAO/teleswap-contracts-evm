@@ -6,7 +6,7 @@ import "./interfaces/ICcExchangeRouter.sol";
 abstract contract CcExchangeRouterStorage is ICcExchangeRouter {
 
     // Constants
-    uint constant MAX_PROTOCOL_FEE = 10000;
+    uint constant MAX_PERCENTAGE_FEE = 10000; // 10000 means 100%
 
     // Public variables
     uint public override startingBlockNumber;

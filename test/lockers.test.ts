@@ -1,6 +1,7 @@
 require('dotenv').config({path:"../../.env"});
 
 import { expect } from "chai";
+import "@nomicfoundation/hardhat-chai-matchers";  // Add this import
 import { deployments, ethers } from "hardhat";
 import { Signer, BigNumber } from "ethers";
 import { deployMockContract, MockContract } from "@ethereum-waffle/mock-contract";
@@ -19,7 +20,8 @@ import { Erc20__factory } from "../src/types/factories/Erc20__factory";
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 import { advanceBlockWithTime, takeSnapshot, revertProvider } from "./block_utils";
 
-describe("Lockers", async () => {
+describe("Lockers", async function() {
+    this.bail(true); // Stop on first failure
 
     let snapshotId: any;
 
@@ -70,7 +72,7 @@ describe("Lockers", async () => {
     let lockers: Contract;
     let lockers2: Contract;
     let lockersAsAdmin: Contract;
-    let teleportDAOToken: ERC20;
+    let teleportSystemToken: ERC20;
     let teleBTC: TeleBTCLogic;
 
     // Mock contracts
@@ -91,15 +93,6 @@ describe("Lockers", async () => {
         signer3Address = await signer3.getAddress();
 
         teleportSystemToken = await deployTelePortDaoToken()
-
-        // Mocks exchange router contract
-        const exchangeConnectorContract = await deployments.getArtifact(
-            "IExchangeConnector"
-        );
-        mockExchangeConnector = await deployMockContract(
-            deployer,
-            exchangeConnectorContract.abi
-        );
 
         const priceOracleContract = await deployments.getArtifact(
             "IPriceOracle"
@@ -241,7 +234,7 @@ describe("Lockers", async () => {
         let linkLibraryAddresses: LockersManagerLogicLibraryAddresses;
 
         linkLibraryAddresses = {
-            "contracts/libraries/LockersManagerLib.sol:LockersManagerLib": lockersLib.address,
+            "contracts/lockersManager/LockersManagerLib.sol:LockersManagerLib": lockersLib.address,
         };
 
         // Deploys lockers logic
@@ -298,7 +291,7 @@ describe("Lockers", async () => {
                     LOCKER_PERCENTAGE_FEE,
                     PRICE_WITH_DISCOUNT_RATIO
                 )
-            ).to.be.revertedWith("InvalidValue")
+            ).to.be.revertedWithCustomError(lockers2, "InvalidValue")
         })
 
         it("initialize cant be called with Price discount greater than 100%", async function () {
@@ -313,7 +306,7 @@ describe("Lockers", async () => {
                     LOCKER_PERCENTAGE_FEE,
                     PRICE_WITH_DISCOUNT_RATIO + 10000
                 )
-            ).to.be.revertedWith("InvalidValue")
+            ).to.be.revertedWithCustomError(lockers2, "InvalidValue")
         })
 
     })
@@ -325,7 +318,7 @@ describe("Lockers", async () => {
                 lockers.addMinter(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
         })
 
         it("only owner can add a minter", async function () {
@@ -360,7 +353,7 @@ describe("Lockers", async () => {
                 lockers.addMinter(
                     ONE_ADDRESS
                 )
-            ).to.be.revertedWith("AlreadyHasRole")
+            ).to.be.revertedWithCustomError(lockers, "AlreadyHasRole")
         })
 
     })
@@ -384,7 +377,7 @@ describe("Lockers", async () => {
                 lockers.removeMinter(
                     ONE_ADDRESS
                 )
-            ).to.be.revertedWith("NotMinter")
+            ).to.be.revertedWithCustomError(lockers, "NotMinter")
         })
 
         it("owner successfully removes an account from minters", async function () {
@@ -411,7 +404,7 @@ describe("Lockers", async () => {
                 lockers.addBurner(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
         })
 
         it("only owner can add a burner", async function () {
@@ -446,7 +439,7 @@ describe("Lockers", async () => {
                 lockers.addBurner(
                     ONE_ADDRESS
                 )
-            ).to.be.revertedWith("AlreadyHasRole")
+            ).to.be.revertedWithCustomError(lockers, "AlreadyHasRole")
         })
     })
 
@@ -651,7 +644,7 @@ describe("Lockers", async () => {
                 lockers.setLockerPercentageFee(
                     10001
                 )
-            ).to.be.revertedWith("InvalidValue")
+            ).to.be.revertedWithCustomError(lockers, "InvalidValue")
         })
 
         it("non owners can't call setLockerPercentageFee", async function () {
@@ -743,7 +736,7 @@ describe("Lockers", async () => {
                 lockers.setPriceOracle(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
         })
 
         it("non owners can't call setPriceOracle", async function () {
@@ -781,7 +774,7 @@ describe("Lockers", async () => {
                 lockers.setBurnRouter(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
         })
 
         it("non owners can't call setBurnRouter", async function () {
@@ -855,7 +848,7 @@ describe("Lockers", async () => {
                 lockers.setTeleBTC(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
         })
 
         it("non owners can't call setTeleBTC", async function () {
@@ -917,7 +910,7 @@ describe("Lockers", async () => {
                 lockers.setCollateralRatio(
                     10
                 )
-            ).to.be.revertedWith("InvalidValue")
+            ).to.be.revertedWithCustomError(lockers, "InvalidValue")
         })
     })
 
@@ -955,31 +948,31 @@ describe("Lockers", async () => {
                 lockers.setTeleBTC(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
 
             await expect(
                 lockers.setBurnRouter(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
 
             await expect(
                 lockers.setPriceOracle(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
 
             await expect(
                 lockers.addBurner(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
 
             await expect(
                 lockers.addMinter(
                     ZERO_ADDRESS
                 )
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
 
         })
     });
@@ -1256,7 +1249,7 @@ describe("Lockers", async () => {
 
             await expect(
                 lockerSigner1.revokeRequest()
-            ).to.be.revertedWith("NotRequested")
+            ).to.be.revertedWithCustomError(lockers, "NotRequested")
         })
 
         it("successful revoke", async function () {
@@ -1350,7 +1343,7 @@ describe("Lockers", async () => {
         it("trying to add a non existing request as a locker", async function () {
             await expect(
                 lockers.addLocker(signer1Address, ONE_HOUNDRED_PERCENT)
-            ).to.be.revertedWith("NotRequested")
+            ).to.be.revertedWithCustomError(lockers, "NotRequested")
         })
 
         it("adding a locker", async function () {
@@ -1481,7 +1474,7 @@ describe("Lockers", async () => {
 
             await expect(
                 lockerSigner1.requestInactivation()
-            ).to.be.revertedWith("NotLocker")
+            ).to.be.revertedWithCustomError(lockers, "NotLocker")
         })
 
         it("successfully request to be removed", async function () {
@@ -1535,7 +1528,7 @@ describe("Lockers", async () => {
 
             await expect(
                 lockerSigner1.requestActivation()
-            ).to.be.revertedWith("NotLocker")
+            ).to.be.revertedWithCustomError(lockers, "NotLocker")
         })
 
         it("successfully request to be activated", async function () {
@@ -1627,7 +1620,7 @@ describe("Lockers", async () => {
 
             await expect(
                 lockerSigner1.selfRemoveLocker()
-            ).to.be.revertedWith("NotLocker")
+            ).to.be.revertedWithCustomError(lockers, "NotLocker")
         })
 
         it("can't remove a locker if it doesn't request to be removed", async function () {
@@ -1655,7 +1648,7 @@ describe("Lockers", async () => {
 
             await expect(
                 lockerSigner1.selfRemoveLocker()
-            ).to.be.revertedWith("LockerActive")
+            ).to.be.revertedWithCustomError(lockers, "LockerActive")
         })
 
         it("the locker can't be removed because netMinted is not zero", async function () {
@@ -1826,7 +1819,7 @@ describe("Lockers", async () => {
                     btcAmountToSlash,
                     ccBurnSimulatorAddress
                 )
-            ).to.be.revertedWith("NotBurnRouter")
+            ).to.be.revertedWithCustomError(lockersLib, "NotBurnRouter")
         })
 
         it("slash locker reverts when the target address is not locker", async function () {
@@ -2039,7 +2032,7 @@ describe("Lockers", async () => {
                     deployerAddress,
                     btcAmountToSlash
                 )
-            ).to.be.revertedWith("NotBurnRouter")
+            ).to.be.revertedWithCustomError(lockersLib, "NotBurnRouter")
         })
 
         it("slash locker reverts when the target address is not locker", async function () {
@@ -2428,7 +2421,9 @@ describe("Lockers", async () => {
             let collateralAmount = BigNumber.from(10).pow(18).mul(1)
 
             //TODO concept?
-            let neededTeleBTC = theLocker.slashingTeleBTCAmount.mul(collateralAmount).div(theLocker.reservedNativeTokenForSlash).add(1)
+            let neededTeleBTC = theLocker.slashingTeleBTCAmount.mul(
+                collateralAmount
+            ).div(theLocker.reservedCollateralTokenForSlash).add(1)
 
             // Someone buys slashed collateral with discount
             let lockerSigner2 = lockers.connect(signer2)
@@ -2509,7 +2504,7 @@ describe("Lockers", async () => {
             let lockerSigner2 = lockers.connect(signer2)
             
             let collateralAmount = minRequiredExchangeTokenLockedAmount.div(5)
-            let neededTeleBTC = theLocker.slashingTeleBTCAmount.mul(collateralAmount).div(theLocker.reservedNativeTokenForSlash).add(1)
+            let neededTeleBTC = theLocker.slashingTeleBTCAmount.mul(collateralAmount).div(theLocker.reservedCollateralTokenForSlash).add(1)
 
             await expect(
                 lockerSigner2.buySlashedCollateralOfLocker(
@@ -2571,7 +2566,7 @@ describe("Lockers", async () => {
 
             await expect (
                 lockerSigner2.mint(LOCKER1_PUBKEY__HASH, ONE_ADDRESS, amount)
-            ).to.be.revertedWith("NotMinter")
+            ).to.be.revertedWithCustomError(lockers, "NotMinter")
         })
 
         it("Mints tele BTC", async function () {
@@ -2716,7 +2711,7 @@ describe("Lockers", async () => {
 
             await expect (
                 lockerSigner2.burn(LOCKER1_PUBKEY__HASH, amount)
-            ).to.be.revertedWith("NotBurner")
+            ).to.be.revertedWithCustomError(lockers, "NotBurner")
 
         })
 
@@ -2816,7 +2811,7 @@ describe("Lockers", async () => {
 
             await expect (
                 lockerSigner2.burn(LOCKER1_PUBKEY__HASH, amount)
-            ).to.be.revertedWith("InsufficientFunds")
+            ).to.be.revertedWithCustomError(lockers, "InsufficientFunds")
 
 
         })
@@ -2857,7 +2852,7 @@ describe("Lockers", async () => {
                     signer1Address,
                     0
                 )
-            ).to.be.revertedWith("ZeroValue")
+            ).to.be.revertedWithCustomError(lockers, "ZeroValue")
         })
 
         it("liquidate locker reverts when the target address is not locker", async function () {
@@ -3476,7 +3471,7 @@ describe("Lockers", async () => {
 
             await expect (
                 lockerSigner2.mint(LOCKER1_PUBKEY__HASH, ZERO_ADDRESS, 25000000)
-            ).to.be.revertedWith('ZeroAddress')
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
         })
 
         it("can't mint since locker is inactive", async function () {
@@ -3525,7 +3520,7 @@ describe("Lockers", async () => {
 
             await expect (
                 lockerSigner2.mint(LOCKER1_PUBKEY__HASH, signer2Address, 25000000)
-            ).to.be.revertedWith("LockerNotActive")
+            ).to.be.revertedWithCustomError(lockers, "LockerNotActive")
         })
 
         it("can't mint since locker locking script is wrong", async function () {
@@ -3574,7 +3569,7 @@ describe("Lockers", async () => {
 
             await expect (
                 lockerSigner2.mint(LOCKER1_PUBKEY__HASH + "00", signer2Address, 25000000)
-            ).to.be.revertedWith("ZeroAddress")
+            ).to.be.revertedWithCustomError(lockers, "ZeroAddress")
         })
         
     })

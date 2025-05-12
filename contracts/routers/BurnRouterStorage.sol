@@ -6,8 +6,8 @@ import "./interfaces/IBurnRouter.sol";
 abstract contract BurnRouterStorage is IBurnRouter {
 
     // Constants
-    uint constant MAX_PROTOCOL_FEE = 10000;
-    uint constant MAX_SLASHER_REWARD = 10000;
+    uint constant MAX_PERCENTAGE_FEE = 10000; // 10000 means 100%
+    uint constant UNUSED_VARIABLE = 0; // Unused variable
 
     // Public variables
     address public override relay;

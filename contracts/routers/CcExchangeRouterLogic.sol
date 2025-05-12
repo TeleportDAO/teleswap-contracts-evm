@@ -45,6 +45,7 @@ contract CcExchangeRouterLogic is
     function initialize(
         uint256 _startingBlockNumber,
         uint256 _protocolPercentageFee,
+        uint256 _lockerPercentageFee,
         uint256 _chainId,
         address _lockers,
         address _relay,
@@ -59,6 +60,7 @@ contract CcExchangeRouterLogic is
         chainId = _chainId;
         _setStartingBlockNumber(_startingBlockNumber);
         _setProtocolPercentageFee(_protocolPercentageFee);
+        _setLockerPercentageFee(_lockerPercentageFee);
         _setRelay(_relay);
         _setLockers(_lockers);
         _setTeleBTC(_teleBTC);
@@ -113,6 +115,13 @@ contract CcExchangeRouterLogic is
         uint256 _protocolPercentageFee
     ) external override onlyOwner {
         _setProtocolPercentageFee(_protocolPercentageFee);
+    }
+
+    /// @notice Setter for locker percentage fee
+    function setLockerPercentageFee(
+        uint256 _lockerPercentageFee
+    ) external override onlyOwner {
+        _setLockerPercentageFee(_lockerPercentageFee);
     }
 
     /// @notice Setter for treasury
@@ -531,7 +540,7 @@ contract CcExchangeRouterLogic is
         uint256 _destinationChainId
     ) private {
         // Send fees to the teleporter, treasury, and third party
-        _sendFees(_txId);
+        _sendFees(_txId, _lockerLockingScript);
 
         ccExchangeRequest memory request = ccExchangeRequests[_txId];
         extendedCcExchangeRequest
@@ -636,7 +645,7 @@ contract CcExchangeRouterLogic is
             extendedCcExchangeRequests[_txId].isRequestCompleted = true;
 
             // Send fees to the teleporter, treasury, and third party
-            _sendFees(_txId);
+            _sendFees(_txId, _lockerLockingScript);
 
             if (_chainId != chainId) {
                 // If the destination chain is not the current chain
@@ -651,8 +660,9 @@ contract CcExchangeRouterLogic is
         } else {
             // If swap failed, keep TeleBTC in the contract for retry
             uint fees = extendedCcExchangeRequests[_txId].thirdPartyFee +
-                extendedCcExchangeRequests[_txId].protocolFee +
-                ccExchangeRequests[_txId].fee;
+                       extendedCcExchangeRequests[_txId].protocolFee +
+                       ccExchangeRequests[_txId].fee +
+                       extendedCcExchangeRequests[_txId].lockerFee;
 
             // We don't take fees (except the locker fee) in the case of failed wrapAndSwap
             extendedCcExchangeRequests[_txId].remainedInputAmount += fees;
@@ -748,11 +758,11 @@ contract CcExchangeRouterLogic is
         } else {
             // Failed swap
             uint256[5] memory fees = [
-                0,
-                swapArguments._extendedCcExchangeRequest.lockerFee,
-                0,
-                0,
-                0
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0),
+                uint256(0)
             ];
             emit FailedWrapAndSwap(
                 ILockersManager(lockers).getLockerTargetAddress(
@@ -785,7 +795,7 @@ contract CcExchangeRouterLogic is
         bytes32 _txId
     ) private {
         // Mints teleBTC for cc exchange router
-        uint256 mintedAmount = ILockersManager(lockers).mint(
+        ILockersManager(lockers).mint(
             _lockerLockingScript,
             address(this),
             ccExchangeRequests[_txId].inputAmount
@@ -794,26 +804,29 @@ contract CcExchangeRouterLogic is
         // Calculates fees
         extendedCcExchangeRequests[_txId].protocolFee =
             (ccExchangeRequests[_txId].inputAmount * protocolPercentageFee) /
-            MAX_PROTOCOL_FEE;
+            MAX_PERCENTAGE_FEE;
         uint256 networkFee = ccExchangeRequests[_txId].fee;
         extendedCcExchangeRequests[_txId].thirdPartyFee =
             (ccExchangeRequests[_txId].inputAmount *
                 thirdPartyFee[extendedCcExchangeRequests[_txId].thirdParty]) /
-            MAX_PROTOCOL_FEE;
+            MAX_PERCENTAGE_FEE;
         extendedCcExchangeRequests[_txId].lockerFee =
-            ccExchangeRequests[_txId].inputAmount -
-            mintedAmount;
+            (ccExchangeRequests[_txId].inputAmount * lockerPercentageFee) /
+            MAX_PERCENTAGE_FEE;
 
         extendedCcExchangeRequests[_txId].remainedInputAmount =
-            mintedAmount -
-            extendedCcExchangeRequests[_txId].protocolFee -
-            networkFee -
-            extendedCcExchangeRequests[_txId].thirdPartyFee;
+            ccExchangeRequests[_txId].inputAmount -
+            (
+                extendedCcExchangeRequests[_txId].lockerFee +
+                extendedCcExchangeRequests[_txId].protocolFee +
+                networkFee +
+                extendedCcExchangeRequests[_txId].thirdPartyFee
+            );
     }
 
     /// @notice Transfers all associated fees for a successful swap
     /// @param _txId The transaction ID of the request
-    function _sendFees(bytes32 _txId) private {
+    function _sendFees(bytes32 _txId, bytes memory _lockerLockingScript) private {
         /* 
         Send fees:
             1. Teleporter fee (network fee)
@@ -844,6 +857,37 @@ contract CcExchangeRouterLogic is
                 ],
                 extendedCcExchangeRequests[_txId].thirdPartyFee
             );
+        }
+
+        // Transfer locker fee to locker
+        if (extendedCcExchangeRequests[_txId].lockerFee > 0) {
+            _sendLockerFee(
+                ILockersManager(lockers).getLockerTargetAddress(
+                    _lockerLockingScript
+                ),
+                extendedCcExchangeRequests[_txId].lockerFee,
+                extendedCcExchangeRequests[_txId].thirdParty
+            );
+        }
+    }
+
+    function _sendLockerFee(address _locker, uint _lockerFee, uint _thirdParty) internal {
+        if (_lockerFee > 0) {
+            if (rewardDistributor == address(0) || _thirdParty != 0) {
+                // Send reward directly to locker
+                ITeleBTC(teleBTC).transfer(_locker, _lockerFee);
+            } else {
+                // Call reward distributor to distribute reward
+                ITeleBTC(teleBTC).approve(rewardDistributor, _lockerFee);
+                Address.functionCall(
+                    rewardDistributor,
+                    abi.encodeWithSignature(
+                        "depositReward(address,uint256)",
+                        _locker,
+                        _lockerFee
+                    )
+                );
+            }
         }
     }
 
@@ -876,7 +920,7 @@ contract CcExchangeRouterLogic is
     /// @notice Internal setter for protocol percentage fee
     function _setProtocolPercentageFee(uint256 _protocolPercentageFee) private {
         require(
-            MAX_PROTOCOL_FEE >= _protocolPercentageFee,
+            MAX_PERCENTAGE_FEE >= _protocolPercentageFee,
             "CCExchangeRouter: fee is out of range"
         );
         emit NewProtocolPercentageFee(
@@ -884,6 +928,14 @@ contract CcExchangeRouterLogic is
             _protocolPercentageFee
         );
         protocolPercentageFee = _protocolPercentageFee;
+    }
+
+    function _setLockerPercentageFee(uint256 _lockerPercentageFee) private {
+        require(
+            MAX_PERCENTAGE_FEE >= _lockerPercentageFee,
+            "CCExchangeRouter: fee is out of range"
+        );
+        lockerPercentageFee = _lockerPercentageFee;
     }
 
     /// @notice Internal setter for starting block number
