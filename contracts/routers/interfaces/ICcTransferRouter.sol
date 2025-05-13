@@ -67,10 +67,10 @@ interface ICcTransferRouter {
         address newRelay
     );
 
-    /// @notice                     Emits when changes made to InstantRouter address
-    event NewInstantRouter (
-        address oldInstantRouter, 
-        address newInstantRouter
+    /// @notice                     Emits when changes made to SpecialTeleporter address
+    event NewSpecialTeleporter (
+        address oldSpecialTeleporter, 
+        address newSpecialTeleporter
     );
 
     /// @notice                     Emits when changes made to Lockers address
@@ -111,8 +111,6 @@ interface ICcTransferRouter {
 		uint newThirdPartyFee
 	);
 
-
-
 	// Read-only functions
 
 	function isRequestUsed(bytes32 _txId) external view returns (bool);
@@ -127,7 +125,7 @@ interface ICcTransferRouter {
 
 	function relay() external view returns (address);
 
-	function instantRouter() external view returns (address);
+	function specialTeleporter() external view returns (address);
 
 	function lockers() external view returns (address);
 
@@ -141,7 +139,7 @@ interface ICcTransferRouter {
 
 	function setRelay(address _relay) external;
 
-	function setInstantRouter(address _instantRouter) external;
+	function setSpecialTeleporter(address _specialTeleporter) external;
 
 	function setLockers(address _lockers) external;
 
@@ -156,6 +154,8 @@ interface ICcTransferRouter {
 	function setThirdPartyAddress(uint _thirdPartyId, address _thirdPartyAddress) external;
 
 	function setThirdPartyFee(uint _thirdPartyId, uint _thirdPartyFee) external;
+
+	function setRewardDistributor(address _rewardDistributor) external;
 
 	function wrap(
 		TxAndProof memory _txAndProof,

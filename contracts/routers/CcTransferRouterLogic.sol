@@ -26,14 +26,14 @@ contract CcTransferRouterLogic is
     }
 
     /// @notice Gives default params to initiate cc transfer router
-    /// @param _startingBlockNumber         Requests that are included in a block older than _startingBlockNumber cannot be executed
-    /// @param _protocolPercentageFee       Percentage amount of protocol fee (min: %0.01)
-    /// @param _chainId                     Id of the underlying chain
-    /// @param _appId                       Id of ccTransfer dApp
-    /// @param _relay                       The Relay address to validate data from source chain
-    /// @param _lockers                     Lockers' contract address
-    /// @param _teleBTC                     TeleportDAO BTC ERC20 token address
-    /// @param _treasury                    Address of treasury that collects protocol fees
+    /// @param _startingBlockNumber Requests that are included in a block older than _startingBlockNumber cannot be executed
+    /// @param _protocolPercentageFee Percentage amount of protocol fee (min: %0.01)
+    /// @param _chainId Id of the underlying chain
+    /// @param _appId Id of ccTransfer dApp
+    /// @param _relay The Relay address to validate data from source chain
+    /// @param _lockers Lockers' contract address
+    /// @param _teleBTC TeleportDAO BTC ERC20 token address
+    /// @param _treasury Address of treasury that collects protocol fees
     function initialize(
         uint256 _startingBlockNumber,
         uint256 _protocolPercentageFee,
@@ -61,7 +61,7 @@ contract CcTransferRouterLogic is
 
     function renounceOwnership() public virtual override onlyOwner {}
 
-    /// @notice Setter for starting block number
+    ///@notice Setter for starting block number
     function setStartingBlockNumber(uint256 _startingBlockNumber)
         external
         override
@@ -70,9 +70,9 @@ contract CcTransferRouterLogic is
         _setStartingBlockNumber(_startingBlockNumber);
     }
 
-    /// @notice                             Setter for protocol percentage fee
-    /// @dev                                Only owner can call this
-    /// @param _protocolPercentageFee       Percentage amount of protocol fee
+    /// @notice Setter for protocol percentage fee
+    /// @dev Only owner can call this
+    /// @param _protocolPercentageFee Percentage amount of protocol fee
     function setProtocolPercentageFee(uint256 _protocolPercentageFee)
         external
         override
@@ -81,9 +81,9 @@ contract CcTransferRouterLogic is
         _setProtocolPercentageFee(_protocolPercentageFee);
     }
 
-    /// @notice                             Setter for locker percentage fee
-    /// @dev                                Only owner can call this
-    /// @param _lockerPercentageFee         Percentage amount of locker fee
+    /// @notice Setter for locker percentage fee
+    /// @dev Only owner can call this
+    /// @param _lockerPercentageFee Percentage amount of locker fee
     function setLockerPercentageFee(uint256 _lockerPercentageFee)
         external
         override
@@ -92,9 +92,9 @@ contract CcTransferRouterLogic is
         _setLockerPercentageFee(_lockerPercentageFee);
     }
 
-    /// @notice                             Setter for relay
-    /// @dev                                Only owner can call this
-    /// @param _relay                       Address of the relay contract
+    /// @notice Setter for relay
+    /// @dev Only owner can call this
+    /// @param _relay Address of the relay contract
     function setRelay(address _relay)
         external
         override
@@ -103,9 +103,9 @@ contract CcTransferRouterLogic is
         _setRelay(_relay);
     }
 
-    /// @notice                             Setter for lockers
-    /// @dev                                Only owner can call this
-    /// @param _lockers                     Address of the lockers contract
+    /// @notice Setter for lockers
+    /// @dev Only owner can call this
+    /// @param _lockers Address of the lockers contract
     function setLockers(address _lockers)
         external
         override
@@ -114,20 +114,20 @@ contract CcTransferRouterLogic is
         _setLockers(_lockers);
     }
 
-    /// @notice                             Setter for instant router
-    /// @dev                                Only owner can call this
-    /// @param _instantRouter               Address of the instant router contract
-    function setInstantRouter(address _instantRouter)
+    /// @notice Setter for special teleporter
+    /// @dev Only owner can call this
+    /// @param _specialTeleporter Address of the special teleporter contract
+    function setSpecialTeleporter(address _specialTeleporter)
         external
         override
         onlyOwner
     {
-        _setInstantRouter(_instantRouter);
+        _setSpecialTeleporter(_specialTeleporter);
     }
 
-    /// @notice                             Setter for teleBTC
-    /// @dev                                Only owner can call this
-    /// @param _teleBTC                     TeleportDAO BTC ERC20 token address
+    /// @notice Setter for teleBTC
+    /// @dev Only owner can call this
+    /// @param _teleBTC TeleportDAO BTC ERC20 token address
     function setTeleBTC(address _teleBTC)
         external
         override
@@ -136,9 +136,9 @@ contract CcTransferRouterLogic is
         _setTeleBTC(_teleBTC);
     }
 
-    /// @notice                             Setter for treasury
-    /// @dev                                Only owner can call this
-    /// @param _treasury                    Treasury address
+    /// @notice Setter for treasury
+    /// @dev Only owner can call this
+    /// @param _treasury Treasury address
     function setTreasury(address _treasury)
         external
         override
@@ -147,9 +147,9 @@ contract CcTransferRouterLogic is
         _setTreasury(_treasury);
     }
 
-    /// @notice                             Setter for third party address
-    /// @dev                                Only owner can call this
-    /// @param _thirdPartyAddress           third party address
+    /// @notice Setter for third party address
+    /// @dev Only owner can call this
+    /// @param _thirdPartyAddress third party address
     function setThirdPartyAddress(
         uint256 _thirdPartyId,
         address _thirdPartyAddress
@@ -157,9 +157,9 @@ contract CcTransferRouterLogic is
         _setThirdPartyAddress(_thirdPartyId, _thirdPartyAddress);
     }
 
-    /// @notice                             Setter for third party fee
-    /// @dev                                Only owner can call this
-    /// @param _thirdPartyFee               third party fee
+    /// @notice Setter for third party fee
+    /// @dev Only owner can call this
+    /// @param _thirdPartyFee third party fee
     function setThirdPartyFee(uint256 _thirdPartyId, uint256 _thirdPartyFee)
         external
         override
@@ -168,8 +168,16 @@ contract CcTransferRouterLogic is
         _setThirdPartyFee(_thirdPartyId, _thirdPartyFee);
     }
 
-    /// @notice                             Internal setter for protocol percentage fee
-    /// @param _protocolPercentageFee       Percentage amount of protocol fee
+    /// @notice Setter for reward distributor
+    /// @dev This contract distributes locker fee between locker and stakers
+    function setRewardDistributor(
+        address _rewardDistributor
+    ) external override onlyOwner {
+        rewardDistributor = _rewardDistributor;
+    }
+
+    ///@notice Internal setter for protocol percentage fee
+    ///@param _protocolPercentageFee Percentage amount of protocol fee
     function _setProtocolPercentageFee(uint256 _protocolPercentageFee) private {
         require(
             MAX_PERCENTAGE_FEE >= _protocolPercentageFee,
@@ -182,8 +190,8 @@ contract CcTransferRouterLogic is
         protocolPercentageFee = _protocolPercentageFee;
     }
 
-    /// @notice                             Internal setter for locker percentage fee
-    /// @param _lockerPercentageFee         Percentage amount of locker fee
+    ///@notice Internal setter for locker percentage fee
+    ///@param _lockerPercentageFee Percentage amount of locker fee
     function _setLockerPercentageFee(uint256 _lockerPercentageFee) private {
         require(
             MAX_PERCENTAGE_FEE >= _lockerPercentageFee,
@@ -192,7 +200,7 @@ contract CcTransferRouterLogic is
         lockerPercentageFee = _lockerPercentageFee;
     }
     
-    /// @notice Internal setter for starting block number
+    ///@notice Internal setter for starting block number
     function _setStartingBlockNumber(uint256 _startingBlockNumber) private {
         require(
             _startingBlockNumber > startingBlockNumber,
@@ -201,46 +209,46 @@ contract CcTransferRouterLogic is
         startingBlockNumber = _startingBlockNumber;
     }
 
-    /// @notice                             Internal setter for relay
-    /// @param _relay                       Address of the relay contract
+    ///@notice Internal setter for relay
+    ///@param _relay Address of the relay contract
     function _setRelay(address _relay) private nonZeroAddress(_relay) {
         emit NewRelay(relay, _relay);
         relay = _relay;
     }
 
-    /// @notice                             Internal setter for relay
-    /// @param _lockers                     Address of the lockers contract
+    ///@notice Internal setter for relay
+    ///@param _lockers Address of the lockers contract
     function _setLockers(address _lockers) private nonZeroAddress(_lockers) {
         emit NewLockers(lockers, _lockers);
         lockers = _lockers;
     }
 
-    /// @notice                             Internal setter for instant router
-    /// @param _instantRouter               Address of the instant router contract
-    function _setInstantRouter(address _instantRouter)
+    ///@notice Internal setter for special teleporter
+    ///@param _specialTeleporter Address of the special teleporter contract
+    function _setSpecialTeleporter(address _specialTeleporter)
         private
-        nonZeroAddress(_instantRouter)
+        nonZeroAddress(_specialTeleporter)
     {
-        emit NewInstantRouter(instantRouter, _instantRouter);
-        instantRouter = _instantRouter;
+        emit NewSpecialTeleporter(specialTeleporter, _specialTeleporter);
+        specialTeleporter = _specialTeleporter;
     }
 
-    /// @notice                             Internal setter for teleBTC
-    /// @param _teleBTC                     TeleportDAO BTC ERC20 token address
+    ///@notice Internal setter for teleBTC
+    ///@param _teleBTC TeleportDAO BTC ERC20 token address
     function _setTeleBTC(address _teleBTC) private nonZeroAddress(_teleBTC) {
         emit NewTeleBTC(teleBTC, _teleBTC);
         teleBTC = _teleBTC;
     }
 
-    /// @notice                             Internal setter for treasury
-    /// @param _treasury                    Treasury address
+    ///@notice Internal setter for treasury
+    ///@param _treasury Treasury address
     function _setTreasury(address _treasury) private nonZeroAddress(_treasury) {
         emit NewTreasury(treasury, _treasury);
         treasury = _treasury;
     }
 
-    /// @notice                             Internal setter for third party address
-    /// @param _thirdPartyAddress           third party address
+    ///@notice Internal setter for third party address
+    ///@param _thirdPartyAddress third party address
     function _setThirdPartyAddress(
         uint256 _thirdPartyId,
         address _thirdPartyAddress
@@ -253,8 +261,8 @@ contract CcTransferRouterLogic is
         thirdPartyAddress[_thirdPartyId] = _thirdPartyAddress;
     }
 
-    /// @notice                             Internal setter for third party fee
-    /// @param _thirdPartyFee               third party fee
+    ///@notice Internal setter for third party fee
+    ///@param _thirdPartyFee third party fee
     function _setThirdPartyFee(uint256 _thirdPartyId, uint256 _thirdPartyFee)
         private
     {
@@ -266,10 +274,10 @@ contract CcTransferRouterLogic is
         thirdPartyFee[_thirdPartyId] = _thirdPartyFee;
     }
 
-    /// @notice                             Check if the request has been executed before
-    /// @dev                                This is to avoid re-submitting a used request
-    /// @param _txId                        The txId of request on the source chain
-    /// @return                             True if the request has been executed
+    ///@notice Check if the request has been executed before
+    ///@dev This is to avoid re-submitting a used request
+    ///@param _txId The txId of request on the source chain
+    ///@return True if the request has been executed
     function isRequestUsed(bytes32 _txId)
         external
         view
@@ -279,20 +287,20 @@ contract CcTransferRouterLogic is
         return ccTransferRequests[_txId].isUsed ? true : false;
     }
 
-    /// @notice                             Executes the cross chain transfer request
-    /// @dev                                Validates the transfer request, then,
-    ///                                     if speed is 1, the request is instant
-    ///                                     which pays back the loan,
-    ///                                     if the speed is 0, it is a normal transfer
-    /// @param _txAndProof                  Transaction and merkle proof data
-    /// @param _lockerLockingScript         Locking script of locker that user has sent BTC to it
-    /// @return                             True if the transfer is successful
+    /// @notice Executes the cross chain transfer request
+    /// @dev Validates the transfer request, then,
+    /// if speed is 1, the request is instant
+    /// which pays back the loan,
+    /// if the speed is 0, it is a normal transfer
+    /// @param _txAndProof Transaction and merkle proof data
+    /// @param _lockerLockingScript Locking script of locker that user has sent BTC to it
+    /// @return True if the transfer is successful
     function wrap(
         TxAndProof memory _txAndProof,
         bytes calldata _lockerLockingScript
     ) external payable override nonReentrant returns (bool) {
         require(
-            _msgSender() == instantRouter,
+            _msgSender() == specialTeleporter,
             "CCTransferRouter: invalid sender"
         );
         require(
@@ -357,10 +365,10 @@ contract CcTransferRouterLogic is
         return true;
     }
 
-    /// @notice                             Sends minted teleBTC to the user
-    /// @param _lockerLockingScript         Locker's locking script
-    /// @param _txId                        The transaction ID of the request
-    /// @return _remainedAmount             Amount of teleBTC that user receives after reducing fees
+    /// @notice Sends minted teleBTC to the user
+    /// @param _lockerLockingScript Locker's locking script
+    /// @param _txId The transaction ID of the request
+    /// @return _remainedAmount Amount of teleBTC that user receives after reducing fees
     function _sendTeleBTC(bytes memory _lockerLockingScript, bytes32 _txId)
         private
         returns (
@@ -387,11 +395,11 @@ contract CcTransferRouterLogic is
         );
     }
 
-    /// @notice                             Parses and saves the request
-    /// @dev                                Checks that user has sent BTC to a valid locker
-    /// @param _lockerLockingScript         Locker's locking script
-    /// @param _vout                        The outputs of the tx
-    /// @param _txId                        The txID of the request
+    ///@notice Parses and saves the request
+    ///@dev Checks that user has sent BTC to a valid locker
+    ///@param _lockerLockingScript Locker's locking script
+    ///@param _vout The outputs of the tx
+    ///@param _txId The txID of the request
     function _saveCCTransferRequest(
         bytes memory _lockerLockingScript,
         bytes memory _vout,
@@ -467,13 +475,13 @@ contract CcTransferRouterLogic is
         ccTransferRequests[_txId] = request;
     }
 
-    /// @notice                             Checks if tx has been finalized on source chain
-    /// @dev                                Pays relay fee using included ETH in the transaction
-    /// @param _txId                        The request tx
-    /// @param _blockNumber                 The block number of the tx
-    /// @param _intermediateNodes           Merkle proof for tx
-    /// @param _index                       Index of tx in the block
-    /// @return                             True if the tx is finalized on the source chain
+    /// @notice Checks if tx has been finalized on source chain
+    /// @dev Pays relay fee using included ETH in the transaction
+    /// @param _txId The request tx
+    /// @param _blockNumber The block number of the tx
+    /// @param _intermediateNodes Merkle proof for tx
+    /// @param _index Index of tx in the block
+    /// @return True if the tx is finalized on the source chain
     function _isConfirmed(
         bytes32 _txId,
         uint256 _blockNumber,

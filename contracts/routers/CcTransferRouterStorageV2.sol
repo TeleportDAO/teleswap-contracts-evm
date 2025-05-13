@@ -10,4 +10,7 @@ abstract contract CcTransferRouterStorageV2 {
     mapping(uint => address) public thirdPartyAddress;
 
     mapping(bytes32 => uint) public thirdParty;
+
+    uint public lockerPercentageFee;
+    address public rewardDistributor;
 }

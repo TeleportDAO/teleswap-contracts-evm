@@ -674,7 +674,7 @@ contract BurnRouterLogic is
             _exchangeConnector
         ).swap(
                 _amounts[0],
-                _amounts[1] * 90 / 100, // TODO: _amounts[1]
+                _amounts[1],
                 _path,
                 address(this),
                 _deadline,
@@ -695,19 +695,29 @@ contract BurnRouterLogic is
         bytes32 _inputTxId,
         uint256 _inputBlockNumber
     ) private {
-        // Finds total value of malicious transaction
-        uint256 totalValue = BitcoinHelper.parseOutputsTotalValue(_inputVout);
+        // Get the necessary data for slashing
+        (
+            address _lockerTargetAddress,
+            uint256 slasherReward,
+            uint256 totalValue
+        ) = BurnRouterLib.prepareSlashLockerForDispute(
+            lockers,
+            _inputVout,
+            _lockerLockingScript,
+            slasherPercentageReward,
+            MAX_PERCENTAGE_FEE
+        );
 
-        // Gets the target address of the locker from its Bitcoin address
-        address _lockerTargetAddress = ILockersManager(lockers)
-            .getLockerTargetAddress(_lockerLockingScript);
-
+        // Perform the slash operation
         ILockersManager(lockers).slashThiefLocker(
             _lockerTargetAddress,
-            (totalValue * slasherPercentageReward) / MAX_PERCENTAGE_FEE, // Slasher reward
+            slasherReward,
             _msgSender(), // Slasher address
             totalValue
         );
+
+        // Calculate total value slashed (including slasher reward)
+        uint256 totalValueSlashed = totalValue + slasherReward;
 
         // Emits the event
         emit LockerDispute(
@@ -715,13 +725,12 @@ contract BurnRouterLogic is
             _lockerLockingScript,
             _inputBlockNumber,
             _inputTxId,
-            totalValue +
-                (totalValue * slasherPercentageReward) /
-                MAX_PERCENTAGE_FEE
+            totalValueSlashed
         );
     }
 
     /// @notice Checks the burn requests that get paid by this transaction
+    /// @param _txId Transaction ID of the payment
     /// @param _paidBlockNumber Block number in which locker paid the burn request
     /// @param _lockerTargetAddress Address of the locker on the target chain
     /// @param _vout Outputs of a transaction
@@ -729,70 +738,33 @@ contract BurnRouterLogic is
     /// @param _voutIndexes Indexes of outputs that were used to pay burn requests
     /// @return paidOutputCounter Number of executed burn requests
     function _checkPaidBurnRequests(
-        bytes32 txId,
+        bytes32 _txId,
         uint256 _paidBlockNumber,
         address _lockerTargetAddress,
         bytes memory _vout,
         uint256[] memory _burnReqIndexes,
         uint256[] memory _voutIndexes
     ) private returns (uint256 paidOutputCounter) {
-        uint256 parsedAmount;
-        /*
-            Below variable is for checking that every output in vout (except one)
-            is related to a cc burn request so that we can
-            set "isUsedAsBurnProof = true" for the whole txId
-        */
-        paidOutputCounter = 0;
-        uint256 tempVoutIndex;
-
+        paidOutputCounter = BurnRouterLib.checkPaidBurnRequests(
+            burnRequests,
+            _paidBlockNumber,
+            _lockerTargetAddress,
+            _vout,
+            _burnReqIndexes,
+            _voutIndexes
+        );
+        
+        // Emit events for paid requests
         for (uint256 i = 0; i < _burnReqIndexes.length; i++) {
-            // prevent from sending repeated vout indexes
-            if (i == 0) {
-                tempVoutIndex = _voutIndexes[i];
-            } else {
-                // get vout indexes in increasing order to get sure there is no duplicate
-                require(
-                    _voutIndexes[i] > tempVoutIndex,
-                    "BurnRouterLogic: un-sorted vout indexes"
-                );
-
-                tempVoutIndex = _voutIndexes[i];
-            }
-
             uint256 _burnReqIndex = _burnReqIndexes[i];
-            // Checks that the request has not been paid and its deadline has not passed
-            if (
-                !burnRequests[_lockerTargetAddress][_burnReqIndex]
-                    .isTransferred &&
-                burnRequests[_lockerTargetAddress][_burnReqIndex].deadline >=
-                _paidBlockNumber
-            ) {
-                parsedAmount = BitcoinHelper
-                    .parseValueFromSpecificOutputHavingScript(
-                        _vout,
-                        _voutIndexes[i],
-                        burnRequests[_lockerTargetAddress][_burnReqIndex]
-                            .userScript,
-                        burnRequests[_lockerTargetAddress][_burnReqIndex]
-                            .scriptType
-                    );
-                    
-                // Checks that locker has sent required teleBTC amount
-                if (
-                    burnRequests[_lockerTargetAddress][_burnReqIndex]
-                        .burntAmount == parsedAmount
-                ) {
-                    burnRequests[_lockerTargetAddress][_burnReqIndex]
-                        .isTransferred = true;
-                    paidOutputCounter = paidOutputCounter + 1;
-                    emit PaidUnwrap(
-                        _lockerTargetAddress,
-                        burnRequests[_lockerTargetAddress][_burnReqIndex]
-                            .requestIdOfLocker,
-                        txId,
-                        _voutIndexes[i]
-                    );
-                }
+            // Only emit for requests that were successfully processed
+            if (burnRequests[_lockerTargetAddress][_burnReqIndex].isTransferred) {
+                emit PaidUnwrap(
+                    _lockerTargetAddress,
+                    burnRequests[_lockerTargetAddress][_burnReqIndex].requestIdOfLocker,
+                    _txId,
+                    _voutIndexes[i]
+                );
             }
         }
     }
@@ -801,6 +773,7 @@ contract BurnRouterLogic is
     /// @param _amount Amount of wrapped token that user wants to burn
     /// @param _burntAmount Amount of wrapped token that actually gets burnt after deducting fees from the original value (_amount)
     /// @param _userScript User's Bitcoin script type
+    /// @param _scriptType Script type
     /// @param _lastSubmittedHeight Last block header height submitted on the relay contract
     /// @param _lockerTargetAddress Locker's target chain address that the request belongs to
     function _saveBurnRequest(
@@ -811,19 +784,18 @@ contract BurnRouterLogic is
         uint256 _lastSubmittedHeight,
         address _lockerTargetAddress
     ) private {
-        burnRequest memory request;
-        request.amount = _amount;
-        request.burntAmount = _burntAmount;
-        request.sender = _msgSender();
-        request.userScript = _userScript;
-        request.scriptType = _scriptType;
-        request.deadline = _lastSubmittedHeight + transferDeadline;
-        request.isTransferred = false;
-        request.requestIdOfLocker = burnRequestCounter[_lockerTargetAddress];
-        burnRequestCounter[_lockerTargetAddress] =
-            burnRequestCounter[_lockerTargetAddress] +
-            1;
-        burnRequests[_lockerTargetAddress].push(request);
+        BurnRouterLib.saveBurnRequest(
+            burnRequests,
+            burnRequestCounter,
+            _amount,
+            _burntAmount,
+            _userScript,
+            _scriptType,
+            _lastSubmittedHeight,
+            _lockerTargetAddress,
+            transferDeadline,
+            _msgSender()
+        );
     }
 
     /// @notice Checks inclusion of the transaction in the specified block

@@ -77,7 +77,6 @@ describe("CcTransferRouter", async function() {
 
     // Mock contracts
     let mockBitcoinRelay: MockContract;
-    let mockInstantRouter: MockContract;
     let mockPriceOracle: MockContract;
 
     let beginning: any;
@@ -172,7 +171,7 @@ describe("CcTransferRouter", async function() {
         await teleBTC.addBurner(lockers.address)
 
         await ccTransferRouter.setLockers(lockers.address)
-        await ccTransferRouter.setInstantRouter(deployerAddress)
+        await ccTransferRouter.setSpecialTeleporter(deployerAddress)
     });
 
     const deployLockersManagerLib = async (
@@ -798,7 +797,7 @@ describe("CcTransferRouter", async function() {
             ).to.revertedWith("CCTransferRouter: lock time is non -zero");
         })
 
-        it("only instant router can wrap", async function () {
+        it("only special teleporter can wrap", async function () {
             await setRelayReturn(true);
 
             await expect(
@@ -836,77 +835,6 @@ describe("CcTransferRouter", async function() {
                 )
             ).to.revertedWith("CCTransferRouter: paid fee is not sufficient");
         })
-
-        // it("Mints teleBTC for instant cc transfer request", async function () {
-        //     let prevSupply = await teleBTC.totalSupply();
-        //     // Mocks relay to return true after checking tx proof
-        //     await setRelayReturn(true);
-
-        //     // Calculates fees
-        //     let lockerFee = Math.floor(
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount*LOCKER_PERCENTAGE_FEE/10000
-        //     );
-        //     let teleporterFee = Math.floor(
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount*CC_REQUESTS.normalCCTransfer.teleporterFee/10000
-        //     );
-        //     let protocolFee = Math.floor(
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount*PROTOCOL_PERCENTAGE_FEE/10000
-        //     );
-
-        //     let receivedAmount = CC_REQUESTS.instantCCTransfer.bitcoinAmount - lockerFee - teleporterFee - protocolFee;
-
-        //     await expect(
-        //         await ccTransferRouter.wrap(
-        //             CC_REQUESTS.instantCCTransfer.version,
-        //             CC_REQUESTS.instantCCTransfer.vin,
-        //             CC_REQUESTS.instantCCTransfer.vout,
-        //             CC_REQUESTS.instantCCTransfer.locktime,
-        //             CC_REQUESTS.instantCCTransfer.blockNumber,
-        //             CC_REQUESTS.instantCCTransfer.intermediateNodes,
-        //             CC_REQUESTS.instantCCTransfer.index,
-        //             LOCKER1_LOCKING_SCRIPT
-        //         )
-        //     ).to.emit(ccTransferRouter, 'CCTransfer').withArgs(
-        //         LOCKER1_LOCKING_SCRIPT,
-        //         0,
-        //         lockerAddress,
-        //         CC_REQUESTS.instantCCTransfer.recipientAddress,
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount,
-        //         receivedAmount,
-        //         CC_REQUESTS.instantCCTransfer.speed,
-        //         deployerAddress,
-        //         teleporterFee,
-        //         0,
-        //         protocolFee,
-        //         CC_REQUESTS.instantCCTransfer.txId
-        //     );
-
-        //     // Checks that enough teleBTC allowance has been given to instant router
-        //     expect(
-        //         await teleBTC.allowance(ccTransferRouter.address, mockInstantRouter.address)
-        //     ).to.equal(receivedAmount);
-
-        //     // Checks that enough teleBTC has been minted for teleporter
-        //     expect(
-        //         await teleBTC.balanceOf(await deployer.getAddress())
-        //     ).to.equal(teleporterFee);
-
-        //     // Checks that correct amount of teleBTC has been minted for protocol
-        //     expect(
-        //         await teleBTC.balanceOf(TREASURY)
-        //     ).to.equal(protocolFee);
-
-        //     // Checks that correct amount of teleBTC has been minted for locker
-        //     expect(
-        //         await teleBTC.balanceOf(lockerAddress)
-        //     ).to.equal(lockerFee);
-
-        //     // Checks that correct amount of teleBTC has been minted in total
-        //     expect(
-        //         await teleBTC.totalSupply()
-        //     ).to.equal(prevSupply + CC_REQUESTS.instantCCTransfer.bitcoinAmount)
-        // })
-
     });
 
     describe("#isRequestUsed", async () => {
@@ -998,7 +926,7 @@ describe("CcTransferRouter", async function() {
             ).to.revertedWith("CCTransferRouter: protocol fee is out of range");
         })
 
-        it("Sets relay, lockers, instant router, teleBTC and treasury", async function () {
+        it("Sets relay, lockers, special teleporter, teleBTC and treasury", async function () {
             await expect(
                 await ccTransferRouter.setRelay(ONE_ADDRESS)
             ).to.emit(
@@ -1025,17 +953,17 @@ describe("CcTransferRouter", async function() {
             ).to.be.revertedWith("Ownable: caller is not the owner")
 
             await expect(
-                await ccTransferRouter.setInstantRouter(ONE_ADDRESS)
+                await ccTransferRouter.setSpecialTeleporter(ONE_ADDRESS)
             ).to.emit(
-                ccTransferRouter, "NewInstantRouter"
+                ccTransferRouter, "NewSpecialTeleporter"
             ).withArgs(deployerAddress, ONE_ADDRESS);
 
             expect(
-                await ccTransferRouter.instantRouter()
+                await ccTransferRouter.specialTeleporter()
             ).to.equal(ONE_ADDRESS);
 
             await expect(
-                ccTransferRouter.connect(signer1).setInstantRouter(ONE_ADDRESS)
+                ccTransferRouter.connect(signer1).setSpecialTeleporter(ONE_ADDRESS)
             ).to.be.revertedWith("Ownable: caller is not the owner")
 
             await expect(
@@ -1085,7 +1013,7 @@ describe("CcTransferRouter", async function() {
             ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
-                ccTransferRouter.setInstantRouter(ZERO_ADDRESS)
+                ccTransferRouter.setSpecialTeleporter(ZERO_ADDRESS)
             ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(

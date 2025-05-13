@@ -282,4 +282,140 @@ library BurnRouterLib {
     ) public view returns (uint256) {
         return IBitcoinRelay(_relay).getBlockHeaderFee(_blockNumber, 0);
     }
+
+    /// @notice Records burn request of user
+    /// @param _burnRequests Array of burn requests for the locker
+    /// @param _burnRequestCounter Counter of burn requests for the locker
+    /// @param _amount Amount of wrapped token that user wants to burn
+    /// @param _burntAmount Amount of wrapped token that actually gets burnt after deducting fees from the original value (_amount)
+    /// @param _userScript User's Bitcoin script type
+    /// @param _scriptType User's Bitcoin script type
+    /// @param _lastSubmittedHeight Last block header height submitted on the relay contract
+    /// @param _lockerTargetAddress Locker's target chain address that the request belongs to
+    /// @param _transferDeadline Deadline for the transfer
+    /// @param _sender Address of the sender
+    /// @return requestId The ID of the created burn request
+    function saveBurnRequest(
+        mapping(address => BurnRouterStorage.burnRequest[]) storage _burnRequests,
+        mapping(address => uint256) storage _burnRequestCounter,
+        uint256 _amount,
+        uint256 _burntAmount,
+        bytes memory _userScript,
+        ScriptTypes _scriptType,
+        uint256 _lastSubmittedHeight,
+        address _lockerTargetAddress,
+        uint256 _transferDeadline,
+        address _sender
+    ) external returns (uint256 requestId) {
+        BurnRouterStorage.burnRequest memory request;
+        request.amount = _amount;
+        request.burntAmount = _burntAmount;
+        request.sender = _sender;
+        request.userScript = _userScript;
+        request.scriptType = _scriptType;
+        request.deadline = _lastSubmittedHeight + _transferDeadline;
+        request.isTransferred = false;
+        request.requestIdOfLocker = _burnRequestCounter[_lockerTargetAddress];
+        
+        requestId = _burnRequestCounter[_lockerTargetAddress];
+        _burnRequestCounter[_lockerTargetAddress] = _burnRequestCounter[_lockerTargetAddress] + 1;
+        _burnRequests[_lockerTargetAddress].push(request);
+        
+        return requestId;
+    }
+
+    /// @notice Checks the burn requests that get paid by this transaction
+    /// @param _burnRequests Array of burn requests for the locker
+    /// @param _paidBlockNumber Block number in which locker paid the burn request
+    /// @param _lockerTargetAddress Address of the locker on the target chain
+    /// @param _vout Outputs of a transaction
+    /// @param _burnReqIndexes Indexes of requests that locker provides proof for them
+    /// @param _voutIndexes Indexes of outputs that were used to pay burn requests
+    /// @return paidOutputCounter Number of executed burn requests
+    function checkPaidBurnRequests(
+        mapping(address => BurnRouterStorage.burnRequest[]) storage _burnRequests,
+        uint256 _paidBlockNumber,
+        address _lockerTargetAddress,
+        bytes memory _vout,
+        uint256[] memory _burnReqIndexes,
+        uint256[] memory _voutIndexes
+    ) external returns (uint256 paidOutputCounter) {
+        uint256 parsedAmount;
+        /*
+            Below variable is for checking that every output in vout (except one)
+            is related to a cc burn request so that we can
+            set "isUsedAsBurnProof = true" for the whole txId
+        */
+        paidOutputCounter = 0;
+        uint256 tempVoutIndex;
+
+        for (uint256 i = 0; i < _burnReqIndexes.length; i++) {
+            // prevent from sending repeated vout indexes
+            if (i == 0) {
+                tempVoutIndex = _voutIndexes[i];
+            } else {
+                // get vout indexes in increasing order to get sure there is no duplicate
+                require(
+                    _voutIndexes[i] > tempVoutIndex,
+                    "BurnRouterLogic: un-sorted vout indexes"
+                );
+
+                tempVoutIndex = _voutIndexes[i];
+            }
+
+            uint256 _burnReqIndex = _burnReqIndexes[i];
+            // Checks that the request has not been paid and its deadline has not passed
+            if (
+                !_burnRequests[_lockerTargetAddress][_burnReqIndex].isTransferred &&
+                _burnRequests[_lockerTargetAddress][_burnReqIndex].deadline >= _paidBlockNumber
+            ) {
+                parsedAmount = BitcoinHelper.parseValueFromSpecificOutputHavingScript(
+                    _vout,
+                    _voutIndexes[i],
+                    _burnRequests[_lockerTargetAddress][_burnReqIndex].userScript,
+                    _burnRequests[_lockerTargetAddress][_burnReqIndex].scriptType
+                );
+                
+                // Checks that locker has sent required teleBTC amount
+                if (
+                    _burnRequests[_lockerTargetAddress][_burnReqIndex].burntAmount == parsedAmount
+                ) {
+                    _burnRequests[_lockerTargetAddress][_burnReqIndex].isTransferred = true;
+                    paidOutputCounter = paidOutputCounter + 1;
+                }
+            }
+        }
+    }
+
+    /// @notice Prepares data for slashing the malicious locker
+    /// @param lockers Address of lockers contract
+    /// @param _inputVout Inputs of the malicious transaction
+    /// @param _lockerLockingScript Malicious locker's locking script
+    /// @param _slasherPercentageReward Percentage of reward for slasher
+    /// @param _MAX_PERCENTAGE_FEE Maximum percentage fee
+    /// @return _lockerTargetAddress Address of the locker to slash
+    /// @return slasherReward Reward amount for the slasher
+    /// @return totalValue Total value to slash
+    function prepareSlashLockerForDispute(
+        address lockers,
+        bytes memory _inputVout,
+        bytes memory _lockerLockingScript,
+        uint256 _slasherPercentageReward,
+        uint256 _MAX_PERCENTAGE_FEE
+    ) external view returns (
+        address _lockerTargetAddress,
+        uint256 slasherReward,
+        uint256 totalValue
+    ) {
+        // Finds total value of malicious transaction
+        totalValue = BitcoinHelper.parseOutputsTotalValue(_inputVout);
+
+        // Gets the target address of the locker from its Bitcoin address
+        _lockerTargetAddress = ILockersManager(lockers)
+            .getLockerTargetAddress(_lockerLockingScript);
+
+        slasherReward = (totalValue * _slasherPercentageReward) / _MAX_PERCENTAGE_FEE;
+        
+        return (_lockerTargetAddress, slasherReward, totalValue);
+    }
 }
