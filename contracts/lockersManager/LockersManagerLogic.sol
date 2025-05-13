@@ -562,57 +562,6 @@ contract LockersManagerLogic is
         return true;
     }
 
-    // /// @notice Remove Locker from system and send back Locker TST and collateral.
-    // /// @dev Owner need to pay net minted TeleBTC to the contract
-    // function removeLockerByOwner(
-    //     address _lockerTargetAddress
-    // ) external onlyOwner nonReentrant returns (bool) {
-    //     locker memory _removingLocker = lockersMapping[_lockerTargetAddress];
-
-    //     require(_removingLocker.isLocker, "Lockers: no locker");
-
-    //     if (_removingLocker.netMinted > 0) {
-    //         ITeleBTC(teleBTC).transferFrom(
-    //             _msgSender(),
-    //             address(this),
-    //             _removingLocker.netMinted
-    //         );
-    //         ITeleBTC(teleBTC).burn(_removingLocker.netMinted);
-    //     }
-
-    //     require(
-    //         _removingLocker.slashingTeleBTCAmount == 0,
-    //         "Lockers: 0 slashing TBTC"
-    //     );
-
-    //     // Remove locker from lockersMapping
-
-    //     delete getLockerTargetAddress[
-    //         lockersMapping[_lockerTargetAddress].lockerLockingScript
-    //     ];
-    //     delete lockersMapping[_lockerTargetAddress];
-    //     totalNumberOfLockers = totalNumberOfLockers - 1;
-
-    //     // Sends back TST and collateral
-    //     IERC20(TeleportSystemToken).safeTransfer(
-    //         owner(),
-    //         _removingLocker.TSTLockedAmount
-    //     );
-    //     Address.sendValue(
-    //         payable(owner()),
-    //         _removingLocker.collateralTokenLockedAmount
-    //     );
-
-    //     emit LockerRemoved(
-    //         _lockerTargetAddress,
-    //         _removingLocker.lockerLockingScript,
-    //         _removingLocker.TSTLockedAmount,
-    //         lockerCollateralToken[_lockerTargetAddress],
-    //         _removingLocker.collateralTokenLockedAmount
-    //     );
-    //     return true;
-    // }
-
     /// @notice Slash Locker for unprocessed unwrap request
     /// @dev Only burn router can call this. Locker is slashed since he doesn't provide burn proof
     ///      before the request deadline. User who made the burn request will receive the slashed bond.
@@ -727,18 +676,6 @@ contract LockersManagerLogic is
         return true;
     }
 
-    // function liquidateLocker(
-    //     address _lockerTargetAddress,
-    //     uint256 _collateralAmount
-    // )
-    //     external
-    //     override
-    //     nonZeroValue(_collateralAmount)
-    //     nonReentrant
-    //     whenNotPaused
-    //     returns (bool)
-    // {}
-
     /// @notice Liquidate Locker with unhealthy collateral
     /// @dev Anyone can liquidate Locker with health factor under
     ///      100% by providing a sufficient amount of TeleBTC.
@@ -754,6 +691,7 @@ contract LockersManagerLogic is
         nonZeroValue(_collateralAmount)
         nonReentrant
         whenNotPaused
+        onlyOwner
         returns (bool)
     {
         uint256 neededTeleBTC = LockersManagerLib.liquidateLocker(
@@ -1183,3 +1121,54 @@ contract LockersManagerLogic is
             );
     }
 }
+
+    // /// @notice Remove Locker from system and send back Locker TST and collateral.
+    // /// @dev Owner need to pay net minted TeleBTC to the contract
+    // function removeLockerByOwner(
+    //     address _lockerTargetAddress
+    // ) external onlyOwner nonReentrant returns (bool) {
+    //     locker memory _removingLocker = lockersMapping[_lockerTargetAddress];
+
+    //     require(_removingLocker.isLocker, "Lockers: no locker");
+
+    //     if (_removingLocker.netMinted > 0) {
+    //         ITeleBTC(teleBTC).transferFrom(
+    //             _msgSender(),
+    //             address(this),
+    //             _removingLocker.netMinted
+    //         );
+    //         ITeleBTC(teleBTC).burn(_removingLocker.netMinted);
+    //     }
+
+    //     require(
+    //         _removingLocker.slashingTeleBTCAmount == 0,
+    //         "Lockers: 0 slashing TBTC"
+    //     );
+
+    //     // Remove locker from lockersMapping
+
+    //     delete getLockerTargetAddress[
+    //         lockersMapping[_lockerTargetAddress].lockerLockingScript
+    //     ];
+    //     delete lockersMapping[_lockerTargetAddress];
+    //     totalNumberOfLockers = totalNumberOfLockers - 1;
+
+    //     // Sends back TST and collateral
+    //     IERC20(TeleportSystemToken).safeTransfer(
+    //         owner(),
+    //         _removingLocker.TSTLockedAmount
+    //     );
+    //     Address.sendValue(
+    //         payable(owner()),
+    //         _removingLocker.collateralTokenLockedAmount
+    //     );
+
+    //     emit LockerRemoved(
+    //         _lockerTargetAddress,
+    //         _removingLocker.lockerLockingScript,
+    //         _removingLocker.TSTLockedAmount,
+    //         lockerCollateralToken[_lockerTargetAddress],
+    //         _removingLocker.collateralTokenLockedAmount
+    //     );
+    //     return true;
+    // }
