@@ -1,5 +1,6 @@
 const CC_REQUESTS = require('./test_fixtures/ccTransferRequests.json');
 require('dotenv').config({path:"../../.env"});
+import "@nomicfoundation/hardhat-chai-matchers";
 
 import { expect } from "chai";
 import { deployments, ethers } from "hardhat";
@@ -27,7 +28,8 @@ import { Erc20__factory } from "../src/types/factories/Erc20__factory";
 
 import { takeSnapshot, revertProvider } from "./block_utils";
 
-describe("CcTransferRouter", async () => {
+describe("CcTransferRouter", async function() {
+    this.bail(true); // Stop on first failure
 
     // Constants
     let ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -128,6 +130,7 @@ describe("CcTransferRouter", async () => {
         await ccTransferRouter.initialize(
             STARTING_BLOCK_NUMBER,
             PROTOCOL_PERCENTAGE_FEE,
+            LOCKER_PERCENTAGE_FEE,
             CHAIN_ID,
             APP_ID,
             mockBitcoinRelay.address,
@@ -194,7 +197,7 @@ describe("CcTransferRouter", async () => {
         let linkLibraryAddresses: LockersManagerLogicLibraryAddresses;
 
         linkLibraryAddresses = {
-            "contracts/libraries/LockersManagerLib.sol:LockersManagerLib": lockersLib.address,
+            "contracts/lockersManager/LockersManagerLib.sol:LockersManagerLib": lockersLib.address,
         };
 
         // Deploys lockers logic
@@ -1075,23 +1078,23 @@ describe("CcTransferRouter", async () => {
         it("Reverts since given address is zero", async function () {
             await expect(
                 ccTransferRouter.setRelay(ZERO_ADDRESS)
-            ).to.revertedWith("ZeroAddress");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
                 ccTransferRouter.setLockers(ZERO_ADDRESS)
-            ).to.revertedWith("ZeroAddress");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
                 ccTransferRouter.setInstantRouter(ZERO_ADDRESS)
-            ).to.revertedWith("ZeroAddress");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
                 ccTransferRouter.setTeleBTC(ZERO_ADDRESS)
-            ).to.revertedWith("ZeroAddress");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
                 ccTransferRouter.setTreasury(ZERO_ADDRESS)
-            ).to.revertedWith("ZeroAddress");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
         })
 
         

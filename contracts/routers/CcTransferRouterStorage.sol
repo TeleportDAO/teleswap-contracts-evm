@@ -6,7 +6,7 @@ import "./interfaces/ICcTransferRouter.sol";
 abstract contract CcTransferRouterStorage is ICcTransferRouter {
 
     // Constants
-    uint constant MAX_PROTOCOL_FEE = 10000;
+    uint constant MAX_PERCENTAGE_FEE = 10000;
 
     // Public variables
     uint public override startingBlockNumber;
@@ -19,5 +19,7 @@ abstract contract CcTransferRouterStorage is ICcTransferRouter {
     address public override instantRouter;
     address public override treasury;
     mapping(bytes32 => ccTransferRequest) public ccTransferRequests; // TxId to ccTransferRequest structure
+    uint public lockerPercentageFee;
+    address public rewardDistributor;
 
 }

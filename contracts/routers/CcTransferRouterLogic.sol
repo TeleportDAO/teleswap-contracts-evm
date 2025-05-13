@@ -37,6 +37,7 @@ contract CcTransferRouterLogic is
     function initialize(
         uint256 _startingBlockNumber,
         uint256 _protocolPercentageFee,
+        uint256 _lockerPercentageFee,
         uint256 _chainId,
         uint256 _appId,
         address _relay,
@@ -51,6 +52,7 @@ contract CcTransferRouterLogic is
         appId = _appId;
         _setStartingBlockNumber(_startingBlockNumber);
         _setProtocolPercentageFee(_protocolPercentageFee);
+        _setLockerPercentageFee(_lockerPercentageFee);
         _setRelay(_relay);
         _setLockers(_lockers);
         _setTeleBTC(_teleBTC);
@@ -77,6 +79,17 @@ contract CcTransferRouterLogic is
         onlyOwner
     {
         _setProtocolPercentageFee(_protocolPercentageFee);
+    }
+
+    /// @notice                             Setter for locker percentage fee
+    /// @dev                                Only owner can call this
+    /// @param _lockerPercentageFee         Percentage amount of locker fee
+    function setLockerPercentageFee(uint256 _lockerPercentageFee)
+        external
+        override
+        onlyOwner 
+    {
+        _setLockerPercentageFee(_lockerPercentageFee);
     }
 
     /// @notice                             Setter for relay
@@ -159,7 +172,7 @@ contract CcTransferRouterLogic is
     /// @param _protocolPercentageFee       Percentage amount of protocol fee
     function _setProtocolPercentageFee(uint256 _protocolPercentageFee) private {
         require(
-            MAX_PROTOCOL_FEE >= _protocolPercentageFee,
+            MAX_PERCENTAGE_FEE >= _protocolPercentageFee,
             "CCTransferRouter: protocol fee is out of range"
         );
         emit NewProtocolPercentageFee(
@@ -169,6 +182,16 @@ contract CcTransferRouterLogic is
         protocolPercentageFee = _protocolPercentageFee;
     }
 
+    /// @notice                             Internal setter for locker percentage fee
+    /// @param _lockerPercentageFee         Percentage amount of locker fee
+    function _setLockerPercentageFee(uint256 _lockerPercentageFee) private {
+        require(
+            MAX_PERCENTAGE_FEE >= _lockerPercentageFee,
+            "CCTransferRouter: locker fee is out of range"
+        );
+        lockerPercentageFee = _lockerPercentageFee;
+    }
+    
     /// @notice Internal setter for starting block number
     function _setStartingBlockNumber(uint256 _startingBlockNumber) private {
         require(
@@ -503,24 +526,18 @@ contract CcTransferRouterLogic is
             uint256 _lockerFee
         )
     {
-        // Mints teleBTC for cc transfer router
-        // Lockers contract gets locker's fee
-        uint256 mintedAmount = ILockersManager(lockers).mint(
+        // Mints TeleBTC for cc transfer router
+        ILockersManager(lockers).mint(
             _lockerLockingScript,
             address(this),
             ccTransferRequests[_txId].inputAmount
         );
 
-        // Calculates fees
-        _protocolFee =
-            (ccTransferRequests[_txId].inputAmount * protocolPercentageFee) /
-            MAX_PROTOCOL_FEE;
+        // Calculates fees (protocol, network, third party, locker)
+        _protocolFee = (ccTransferRequests[_txId].inputAmount * protocolPercentageFee) / MAX_PERCENTAGE_FEE;
         _networkFee = ccTransferRequests[_txId].fee;
-        _thirdPartyFee =
-            (ccTransferRequests[_txId].inputAmount *
-                thirdPartyFee[thirdParty[_txId]]) /
-            MAX_PROTOCOL_FEE;
-        _lockerFee = ccTransferRequests[_txId].inputAmount - mintedAmount;
+        _thirdPartyFee = (ccTransferRequests[_txId].inputAmount * thirdPartyFee[thirdParty[_txId]]) / MAX_PERCENTAGE_FEE;
+        _lockerFee = (ccTransferRequests[_txId].inputAmount * lockerPercentageFee) / MAX_PERCENTAGE_FEE;
 
         // Pays Teleporter fee
         if (_networkFee > 0) {
@@ -540,11 +557,43 @@ contract CcTransferRouterLogic is
             );
         }
 
+        // Pays locker fee
+        if (_lockerFee > 0) {
+            _sendLockerFee(
+                ILockersManager(lockers).getLockerTargetAddress(
+                    _lockerLockingScript
+                ),
+                _lockerFee,
+                thirdParty[_txId]
+            );
+        }
+
         _remainedAmount =
-            mintedAmount -
+            ccTransferRequests[_txId].inputAmount -
             _protocolFee -
             _networkFee -
-            _thirdPartyFee;
+            _thirdPartyFee -
+            _lockerFee;
+    }
+
+    function _sendLockerFee(address _locker, uint _lockerFee, uint _thirdParty) internal {
+        if (_lockerFee > 0) {
+            if (rewardDistributor == address(0) || _thirdParty != 0) {
+                // Send reward directly to locker
+                ITeleBTC(teleBTC).transfer(_locker, _lockerFee);
+            } else {
+                // Call reward distributor to distribute reward
+                ITeleBTC(teleBTC).approve(rewardDistributor, _lockerFee);
+                Address.functionCall(
+                    rewardDistributor,
+                    abi.encodeWithSignature(
+                        "depositReward(address,uint256)",
+                        _locker,
+                        _lockerFee
+                    )
+                );
+            }
+        }
     }
 
     receive() external payable {}

@@ -151,6 +151,8 @@ interface ICcTransferRouter {
 
 	function setProtocolPercentageFee(uint _protocolPercentageFee) external;
 
+	function setLockerPercentageFee(uint256 _lockerPercentageFee) external;
+
 	function setThirdPartyAddress(uint _thirdPartyId, address _thirdPartyAddress) external;
 
 	function setThirdPartyFee(uint _thirdPartyId, uint _thirdPartyFee) external;
