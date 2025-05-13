@@ -283,7 +283,7 @@ contract LockersManagerLogic is
     /// @param _candidateLockingScript Locking script of the Locker. Users can use this script to lock BTC.
     /// @param _lockedTSTAmount TST bond amount
     /// @param _lockedCollateralTokenAmount target collateral token bond amount
-    /// @param _lockerRescueType Type of Locker's rescue script (e.g. P2SH)
+    /// @param _lockerScriptType Type of Locker's script (e.g. P2SH)
     /// @param _lockerRescueScript Rescue script of Locker. In the case of liqudation, BTC is sent to this script.
     /// @return True if candidate added successfully
     function requestToBecomeLocker(
@@ -291,7 +291,7 @@ contract LockersManagerLogic is
         address _collateralToken,
         uint256 _lockedTSTAmount,
         uint256 _lockedCollateralTokenAmount,
-        ScriptTypes _lockerRescueType,
+        ScriptTypes _lockerScriptType,
         bytes calldata _lockerRescueScript
     )
         external
@@ -312,7 +312,7 @@ contract LockersManagerLogic is
                 _lockedTSTAmount,
                 _lockedCollateralTokenAmount,
                 _candidateLockingScript,
-                _lockerRescueType,
+                _lockerScriptType,
                 _lockerRescueScript
             )
         );
@@ -787,7 +787,7 @@ contract LockersManagerLogic is
         IBurnRouter(burnRouter).unwrap(
             neededTeleBTC,
             theLiquidatingLocker.lockerRescueScript,
-            theLiquidatingLocker.lockerRescueType,
+            theLiquidatingLocker.lockerScriptType,
             theLiquidatingLocker.lockerLockingScript,
             0
         );

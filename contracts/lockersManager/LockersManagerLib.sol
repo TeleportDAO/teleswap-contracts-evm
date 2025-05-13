@@ -43,7 +43,7 @@ library LockersManagerLib {
         locker_.TSTLockedAmount = args._lockedTSTAmount;
         locker_.collateralTokenLockedAmount = args._lockedCollateralTokenAmount;
         locker_.isCandidate = true;
-        locker_.lockerRescueType = args._lockerRescueType;
+        locker_.lockerScriptType = args._lockerScriptType;
         locker_.lockerRescueScript = args._lockerRescueScript;
 
         lockersMapping[msg.sender] = locker_;

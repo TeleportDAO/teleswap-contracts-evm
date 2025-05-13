@@ -6,7 +6,7 @@ import "@teleportdao/btc-evm-bridge/contracts/types/ScriptTypesEnum.sol";
 interface ILockersManager {
     /// @notice Structure for registering lockers
     /// @param lockerLockingScript Locker redeem script
-    /// @param lockerRescueType Locker script type in case of getting BTCs back
+    /// @param lockerScriptType Locker script type
     /// @param lockerRescueScript Locker script in case of getting BTCs back
     /// @param TSTLockedAmount Amount of TST locked by Locker
     /// @param collateralTokenLockedAmount Amount of collateral token locked by Locker
@@ -18,7 +18,7 @@ interface ILockersManager {
     /// @param isScriptHash NOT USED
     struct locker {
         bytes lockerLockingScript;
-        ScriptTypes lockerRescueType;
+        ScriptTypes lockerScriptType;
         bytes lockerRescueScript;
         uint256 TSTLockedAmount;
         uint256 collateralTokenLockedAmount;
@@ -63,7 +63,7 @@ interface ILockersManager {
         uint256 _lockedTSTAmount;
         uint256 _lockedCollateralTokenAmount;
         bytes _candidateLockingScript;
-        ScriptTypes _lockerRescueType;
+        ScriptTypes _lockerScriptType;
         bytes _lockerRescueScript;
     }
 
@@ -358,7 +358,7 @@ interface ILockersManager {
         address _collateralToken,
         uint _lockedTSTAmount,
         uint _lockedCollateralTokenAmount,
-        ScriptTypes _lockerRescueType,
+        ScriptTypes _lockerScriptType,
         bytes calldata _lockerRescueScript
     ) external payable returns (bool);
 
