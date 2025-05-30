@@ -224,8 +224,8 @@ contract UniswapV3Connector is
             _isFixedToken
         );
 
-        uint _amount;
         if (_result) {
+            uint _amount;
             _amounts = new uint[](2);
             // Get tokens from user
             IERC20(_path[0]).safeTransferFrom(
@@ -322,7 +322,7 @@ contract UniswapV3Connector is
     ) private view returns (ISwapRouter.ExactOutputParams memory) {
         return
             ISwapRouter.ExactOutputParams({
-                path: convertedPath(_path),
+                path: convertedPathReversed(_path),
                 recipient: _recipient,
                 deadline: _deadline,
                 amountOut: _amountOut,
@@ -346,18 +346,30 @@ contract UniswapV3Connector is
             return (false, 0);
         }
 
-        // Find maximum output amount
-        (bool success, uint outputResult) = getExactInput(_path, _inputAmount);
-
-        // Check that exchanging is possible or not
-        if (_outputAmount > outputResult) {
-            return (false, 0);
-        } else {
-            if (_isFixedToken == true) {
-                return (success, _inputAmount);
-            } else {
-                return getExactOutput(_path, _outputAmount);
+        if (_isFixedToken == true) {
+            // Input amount is fixed
+            // Find maximum output amount
+            (bool success, uint outputResult) = getExactInput(_path, _inputAmount);
+            if (success == false) {
+                return (false, 0);
             }
+            if (_outputAmount > outputResult) {
+                // Result is not enough
+                return (false, 0);
+            }
+            return (true, _inputAmount);
+        } else {
+            // Output amount is fixed
+            // Find minimum input amount
+            (bool success, uint inputResult) = getExactOutput(_path, _outputAmount);
+            if (success == false) {
+                return (false, 0);
+            }
+            if (_inputAmount < inputResult) {
+                // Input amount is not enough
+                return (false, 0);
+            }
+            return (true, inputResult);
         }
     }
 }
