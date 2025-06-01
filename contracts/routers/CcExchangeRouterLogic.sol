@@ -616,7 +616,7 @@ contract CcExchangeRouterLogic is
             uint32(block.timestamp), // quoteTimestamp
             uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
             0, // exclusivityDeadline
-            "0x" // message (null data)
+            bytes("") // message (empty bytes)
         );
 
         // Append integrator identifier
