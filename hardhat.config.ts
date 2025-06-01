@@ -84,6 +84,11 @@ const config: HardhatUserConfig = {
 			chainId: 130,
 			accounts: [process.env.PRIVATE_KEY ?? ""]
 		},
+		worldchain: {
+			url: "https://worldchain-mainnet.g.alchemy.com/public",
+			chainId: 480,
+			accounts: [process.env.PRIVATE_KEY ?? ""]
+		},
 		bsquared: {
 			url: "https://rpc.bsquared.network",
 			chainId: 223,
@@ -138,7 +143,8 @@ const config: HardhatUserConfig = {
 			amoy: process.env.AMOY_API_KEY??"",
 			sepolia: process.env.SEPOLIA_API_KEY??"",
 			bob: process.env.BOB_API_KEY??"",
-			unichain: process.env.UNICHAIN_API_KEY??""
+			unichain: process.env.UNICHAIN_API_KEY??"",
+			worldchain: process.env.WORLDCHAIN_API_KEY??""
   		},
 		customChains: [
 			{
@@ -193,8 +199,16 @@ const config: HardhatUserConfig = {
 				network: "unichain",
 				chainId: 130,
 				urls: {
-					apiURL: "https://unichain.blockscout.com/api",
-					browserURL: "https://unichain.blockscout.com/"
+					apiURL: "https://api.uniscan.xyz/api",
+					browserURL: "https://uniscan.xyz/"
+				}
+			},
+			{
+				network: "worldchain",
+				chainId: 480,
+				urls: {
+					apiURL: "https://api.worldscan.org/api",
+					browserURL: "https://worldscan.org/"
 				}
 			},
 			{
