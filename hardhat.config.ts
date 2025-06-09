@@ -72,7 +72,6 @@ const config: HardhatUserConfig = {
 			url: "https://rpc-mainnet.matic.quiknode.pro",
 			chainId: 137,
 			accounts: [process.env.PRIVATE_KEY ?? ""],
-			gasPrice: 630851301205
 		},
 		base: {
 			url: "https://base.llamarpc.com",

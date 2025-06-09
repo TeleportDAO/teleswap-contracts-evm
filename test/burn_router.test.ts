@@ -501,7 +501,7 @@ describe("BurnRouter", async function() {
                     LOCKER1_LOCKING_SCRIPT,
                     0
                 )
-            ).to.be.revertedWith("BurnRouterLogic: low amount");
+            ).to.be.revertedWith("BurnRouterLogic: lower than dust");
 
         })
 
@@ -558,7 +558,7 @@ describe("BurnRouter", async function() {
             // Sends teleBTC to burnRouter (since we mock swap)
             await TeleBTCSigner1.transfer(
                 burnRouter.address,
-                userRequestedAmount
+                userRequestedAmount.toNumber()
             );
 
             // Sends some inputToken to signer1 then he gives allowance to burnRouter
@@ -588,7 +588,10 @@ describe("BurnRouter", async function() {
 
             let prevBalanceSigner1 = await inputToken.balanceOf(signer1Address);
 
-            await setSwap(true, [inputTokenAmount, userRequestedAmount.toNumber()])
+            await setSwap(true, [
+                inputTokenAmount, 
+                userRequestedAmount.toNumber() + BITCOIN_FEE + lockerFee + protocolFee
+            ])
 
             // Exchanges input token then burns teleBTC
             await expect(

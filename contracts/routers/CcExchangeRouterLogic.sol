@@ -702,7 +702,10 @@ contract CcExchangeRouterLogic is
         (result, amounts) = IDexConnector(swapArguments._exchangeConnector)
             .swap(
                 swapArguments._extendedCcExchangeRequest.remainedInputAmount,
-                swapArguments._ccExchangeRequest.outputAmount,
+                swapArguments._ccExchangeRequest.outputAmount *
+                    (MAX_BRIDGE_FEE /
+                        (MAX_BRIDGE_FEE -
+                            swapArguments._extendedCcExchangeRequest.bridgeFee)),
                 swapArguments._path,
                 address(this),
                 block.timestamp,

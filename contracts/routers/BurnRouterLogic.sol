@@ -292,6 +292,7 @@ contract BurnRouterLogic is
         burntAmount = _unwrap(
             teleBTC,
             _amount,
+            0,
             _amount,
             _userScript,
             _scriptType,
@@ -332,6 +333,7 @@ contract BurnRouterLogic is
             _swapAndUnwrap(
                 _amounts[0],
                 _path[0],
+                _amounts[1],
                 _exchangedTeleBTC,
                 _userScript,
                 _scriptType,
@@ -539,6 +541,7 @@ contract BurnRouterLogic is
     function _swapAndUnwrap(
         uint256 _inputAmount,
         address _inputToken,
+        uint256 _requestedMinOutputAmount,
         uint256 _exchangedTeleBTC,
         bytes memory _userScript,
         ScriptTypes _scriptType,
@@ -548,6 +551,7 @@ contract BurnRouterLogic is
         uint256 burntAmount = _unwrap(
             _inputToken,
             _inputAmount,
+            _requestedMinOutputAmount,
             _exchangedTeleBTC,
             _userScript,
             _scriptType,
@@ -563,6 +567,7 @@ contract BurnRouterLogic is
     function _unwrap(
         address _inputToken,
         uint256 _inputAmount,
+        uint256 _requestedMinOutputAmount,
         uint256 _amount,
         bytes memory _userScript,
         ScriptTypes _scriptType,
@@ -576,23 +581,21 @@ contract BurnRouterLogic is
             lockers,
             _lockerLockingScript
         );
-
-        uint256 protocolFee;
-        uint256 thirdPartyFee;
-        uint256 lockerFee;
-
-        // Gets the target address of locker
-        (
-            remainingAmount,
-            protocolFee,
-            thirdPartyFee,
-            lockerFee
-        ) = _getFees(_amount, _lockerLockingScript, thirdParty);
+        
+        // Get fees and remaining amount
+        uint256[4] memory fees;
+        (fees, remainingAmount) = _getFees(
+            _amount, 
+            _requestedMinOutputAmount, 
+            _lockerLockingScript, 
+            thirdParty
+        );
 
         // Burns remaining TeleBTC
         IWETH(teleBTC).approve(lockers, remainingAmount);
         ILockersManager(lockers).burn(_lockerLockingScript, remainingAmount);
 
+        // Get locker target address
         address _lockerTargetAddress = ILockersManager(lockers)
             .getLockerTargetAddress(_lockerLockingScript);
 
@@ -605,14 +608,9 @@ contract BurnRouterLogic is
             _lockerTargetAddress
         );
 
-        address inputToken = _inputToken;
         uint256[3] memory amounts = [_inputAmount, _amount, remainingAmount];
-        uint256[4] memory fees = [
-            bitcoinFee,
-            lockerFee,
-            protocolFee,
-            thirdPartyFee
-        ];
+        // To avoid stack too deep error, we define inputToken here
+        address inputToken = _inputToken;
 
         emit NewUnwrap(
             _userScript,
@@ -801,33 +799,34 @@ contract BurnRouterLogic is
     /// @notice Checks inclusion of the transaction in the specified block
     /// @dev Calls the relay contract to check Merkle inclusion proof
     /// @param _amount The amount to be burnt
+    /// @return fees [bitcoinFee, lockerFee, protocolFee, thirdPartyFee]
     /// @return remainingAmount amount after reducing fees
-    /// @return _protocolFee fee of protocol
-    /// @return _thirdPartyFee fee of third party
     function _getFees(
         uint256 _amount,
+        uint256 _requestedMinOutputAmount,
         bytes memory _lockerLockingScript,
         uint256 _thirdParty
     )
         private
         returns (
-            uint256 remainingAmount,
-            uint256 _protocolFee,
-            uint256 _thirdPartyFee,
-            uint256 _lockerFee
+            uint256[4] memory fees,
+            uint256 remainingAmount
         )
     {
         // Find protocol and third-party fee
-        _protocolFee = (_amount * protocolPercentageFee) / MAX_PERCENTAGE_FEE;
-        _thirdPartyFee =
+        uint256 _protocolFee = (_amount * protocolPercentageFee) / MAX_PERCENTAGE_FEE;
+        uint256 _thirdPartyFee =
             (_amount * thirdPartyFee[_thirdParty]) /
             MAX_PERCENTAGE_FEE;
-        _lockerFee = (_amount * lockerPercentageFee) / MAX_PERCENTAGE_FEE;
+        uint256 _lockerFee = (_amount * lockerPercentageFee) / MAX_PERCENTAGE_FEE;
 
         remainingAmount = _amount - _protocolFee - _thirdPartyFee - _lockerFee - bitcoinFee;
 
         // Note: to avoid dust amount, we require remainingAmount to be greater than DUST_SATOSHI_AMOUNT
-        require(remainingAmount >= DUST_SATOSHI_AMOUNT, "BurnRouterLogic: low amount");
+        require(remainingAmount >= DUST_SATOSHI_AMOUNT, "BurnRouterLogic: lower than dust");
+
+        // User requested minimum amount
+        require(remainingAmount >= _requestedMinOutputAmount, "BurnRouterLogic: low than requested");
 
         // Send protocol fee
         if (_protocolFee > 0) {
@@ -865,6 +864,8 @@ contract BurnRouterLogic is
                 _thirdParty
             );
         }
+
+        fees = [bitcoinFee, _lockerFee, _protocolFee, _thirdPartyFee];
     }
 
     function _sendLockerFee(address _locker, uint _lockerFee, uint _thirdParty) internal {
