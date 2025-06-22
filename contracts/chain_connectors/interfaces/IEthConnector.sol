@@ -66,6 +66,18 @@ interface IEthConnector {
         uint256 _thirdParty
     ) external payable;
 
+    function swapAndUnwrapV2(
+        address _token,
+        address _exchangeConnector,
+        uint256[] calldata _amounts,
+        bool _isInputFixed,
+        address[] calldata _path,
+        UserAndLockerScript calldata _userAndLockerScript,
+        int64 _relayerFeePercentage,
+        uint256 _thirdParty,
+        address _refundAddress
+    ) external payable;
+
     function swapAndUnwrapRune(
         address _token,
         uint256 _appId,      

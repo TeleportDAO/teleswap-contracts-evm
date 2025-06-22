@@ -122,6 +122,41 @@ contract EthConnectorLogic is
         );
     }
 
+    function swapAndUnwrapV2(
+        address _token,
+        address _exchangeConnector,
+        uint256[] calldata _amounts,
+        bool _isInputFixed,
+        address[] calldata _path,
+        UserAndLockerScript calldata _userAndLockerScript,
+        int64 _relayerFeePercentage,
+        uint256 _thirdParty,
+        address _refundAddress
+    ) external payable override nonReentrant {
+        _validateTransfer(_token, _amounts[0]);
+
+        bytes memory message = abi.encode(
+            "swapAndUnwrap",
+            uniqueCounter,
+            currChainId,
+            _refundAddress,
+            _exchangeConnector,
+            _amounts[1],
+            _isInputFixed,
+            _path,
+            _userAndLockerScript,
+            _thirdParty
+        );
+
+        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
+        _sendMsgUsingAcross(
+            _token,
+            _amounts[0],
+            message,
+            _relayerFeePercentage
+        );
+    }
+
     /// @notice Request exchanging token for RUNE
     function swapAndUnwrapRune(
         address _token,
