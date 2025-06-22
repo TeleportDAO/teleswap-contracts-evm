@@ -40,4 +40,6 @@ abstract contract RuneRouterStorage is IRuneRouter {
     address public across;
 
     address public acrossAdmin;
+
+    mapping(address => mapping(uint => address)) public bridgeTokenMapping;
 }

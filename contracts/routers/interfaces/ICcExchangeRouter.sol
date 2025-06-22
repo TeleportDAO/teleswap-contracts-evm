@@ -344,6 +344,12 @@ interface ICcExchangeRouter {
     function setChainIdMapping(uint _destinationChain, uint _mappedId) external;
 
     function setRewardDistributor(address _rewardDistributor) external;
+
+    function setBridgeTokenMapping(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        address _destinationToken
+    ) external;
     
     function wrapAndSwap(
         TxAndProof memory _txAndProof,

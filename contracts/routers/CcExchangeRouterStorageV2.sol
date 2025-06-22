@@ -50,4 +50,6 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     uint public lockerPercentageFee;
 
     address public rewardDistributor;
+
+    mapping(address => mapping(uint => address)) public bridgeTokenMapping;
 }

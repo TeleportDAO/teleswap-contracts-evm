@@ -826,7 +826,7 @@ contract BurnRouterLogic is
         require(remainingAmount >= DUST_SATOSHI_AMOUNT, "BurnRouterLogic: lower than dust");
 
         // User requested minimum amount
-        require(remainingAmount >= _requestedMinOutputAmount, "BurnRouterLogic: low than requested");
+        require(remainingAmount >= _requestedMinOutputAmount, "BurnRouterLogic: lower than requested");
 
         // Send protocol fee
         if (_protocolFee > 0) {

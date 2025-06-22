@@ -183,6 +183,12 @@ interface IPolyConnector {
 
     function setLockersProxy(address _lockersProxy) external;
 
+    function setBridgeTokenMapping(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        address _destinationToken
+    ) external;
+
     function withdrawFundsToSourceChain(
         bytes memory _message,
         uint8 _v,

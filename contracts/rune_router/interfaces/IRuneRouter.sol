@@ -264,6 +264,12 @@ interface IRuneRouter {
 
     function setAcross(address _across) external;
 
+    function setBridgeTokenMapping(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        address _destinationToken
+    ) external;
+
     function addRune(
         string memory _name,
         string memory _symbol,

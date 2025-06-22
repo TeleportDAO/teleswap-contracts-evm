@@ -80,6 +80,17 @@ contract EthConnectorLogic is
         else IERC20(_token).safeTransfer(_to, _amount);
     }
 
+    /// @notice Setter for bridge token mapping
+    /// @param _sourceToken Address of the token on the current chain
+    /// @param _destinationToken Address of the token on the target chain
+    function setBridgeTokenMapping(
+        address _sourceToken,   
+        uint256 _destinationChainId,
+        address _destinationToken
+    ) external override onlyOwner {
+        bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
+    }
+
     /// @notice Request exchanging token for BTC
     /// @dev To find teleBTCAmount, _relayerFeePercentage should be reduced from the inputTokenAmount
     /// @param _token Address of input token (on the current chain)
@@ -228,7 +239,7 @@ contract EthConnectorLogic is
             acrossAdmin, // depositor
             targetChainConnectorProxy, // recipient
             _token, // inputToken
-            address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
+            bridgeTokenMapping[_token][targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
             _amount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18, // outputAmount
             targetChainId, // destinationChainId

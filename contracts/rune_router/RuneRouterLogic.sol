@@ -207,6 +207,17 @@ contract RuneRouterLogic is
         acrossAdmin = _acrossAdmin;
     }
 
+    /// @notice Setter for bridge token mapping
+    /// @param _sourceToken Address of the token on the current chain
+    /// @param _destinationToken Address of the token on the target chain
+    function setBridgeTokenMapping(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        address _destinationToken
+    ) external override onlyOwner {
+        bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
+    }
+
     /// @notice Deploy wrapped Rune token contract
     /// @dev We assign tokenId to a supported Rune
     /// @param _runeId Real rune id
@@ -766,7 +777,7 @@ contract RuneRouterLogic is
             acrossAdmin, // depositor
             _user, // recipient
             _token, // inputToken
-            address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
+            bridgeTokenMapping[_token][_chainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
             _amount * (1e18 - _acrossRelayerFee) / 1e18, // outputAmount
             _chainId, // destinationChainId

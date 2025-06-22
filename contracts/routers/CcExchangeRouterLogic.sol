@@ -190,6 +190,17 @@ contract CcExchangeRouterLogic is
         rewardDistributor = _rewardDistributor;
     }
 
+    /// @notice Setter for bridge token mapping
+    /// @param _sourceToken Address of the token on the current chain
+    /// @param _destinationToken Address of the token on the target chain
+    function setBridgeTokenMapping(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        address _destinationToken
+    ) external override onlyOwner {
+        bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
+    }
+
     /// @notice Check if a request has been processed
     /// @dev It prevents re-submitting a processed request
     /// @param _txId The transaction ID of request on Bitcoin
@@ -608,7 +619,7 @@ contract CcExchangeRouterLogic is
             acrossAdmin, // depositor
             _user, // recipient
             _token, // inputToken
-            address(0), // outputToken (note: fillers will replace this with the destination chain equivalent of the input token)
+            bridgeTokenMapping[_token][getDestChainId(_chainId)], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
             _amount * (1e18 - _acrossRelayerFee) / 1e18, // outputAmount
             getDestChainId(_chainId), // destinationChainId

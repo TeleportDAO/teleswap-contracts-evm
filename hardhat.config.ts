@@ -49,7 +49,7 @@ const config: HardhatUserConfig = {
 	},
 	networks: {
 		ethereum: {
-			url: "https://eth.llamarpc.com",
+			url: "https://ethereum-rpc.publicnode.com",
 			chainId: 1,
 			accounts: [process.env.PRIVATE_KEY ?? ""]
 		},

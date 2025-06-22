@@ -35,4 +35,5 @@ abstract contract PolyConnectorStorage is IPolyConnector {
     address public acrossAdmin;
 
     uint256 public gasLimit;
+    mapping(address => mapping(uint => address)) public bridgeTokenMapping;
 }

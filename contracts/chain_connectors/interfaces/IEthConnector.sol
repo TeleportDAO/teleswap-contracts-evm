@@ -55,6 +55,12 @@ interface IEthConnector {
 
     function setWrappedNativeToken(address _wrappedNativeToken) external;
 
+    function setBridgeTokenMapping(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        address _destinationToken
+    ) external;
+
     function swapAndUnwrap(
         address _token,
         address _exchangeConnector,
