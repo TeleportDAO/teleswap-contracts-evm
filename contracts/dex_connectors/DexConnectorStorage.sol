@@ -10,4 +10,7 @@ abstract contract DexConnectorStorage is IDexConnector {
     address public override liquidityPoolFactory;
     address public quoterAddress;
     mapping(address => mapping(address => uint24)) public feeTier;
+
+    // Additional storage variables for V3 position management
+    address public positionManager;
 }
