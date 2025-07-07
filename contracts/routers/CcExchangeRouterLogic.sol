@@ -320,96 +320,6 @@ contract CcExchangeRouterLogic is
         return true;
     }
 
-    /// @notice Process a wrapAndSwap request with a custom bridge fee after checking its inclusion on Bitcoin
-    /// @dev Similar to wrapAndSwap but allows Teleporter to specify a custom bridge fee
-    function wrapAndSwapWithCustomBridgeFee(
-        TxAndProof memory _txAndProof,
-        bytes calldata _lockerLockingScript,
-        address[] memory _path,
-        uint256 _customBridgeFee
-    ) external payable virtual override nonReentrant returns (bool) {
-        // Basic checks
-        require(
-            _msgSender() == specialTeleporter,
-            "ExchangeRouter: invalid sender"
-        ); // Only Teleporter can submit requests
-        require(
-            _txAndProof.blockNumber >= startingBlockNumber,
-            "ExchangeRouter: old request"
-        );
-        require(
-            _txAndProof.locktime == bytes4(0),
-            "ExchangeRouter: non-zero locktime"
-        );
-
-        // Check that the given script hash is Locker
-        require(
-            ILockersManager(lockers).isLocker(_lockerLockingScript),
-            "ExchangeRouter: not locker"
-        );
-
-        // Extract request info and check if tx has been finalized on Bitcoin
-        bytes32 txId = CcExchangeRouterLib.ccExchangeHelper(
-            _txAndProof,
-            ccExchangeRequests,
-            extendedCcExchangeRequests,
-            teleBTC,
-            _lockerLockingScript,
-            relay
-        );
-
-        // Find destination chain Id (the final chain that user gets its token on it)
-        uint256 destinationChainId = getDestChainId(
-            extendedCcExchangeRequests[txId].chainId
-        );
-
-        ccExchangeRequest memory request = ccExchangeRequests[txId];
-
-        address _exchangeConnector = exchangeConnector[request.appId];
-        require(
-            _exchangeConnector != address(0),
-            "ExchangeRouter: invalid appId"
-        );
-
-        // Find remained amount after reducing fees
-        _mintAndCalculateFees(_lockerLockingScript, txId);
-
-        if (request.speed == 1) { // Handle fast request
-            /* 
-                If there was a filler who filled the request with the same parameters,
-                we will send the TeleBTC to the filler
-            */
-            address filler = fillerAddress[txId][request.recipientAddress][
-                request.path[request.path.length - 1]
-            ][request.outputAmount][destinationChainId][_customBridgeFee];
-
-            if (filler != address(0)) { // Request has been filled
-                // Send TeleBTC to filler who filled the request
-                _sendTeleBtcToFiller(
-                    filler,
-                    txId,
-                    _lockerLockingScript,
-                    destinationChainId
-                );
-                return true;
-            } else { // Request has not been filled
-                // Treat it as a normal request
-                ccExchangeRequests[txId].speed = 0;
-            }
-        }
-
-        _wrapAndSwap(
-            _exchangeConnector,
-            _lockerLockingScript,
-            txId,
-            _path,
-            _customBridgeFee,
-            destinationChainId
-        );
-
-        return true;
-    }
-
     /// @notice Filler fills an upcoming exchange request
     /// @param _txId Bitcoin request that filler wants to fill
     /// @param _token Address of exchange token in the request
@@ -432,21 +342,23 @@ contract CcExchangeRouterLogic is
             If another filler has filled the request with the same parameters,
             the request will be rejected
         */
+        uint _finalAmount = _amount * (MAX_BRIDGE_FEE - _bridgeFee) / MAX_BRIDGE_FEE;
+        
         require(
-            fillerAddress[_txId][_recipient][_token][_amount][
+            fillerAddress[_txId][_recipient][_token][_finalAmount][
                 _destinationChainId
             ][_bridgeFee] == address(0),
             "ExchangeRouter: already filled"
         );
 
         // Record the filler address
-        fillerAddress[_txId][_recipient][_token][_amount][_destinationChainId][_bridgeFee] = _msgSender();
+        fillerAddress[_txId][_recipient][_token][_finalAmount][_destinationChainId][_bridgeFee] = _msgSender();
 
         if (_destinationChainId == chainId) { // Requests that belongs to the current chain
             if (_token == NATIVE_TOKEN) {
                 // Native token is sent to the recipient
-                require(msg.value == _amount, "ExchangeRouter: wrong amount");
-                (bool sentToRecipient, ) = _recipient.call{value: _amount}("");
+                require(msg.value == _finalAmount, "ExchangeRouter: wrong amount");
+                (bool sentToRecipient, ) = _recipient.call{value: _finalAmount}("");
                 require(sentToRecipient, "ExchangeRouter: transfer failed");
             } else {
                 // Transfer the token from the filler to the recipient
@@ -454,7 +366,7 @@ contract CcExchangeRouterLogic is
                     IERC20(_token).transferFrom(
                         _msgSender(),
                         _recipient,
-                        _amount
+                        _finalAmount
                     ),
                     "ExchangeRouter: no allowance"
                 );
@@ -465,14 +377,14 @@ contract CcExchangeRouterLogic is
                 IERC20(_token).transferFrom(
                     _msgSender(),
                     address(this),
-                    _amount
+                    _finalAmount
                 ),
                 "ExchangeRouter: no allowance"
             );
             _sendTokenToOtherChain(
                 _destinationChainId,
                 _token,
-                _amount,
+                _finalAmount,
                 _recipient,
                 _bridgeFee
             );
@@ -483,7 +395,7 @@ contract CcExchangeRouterLogic is
             _txId,
             _recipient,
             _token,
-            _amount,
+            _finalAmount,
             _destinationChainId,
             _bridgeFee
         );
