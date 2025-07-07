@@ -1665,10 +1665,10 @@
   resolved "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-4.9.6.tgz"
   integrity sha512-xSmezSupL+y9VkHZJGDoCBpmnB2ogM13ccaYDWqJTfS3dbuHkgjuwDFUmaFauBCboQMGB/S5UqUl2y54X99BmA==
 
-"@openzeppelin/contracts@^4.3.2", "@openzeppelin/contracts@4.3.3":
-  version "4.3.3"
-  resolved "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-4.3.3.tgz"
-  integrity sha512-tDBopO1c98Yk7Cv/PZlHqrvtVjlgK5R4J6jxLwoO7qxK4xqOiZG+zSkIvGFpPZ0ikc3QOED3plgdqjgNTnBc7g==
+"@openzeppelin/contracts@^4.3.2":
+  version "4.9.6"
+  resolved "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-4.9.6.tgz"
+  integrity sha512-xSmezSupL+y9VkHZJGDoCBpmnB2ogM13ccaYDWqJTfS3dbuHkgjuwDFUmaFauBCboQMGB/S5UqUl2y54X99BmA==
 
 "@openzeppelin/contracts@^4.8.1":
   version "4.9.6"
@@ -1684,6 +1684,11 @@
   version "4.1.0"
   resolved "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-4.1.0.tgz"
   integrity sha512-TihZitscnaHNcZgXGj9zDLDyCqjziytB4tMCwXq0XimfWkAjBYyk5/pOsDbbwcavhlc79HhpTEpQcrMnPVa1mw==
+
+"@openzeppelin/contracts@4.3.3":
+  version "4.3.3"
+  resolved "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-4.3.3.tgz"
+  integrity sha512-tDBopO1c98Yk7Cv/PZlHqrvtVjlgK5R4J6jxLwoO7qxK4xqOiZG+zSkIvGFpPZ0ikc3QOED3plgdqjgNTnBc7g==
 
 "@openzeppelin/contracts@4.9.6":
   version "4.9.6"
@@ -2767,7 +2772,7 @@
     "@uniswap/lib" "1.1.1"
     "@uniswap/v2-core" "1.0.0"
 
-"@uniswap/v3-core@^1.0.0", "@uniswap/v3-core@^1.0.0-rc.2":
+"@uniswap/v3-core@^1.0.0", "@uniswap/v3-core@^1.0.0-rc.2", "@uniswap/v3-core@^1.0.1":
   version "1.0.1"
   resolved "https://registry.npmjs.org/@uniswap/v3-core/-/v3-core-1.0.1.tgz"
   integrity sha512-7pVk4hEm00j9tc71Y9+ssYpO6ytkeI0y7WE9P6UcmNzhxPePwyAxImuhVsTqWK9YFvzgtvzJHi64pBl4jUzKMQ==
@@ -2782,16 +2787,6 @@
     "@uniswap/v2-core" "^1.0.1"
     "@uniswap/v3-core" "^1.0.0"
     base64-sol "1.0.1"
-
-"@uniswap/v4-core@^1.0.2":
-  version "1.0.2"
-  resolved "https://registry.npmjs.org/@uniswap/v4-core/-/v4-core-1.0.2.tgz"
-  integrity sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==
-
-"@uniswap/v4-periphery@^1.0.2":
-  version "1.0.2"
-  resolved "https://registry.npmjs.org/@uniswap/v4-periphery/-/v4-periphery-1.0.2.tgz"
-  integrity sha512-DgdfC+V2lF04YCCIA55Om+twhvvuk31K3ErbWquvdaqP5DynEGszcvADLrVdWNaVcGZkqhtMSxVnHnIylNAznw==
 
 abbrev@1:
   version "1.1.1"
