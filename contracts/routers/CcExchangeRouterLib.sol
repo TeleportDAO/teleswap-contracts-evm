@@ -65,7 +65,7 @@ library CcExchangeRouterLib {
         extendedCcExchangeRequests[txId].chainId = RequestParser.parseChainId(
             arbitraryData
         );
-        extendedCcExchangeRequests[txId].bridgeFee =
+        extendedCcExchangeRequests[txId].bridgePercentageFee =
             uint(RequestParser.parseArossFeePercentage(arbitraryData)) *
             (10 ** 11);
         extendedCcExchangeRequests[txId].thirdParty = RequestParser

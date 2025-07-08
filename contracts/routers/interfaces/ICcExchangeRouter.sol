@@ -43,7 +43,7 @@ interface ICcExchangeRouter {
         uint chainId;
         bool isRequestCompleted;
         uint remainedInputAmount;
-        uint bridgeFee;
+        uint bridgePercentageFee;
         uint thirdParty;
         uint protocolFee;
         uint thirdPartyFee;
@@ -134,8 +134,9 @@ interface ICcExchangeRouter {
         address recipient, 
         address token,
         uint amount,
+        uint finalAmount,
         uint destinationChainId,
-        uint acrossRelayerFee
+        uint bridgePercentageFee
     );
 
     event FillerRefunded(
@@ -363,7 +364,7 @@ interface ICcExchangeRouter {
         address _token,
         uint _amount,
         uint _destinationChainId,
-        uint _bridgeFee
+        uint _bridgePercentageFee
     ) external payable;
 
     function refundByOwnerOrAdmin(
