@@ -323,12 +323,16 @@ contract CcExchangeRouterLogic is
     /// @notice Filler fills an upcoming exchange request
     /// @param _txId Bitcoin request that filler wants to fill
     /// @param _token Address of exchange token in the request
-    /// @param _amount Amount that filler uses to fill the request (this is not necessarily the amount that user receives)
+    /// @param _fillAmount Amount that filler uses to fill the request (this is not necessarily the amount that user receives)
+    /// @param _userRequestedAmount Amount that user requested
+    /// @param _destinationChainId Destination chain id
+    /// @param _bridgePercentageFee Bridge percentage fee
     function fillTx(
         bytes32 _txId,
         address _recipient,
         address _token,
-        uint _amount,
+        uint _fillAmount,
+        uint _userRequestedAmount,
         uint _destinationChainId,
         uint _bridgePercentageFee
     ) external payable nonReentrant override {
@@ -339,16 +343,17 @@ contract CcExchangeRouterLogic is
         );
 
         // Calculate the final amount that user will receive
-        // This should be equal to the amount user wrote in the request
-        uint _finalAmount = _amount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
+        uint _finalAmount = _fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
+
+        // Check that the final amount is greater than or equal to the user requested amount
+        require(_finalAmount >= _userRequestedAmount, "ExchangeRouter: insufficient fill amount");
 
         /* 
             If another filler has filled the request with the same parameters,
             the request will be rejected
         */
-        
         require(
-            fillerAddress[_txId][_recipient][_token][_finalAmount][
+            fillerAddress[_txId][_recipient][_token][_userRequestedAmount][
                 _destinationChainId
             ][_bridgePercentageFee] == address(0),
             "ExchangeRouter: already filled"
@@ -365,8 +370,8 @@ contract CcExchangeRouterLogic is
         if (_destinationChainId == chainId) { // Requests that belongs to the current chain
             if (_token == wrappedNativeToken) {
                 // Native token is sent to the recipient
-                require(msg.value == _amount, "ExchangeRouter: wrong amount");
-                (bool sentToRecipient, ) = _recipient.call{value: _amount}("");
+                require(msg.value == _fillAmount, "ExchangeRouter: wrong amount");
+                (bool sentToRecipient, ) = _recipient.call{value: _fillAmount}("");
                 require(sentToRecipient, "ExchangeRouter: transfer failed");
             } else {
                 // Transfer the token from the filler to the recipient
@@ -374,7 +379,7 @@ contract CcExchangeRouterLogic is
                     IERC20(_token).transferFrom(
                         _msgSender(),
                         _recipient,
-                        _amount
+                        _fillAmount
                     ),
                     "ExchangeRouter: no allowance"
                 );
@@ -385,14 +390,14 @@ contract CcExchangeRouterLogic is
                 IERC20(_token).transferFrom(
                     _msgSender(),
                     address(this),
-                    _amount
+                    _fillAmount
                 ),
                 "ExchangeRouter: no allowance"
             );
             _sendTokenToOtherChain(
                 _destinationChainId,
                 _token,
-                _amount,
+                _fillAmount,
                 _recipient,
                 _bridgePercentageFee
             );
@@ -403,7 +408,8 @@ contract CcExchangeRouterLogic is
             _txId,
             _recipient,
             _token,
-            _amount,
+            _fillAmount,
+            _userRequestedAmount,
             _finalAmount,
             _destinationChainId,
             _bridgePercentageFee
