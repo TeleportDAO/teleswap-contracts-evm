@@ -369,10 +369,26 @@ contract CcExchangeRouterLogic is
 
         if (_destinationChainId == chainId) { // Requests that belongs to the current chain
             if (_token == wrappedNativeToken) {
-                // Native token is sent to the recipient
-                require(msg.value == _fillAmount, "ExchangeRouter: wrong amount");
-                (bool sentToRecipient, ) = _recipient.call{value: _fillAmount}("");
-                require(sentToRecipient, "ExchangeRouter: transfer failed");
+                // Transfer the token from the filler to the contract
+                require(
+                    IERC20(_token).transferFrom(
+                        _msgSender(),
+                        address(this),
+                        _fillAmount
+                    ),
+                    "ExchangeRouter: no allowance"
+                );
+                
+                // Unwrap the wrapped native token
+                WETH(wrappedNativeToken).withdraw(_fillAmount);
+
+                // Send native token to the user
+                Address.sendValue(
+                    payable(
+                        _recipient
+                    ),
+                    _fillAmount
+                );
             } else {
                 // Transfer the token from the filler to the recipient
                 require(
