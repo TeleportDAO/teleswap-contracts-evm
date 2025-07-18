@@ -363,7 +363,7 @@ contract CcExchangeRouterLogic is
         fillerAddress[_txId]
             [_recipient]
             [_token]
-            [_finalAmount]
+            [_userRequestedAmount]
             [_destinationChainId]
             [_bridgePercentageFee] = _msgSender();
 

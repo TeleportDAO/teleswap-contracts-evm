@@ -91,6 +91,15 @@ contract EthConnectorLogic is
         bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
     }
 
+    /// @notice Approve token for spender
+    function approveToken(
+        address _token,
+        address _spender,
+        uint256 _amount
+    ) external onlyOwner {
+        IERC20(_token).safeApprove(_spender, _amount);
+    }
+
     /// @notice Request exchanging token for BTC
     /// @dev To find teleBTCAmount, _relayerFeePercentage should be reduced from the inputTokenAmount
     /// @param _token Address of input token (on the current chain)
