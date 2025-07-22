@@ -42,7 +42,7 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     // New variables (filler)
     mapping(bytes32 => mapping(address => mapping(address => mapping(uint => mapping(uint => mapping(uint => address))))))
         public fillerAddress;
-    // ^ [txId][recipient][token][amount][chainId][bridgeFee] to filler address
+    // ^ [txId][recipient][token][amount][chainId][bridgePercentageFee] to filler address
     uint constant REGULAR_SLIPPAGE = 1500; // Not used
 
     address public acrossAdmin;

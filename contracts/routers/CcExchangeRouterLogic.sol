@@ -291,7 +291,7 @@ contract CcExchangeRouterLogic is
             */
             address filler = fillerAddress[txId][request.recipientAddress][
                 request.path[request.path.length - 1]
-            ][request.outputAmount][destinationChainId][extendedCcExchangeRequests[txId].bridgeFee];
+            ][request.outputAmount][destinationChainId][extendedCcExchangeRequests[txId].bridgePercentageFee];
 
             if (filler != address(0)) { // Request has been filled
                 // Send TeleBTC to filler who filled the request
@@ -313,7 +313,7 @@ contract CcExchangeRouterLogic is
             _lockerLockingScript,
             txId,
             _path,
-            extendedCcExchangeRequests[txId].bridgeFee,
+            extendedCcExchangeRequests[txId].bridgePercentageFee,
             destinationChainId
         );
 
@@ -323,14 +323,18 @@ contract CcExchangeRouterLogic is
     /// @notice Filler fills an upcoming exchange request
     /// @param _txId Bitcoin request that filler wants to fill
     /// @param _token Address of exchange token in the request
-    /// @param _amount Requested exchanging amount
+    /// @param _fillAmount Amount that filler uses to fill the request (this is not necessarily the amount that user receives)
+    /// @param _userRequestedAmount Amount that user requested
+    /// @param _destinationChainId Destination chain id
+    /// @param _bridgePercentageFee Bridge percentage fee
     function fillTx(
         bytes32 _txId,
         address _recipient,
         address _token,
-        uint _amount,
+        uint _fillAmount,
+        uint _userRequestedAmount,
         uint _destinationChainId,
-        uint _bridgeFee
+        uint _bridgePercentageFee
     ) external payable nonReentrant override {
         // Checks that the request has not been processed before normally
         require(
@@ -338,33 +342,60 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: already processed"
         );
 
+        // Calculate the final amount that user will receive
+        uint _finalAmount = _fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
+
+        // Check that the final amount is greater than or equal to the user requested amount
+        require(_finalAmount >= _userRequestedAmount, "ExchangeRouter: insufficient fill amount");
+
         /* 
             If another filler has filled the request with the same parameters,
             the request will be rejected
         */
         require(
-            fillerAddress[_txId][_recipient][_token][_amount][
+            fillerAddress[_txId][_recipient][_token][_userRequestedAmount][
                 _destinationChainId
-            ][_bridgeFee] == address(0),
+            ][_bridgePercentageFee] == address(0),
             "ExchangeRouter: already filled"
         );
 
         // Record the filler address
-        fillerAddress[_txId][_recipient][_token][_amount][_destinationChainId][_bridgeFee] = _msgSender();
+        fillerAddress[_txId]
+            [_recipient]
+            [_token]
+            [_userRequestedAmount]
+            [_destinationChainId]
+            [_bridgePercentageFee] = _msgSender();
 
         if (_destinationChainId == chainId) { // Requests that belongs to the current chain
-            if (_token == NATIVE_TOKEN) {
-                // Native token is sent to the recipient
-                require(msg.value == _amount, "ExchangeRouter: wrong amount");
-                (bool sentToRecipient, ) = _recipient.call{value: _amount}("");
-                require(sentToRecipient, "ExchangeRouter: transfer failed");
+            if (_token == wrappedNativeToken) {
+                // Transfer the token from the filler to the contract
+                require(
+                    IERC20(_token).transferFrom(
+                        _msgSender(),
+                        address(this),
+                        _fillAmount
+                    ),
+                    "ExchangeRouter: no allowance"
+                );
+                
+                // Unwrap the wrapped native token
+                WETH(wrappedNativeToken).withdraw(_fillAmount);
+
+                // Send native token to the user
+                Address.sendValue(
+                    payable(
+                        _recipient
+                    ),
+                    _fillAmount
+                );
             } else {
                 // Transfer the token from the filler to the recipient
                 require(
                     IERC20(_token).transferFrom(
                         _msgSender(),
                         _recipient,
-                        _amount
+                        _fillAmount
                     ),
                     "ExchangeRouter: no allowance"
                 );
@@ -375,16 +406,16 @@ contract CcExchangeRouterLogic is
                 IERC20(_token).transferFrom(
                     _msgSender(),
                     address(this),
-                    _amount
+                    _fillAmount
                 ),
                 "ExchangeRouter: no allowance"
             );
             _sendTokenToOtherChain(
                 _destinationChainId,
                 _token,
-                _amount,
+                _fillAmount,
                 _recipient,
-                _bridgeFee
+                _bridgePercentageFee
             );
         }
 
@@ -393,9 +424,11 @@ contract CcExchangeRouterLogic is
             _txId,
             _recipient,
             _token,
-            _amount,
+            _fillAmount,
+            _userRequestedAmount,
+            _finalAmount,
             _destinationChainId,
-            _bridgeFee
+            _bridgePercentageFee
         );
     }
 
@@ -489,7 +522,7 @@ contract CcExchangeRouterLogic is
             extendedRequest.lockerFee,
             extendedRequest.protocolFee,
             extendedRequest.thirdPartyFee,
-            extendedRequest.bridgeFee
+            extendedRequest.bridgePercentageFee
         ];
 
         emit NewWrapAndSwap(
@@ -521,7 +554,7 @@ contract CcExchangeRouterLogic is
         address _token,
         uint256 _amount,
         address _user,
-        uint256 _acrossRelayerFee
+        uint256 _bridgePercentageFee
     ) private {
         IERC20(_token).approve(across, _amount);
         bytes memory callData = abi.encodeWithSignature(
@@ -531,7 +564,7 @@ contract CcExchangeRouterLogic is
             _token, // inputToken
             bridgeTokenMapping[_token][getDestChainId(_chainId)], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
-            _amount * (1e18 - _acrossRelayerFee) / 1e18, // outputAmount
+            _amount * (1e18 - _bridgePercentageFee) / 1e18, // outputAmount
             getDestChainId(_chainId), // destinationChainId
             address(0), // exclusiveRelayer (none for now)
             uint32(block.timestamp), // quoteTimestamp
@@ -541,7 +574,8 @@ contract CcExchangeRouterLogic is
         );
 
         // Append integrator identifier
-        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
+        // delimiter (1dc0de) + integratorID (0x0083)
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
 
         Address.functionCall(
             across,
@@ -554,7 +588,7 @@ contract CcExchangeRouterLogic is
         bytes memory _lockerLockingScript,
         bytes32 _txId,
         address[] memory _path,
-        uint256 _acrossRelayerFee, // TODO: get the bridge fee from teleporter (use this as maximum amount of it)
+        uint256 _bridgePercentageFee,
         uint256 _chainId
     ) private {
         (bool result, uint256[] memory amounts) = _swap(
@@ -583,7 +617,7 @@ contract CcExchangeRouterLogic is
                     _path[_path.length - 1],
                     amounts[amounts.length - 1],
                     ccExchangeRequests[_txId].recipientAddress,
-                    _acrossRelayerFee
+                    _bridgePercentageFee
                 );
             }
         } else {
@@ -626,7 +660,7 @@ contract CcExchangeRouterLogic is
                 (swapArguments._ccExchangeRequest.outputAmount *
                     MAX_BRIDGE_FEE) /
                         (MAX_BRIDGE_FEE -
-                            swapArguments._extendedCcExchangeRequest.bridgeFee),
+                            swapArguments._extendedCcExchangeRequest.bridgePercentageFee),
                 swapArguments._path,
                 address(this),
                 block.timestamp,
@@ -661,7 +695,7 @@ contract CcExchangeRouterLogic is
             }
 
             uint256 bridgeFee = (amounts[amounts.length - 1] *
-                swapArguments._extendedCcExchangeRequest.bridgeFee) /
+                swapArguments._extendedCcExchangeRequest.bridgePercentageFee) /
                 MAX_BRIDGE_FEE;
 
             uint256[5] memory fees = [

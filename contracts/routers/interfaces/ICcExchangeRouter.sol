@@ -43,7 +43,7 @@ interface ICcExchangeRouter {
         uint chainId;
         bool isRequestCompleted;
         uint remainedInputAmount;
-        uint bridgeFee;
+        uint bridgePercentageFee;
         uint thirdParty;
         uint protocolFee;
         uint thirdPartyFee;
@@ -127,15 +127,19 @@ interface ICcExchangeRouter {
     /// @param filler Address of filler
     /// @param txId Bitcoin request id
     /// @param token that used for filling
-    /// @param amount that sent for filling
+    /// @param fillAmount that sent for filling
+    /// @param userRequestedAmount that user requested
+    /// @param finalAmount that user received
     event RequestFilled(
         address filler,
         bytes32 txId,
         address recipient, 
         address token,
-        uint amount,
+        uint fillAmount,
+        uint userRequestedAmount,
+        uint finalAmount,
         uint destinationChainId,
-        uint acrossRelayerFee
+        uint bridgePercentageFee
     );
 
     event FillerRefunded(
@@ -361,9 +365,10 @@ interface ICcExchangeRouter {
         bytes32 _txId,
         address _recipient,
         address _token,
-        uint _amount,
+        uint _fillAmount,
+        uint _userRequestedAmount,
         uint _destinationChainId,
-        uint _bridgeFee
+        uint _bridgePercentageFee
     ) external payable;
 
     function refundByOwnerOrAdmin(
