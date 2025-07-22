@@ -367,6 +367,9 @@ contract CcExchangeRouterLogic is
             [_destinationChainId]
             [_bridgePercentageFee] = _msgSender();
 
+        // Record the fill amount
+        finalAmount[_txId] = _finalAmount;
+
         if (_destinationChainId == chainId) { // Requests that belongs to the current chain
             if (_token == wrappedNativeToken) {
                 // Transfer the token from the filler to the contract
@@ -501,7 +504,7 @@ contract CcExchangeRouterLogic is
         bytes memory _lockerLockingScript,
         uint256 _destinationChainId
     ) private {
-        // Send fees to the teleporter, treasury, and third party
+        // Send fees to the teleporter, treasury, third party, and locker
         _sendFees(_txId, _lockerLockingScript);
 
         ccExchangeRequest memory request = ccExchangeRequests[_txId];
@@ -531,7 +534,7 @@ contract CcExchangeRouterLogic is
             ),
             request.recipientAddress,
             [teleBTC, request.path[request.path.length - 1]],
-            [extendedRequest.remainedInputAmount, request.outputAmount],
+            [extendedRequest.remainedInputAmount, finalAmount[_txId]],
             1,
             _msgSender(),
             _txId,
@@ -607,7 +610,7 @@ contract CcExchangeRouterLogic is
             // If swap was successfull, user will get tokens on destination chain
             extendedCcExchangeRequests[_txId].isRequestCompleted = true;
 
-            // Send fees to the teleporter, treasury, and third party
+            // Send fees to the teleporter, treasury, third party, and locker
             _sendFees(_txId, _lockerLockingScript);
 
             if (_chainId != chainId) {
@@ -798,6 +801,7 @@ contract CcExchangeRouterLogic is
             1. Teleporter fee (network fee)
             2. Protocol fee
             3. Third party fee
+            4. Locker fee
         */
         // Transfer network fee to teleporter
         if (ccExchangeRequests[_txId].fee > 0) {

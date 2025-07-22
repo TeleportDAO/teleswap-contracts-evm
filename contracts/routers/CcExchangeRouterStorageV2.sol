@@ -52,4 +52,7 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     address public rewardDistributor;
 
     mapping(address => mapping(uint => address)) public bridgeTokenMapping;
+
+    mapping(bytes32 => uint) public finalAmount;
+    // ^ txId to final amount
 }
