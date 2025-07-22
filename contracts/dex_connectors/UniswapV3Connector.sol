@@ -14,7 +14,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 // Simplified interface for Uniswap V3 Position Manager
 interface IPositionManager {
@@ -361,6 +361,7 @@ contract UniswapV3Connector is
         int24 tickUpper;
         uint256 amount0Desired;
         uint256 amount1Desired;
+        address user;
     }
 
     /// @notice Zap tokens into a Uniswap V3 position in one call
@@ -368,17 +369,15 @@ contract UniswapV3Connector is
         AddLiquidityParams memory params
     ) external nonReentrant returns (
         uint256 _tokenId,
-        uint256 _used0,
-        uint256 _used1
+        uint256 _remaining0,
+        uint256 _remaining1
     ) {
-        // Get current sqrt price from the pool
-        // console.log("Getting pool and sqrt price");
+        // Find the pool address
         address poolAddress = IUniswapV3Factory(liquidityPoolFactory).getPool(
             params.token0, 
             params.token1, 
             params.feeTier
         );
-        console.log("Pool address:", poolAddress);
         
         // If token order is different from pool, swap token addresses and amounts
         if (IUniswapV3PoolImmutables(poolAddress).token0() != params.token0) {
@@ -390,23 +389,8 @@ contract UniswapV3Connector is
             params.amount1Desired = _tempAmount;
         }
 
-        // console.log("=== swapAndAddLiquidity START ===");
-        // console.log("Position manager:", positionManager);
-        // console.log("Token0:", params.token0);
-        // console.log("Token1:", params.token1);
-        // console.log("TokenId:", params.tokenId);
-        // console.log("Amount0Desired:", params.amount0Desired);
-        // console.log("Amount1Desired:", params.amount1Desired);
-        // console.logInt(params.tickLower);
-        // console.logInt(params.tickUpper);
-        
-        // require(params.amount0Desired > 0 && params.amount1Desired > 0, "Zero amounts");
-
-        console.log("Basic validations passed");
-
         // If tokenId is non-zero, validate existing position parameters
         if (params.tokenId != 0) {
-            // console.log("Validating existing position parameters");
             (
                 , , , , 
                 uint24 existingFee,
@@ -414,20 +398,12 @@ contract UniswapV3Connector is
                 int24 existingTickUpper,
                 , , , , 
             ) = IPositionManager(positionManager).positions(params.tokenId);
-            
-            // console.log("Existing fee:", existingFee);
-            // console.logInt(existingTickLower);
-            // console.logInt(existingTickUpper);
-            
-            require(existingFee == params.feeTier, "Fee tier mismatch");
-            require(existingTickLower == params.tickLower, "Tick lower mismatch");
-            require(existingTickUpper == params.tickUpper, "Tick upper mismatch");
-            // console.log("Existing position validation passed");
+            require(existingFee == params.feeTier, "UniswapV3Connector: Fee tier mismatch");
+            require(existingTickLower == params.tickLower, "UniswapV3Connector: Tick lower mismatch");
+            require(existingTickUpper == params.tickUpper, "UniswapV3Connector: Tick upper mismatch");
         }
 
-        // console.log("Starting token transfers and approvals");
-
-        // 1) Pull in tokens and approve
+        // Pull in tokens and approve
         IERC20(params.token0).safeTransferFrom(msg.sender, address(this), params.amount0Desired);
         IERC20(params.token1).safeTransferFrom(msg.sender, address(this), params.amount1Desired);
         IERC20(params.token0).approve(exchangeRouter, params.amount0Desired);
@@ -435,77 +411,66 @@ contract UniswapV3Connector is
         IERC20(params.token0).approve(positionManager, type(uint256).max);
         IERC20(params.token1).approve(positionManager, type(uint256).max);
 
-        console.log("Token transfers and approvals completed");
-
-        
-        (uint160 _sqrtP, , , , , , ) = IUniswapV3PoolState(poolAddress).slot0();
-        console.log("Current sqrt price:", _sqrtP);
+        // Get current sqrt price from the pool
+        (uint160 _sqrtPrice, , , , , , ) = IUniswapV3PoolState(poolAddress).slot0();
+        // console.log("Current sqrt price:", _sqrtPrice);
 
         // Calculate the maximum liquidity that can be provided with the given token amounts
-        console.log("Calculating liquidity amounts");
         uint128 _maxLiquidity = _LiquidityAmounts.getLiquidityForAmounts(
-            _sqrtP,
+            _sqrtPrice,
             _TickMath.getSqrtPriceAtTick(params.tickLower),
             _TickMath.getSqrtPriceAtTick(params.tickUpper),
             params.amount0Desired,
             params.amount1Desired
         );
-        console.log("Max liquidity:", _maxLiquidity);
+        // console.log("Max liquidity:", _maxLiquidity);
 
         // Then get the optimal amounts for that liquidity
         (uint256 _optimalAmount0, uint256 _optimalAmount1) = _LiquidityAmounts.getAmountsForLiquidity(
-            _sqrtP,
+            _sqrtPrice,
             _TickMath.getSqrtPriceAtTick(params.tickLower),
             _TickMath.getSqrtPriceAtTick(params.tickUpper),
             _maxLiquidity
         );
-        console.log("Optimal amount0:", _optimalAmount0);
-        console.log("Optimal amount1:", _optimalAmount1);
+        // console.log("Optimal amount0:", _optimalAmount0);
+        // console.log("Optimal amount1:", _optimalAmount1);
 
-        // 3) Execute swap if needed
+        // Note: we multiply by 1e18 to add precision to the ratio
         uint256 _rangeRatio = _optimalAmount1 > 0 
             ? (_optimalAmount0 * 1e18) / _optimalAmount1 
-            : 1e18;
-        uint256 _currentRatio = params.amount1Desired > 0 
+            : type(uint256).max;
+
+        uint256 _userRatio = params.amount1Desired > 0 
             ? (params.amount0Desired * 1e18) / params.amount1Desired 
             : type(uint256).max;
         
-        console.log("Range ratio:", _rangeRatio);
-        console.log("Current ratio:", _currentRatio);
+        // console.log("Range ratio:", _rangeRatio);
+        // console.log("Current ratio:", _userRatio);
         
-        if (_currentRatio > _rangeRatio) {
-            console.log("Executing swap: token0 -> token1");
+        if (_userRatio > _rangeRatio) {
+            // console.log("Executing swap: token0 -> token1");
+            // Swap token0 to token1
             _executeSwap(
-                params.token0, 
-                params.token1, 
-                params.feeTier, 
-                params.amount0Desired, 
-                params.amount1Desired, 
+                true,
+                params.amount0Desired - _optimalAmount0, // Initial guess
+                params,
                 _rangeRatio
             );
-        } else if (_currentRatio < _rangeRatio && _rangeRatio > 0) {
-            console.log("Executing swap: token1 -> token0");
+        } else if (_userRatio < _rangeRatio && _rangeRatio > 0) {
+            // console.log("Executing swap: token1 -> token0");
+            // Swap token1 to token0
             _executeSwap(
-                params.token1, 
-                params.token0, 
-                params.feeTier, 
-                params.amount1Desired, 
-                params.amount0Desired, 
-                1e18 / _rangeRatio
+                false,
+                params.amount1Desired - _optimalAmount1, // Initial guess
+                params,
+                _optimalAmount1 * 1e18 / _optimalAmount0
             );
-        } else {
-            // console.log("No swap needed");
         }
 
-        // 4) Mint position or increase liquidity and refund
-        _used0 = IERC20(params.token0).balanceOf(address(this));
-        _used1 = IERC20(params.token1).balanceOf(address(this));
-        console.log("Used amount0:", _used0);
-        console.log("Used amount1:", _used1);
-
+        // Mint position or increase liquidity and refund
         if (params.tokenId == 0) {
             // Mint new position
-            console.log("Minting new position");
+            // console.log("Minting new position");
             (_tokenId, , , ) = IPositionManager(positionManager).mint(
                 IPositionManager.MintParams({
                     token0: params.token0,
@@ -513,42 +478,40 @@ contract UniswapV3Connector is
                     fee: params.feeTier,
                     tickLower: params.tickLower,
                     tickUpper: params.tickUpper,
-                    amount0Desired: _used0,
-                    amount1Desired: _used1,
+                    amount0Desired: IERC20(params.token0).balanceOf(address(this)), // Use the whole amount of token0
+                    amount1Desired: IERC20(params.token1).balanceOf(address(this)), // Use the whole amount of token1
                     amount0Min: 0,
                     amount1Min: 0,
-                    recipient: msg.sender,
+                    recipient: params.user, // Mint to user
                     deadline: block.timestamp
                 })
             );
-            console.log("New position minted - TokenId:", _tokenId);
+            // console.log("New position minted - TokenId:", _tokenId);
         } else {
             // Increase liquidity of existing position
-            // console.log("Increasing liquidity of existing position");
             _tokenId = params.tokenId;
             IPositionManager(positionManager).increaseLiquidity(
                 IPositionManager.IncreaseLiquidityParams({
                     tokenId: params.tokenId,
-                    amount0Desired: _used0,
-                    amount1Desired: _used1,
+                    amount0Desired: IERC20(params.token0).balanceOf(address(this)),
+                    amount1Desired: IERC20(params.token1).balanceOf(address(this)),
                     amount0Min: 0,
                     amount1Min: 0,
                     deadline: block.timestamp
                 })
             );
-            // console.log("Liquidity increased - TokenId:", _tokenId);
         }
 
         // Refund remaining tokens
-        uint256 _remaining0 = IERC20(params.token0).balanceOf(address(this));
-        uint256 _remaining1 = IERC20(params.token1).balanceOf(address(this));
-        console.log("Remaining amount0:", _remaining0);
-        console.log("Remaining amount1:", _remaining1);
+        _remaining0 = IERC20(params.token0).balanceOf(address(this)); // Remaining amount of token0
+        _remaining1 = IERC20(params.token1).balanceOf(address(this)); // Remaining amount of token1
+        // console.log("Remaining amount0:", _remaining0);
+        // console.log("Remaining amount1:", _remaining1);
         
         if (_remaining0 > 0) IERC20(params.token0).safeTransfer(msg.sender, _remaining0);
         if (_remaining1 > 0) IERC20(params.token1).safeTransfer(msg.sender, _remaining1);
         
-        console.log("=== swapAndAddLiquidity END ===");
+        // console.log("=== swapAndAddLiquidity END ===");
     }
 
     // Private functions
@@ -632,62 +595,144 @@ contract UniswapV3Connector is
 
     /// @notice Execute swap to achieve optimal ratio
     function _executeSwap(
-        address _tokenIn,
-        address _tokenOut,
-        uint24 _fee,
-        uint256 _amountInAvailable,
-        uint256 _amountOutAvailable,
+        bool _swapToken0ToToken1,
+        uint256 _initialGuess,
+        AddLiquidityParams memory params,
         uint256 _targetRatio
-    ) private returns (uint256 _sentAmount, uint256 _receivedAmount) {
-        _sentAmount = _findOptimalSwapAmount(
-            _tokenIn, _tokenOut, _fee, _amountInAvailable, _amountOutAvailable, _targetRatio
-        );
-        console.log("Swap amount:", _sentAmount);
-        
-        if (_sentAmount > 0) {
-            ISwapRouter.ExactInputSingleParams memory _params = ISwapRouter.ExactInputSingleParams({
-                tokenIn: _tokenIn,
-                tokenOut: _tokenOut,
-                fee: _fee,
+    ) private returns (uint256 _neededSwapAmount, uint256 _receivedAmount) {
+
+        ISwapRouter.ExactInputSingleParams memory _params;
+
+        if (_swapToken0ToToken1) {
+            // Swap token0 to token1
+            _neededSwapAmount = _findOptimalSwapAmount(
+                _initialGuess,
+                params.token0, 
+                params.token1, 
+                params.feeTier, 
+                params.amount0Desired, 
+                params.amount1Desired, 
+                _targetRatio
+            );
+
+            _params = ISwapRouter.ExactInputSingleParams({
+                tokenIn: params.token0,
+                tokenOut: params.token1,
+                fee: params.feeTier,
                 recipient: address(this),
                 deadline: block.timestamp,
-                amountIn: _sentAmount,
+                amountIn: _neededSwapAmount,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             });
+        } else {
+            // Swap token1 to token0
+            _neededSwapAmount = _findOptimalSwapAmount(
+                _initialGuess,
+                params.token1, 
+                params.token0, 
+                params.feeTier, 
+                params.amount1Desired, 
+                params.amount0Desired, 
+                _targetRatio
+            );
+
+            _params = ISwapRouter.ExactInputSingleParams({
+                tokenIn: params.token1,
+                tokenOut: params.token0,
+                fee: params.feeTier,
+                recipient: address(this),
+                deadline: block.timestamp,
+                amountIn: _neededSwapAmount,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+        }
+        // console.log("_neededSwapAmount:", _neededSwapAmount);
+        
+        if (_neededSwapAmount > 0) {
             _receivedAmount = ISwapRouter(exchangeRouter).exactInputSingle(_params);
-            
-            console.log("new ratio:", (_amountInAvailable - _sentAmount) * 1e18 / (_amountOutAvailable + _receivedAmount));
-            console.log("target ratio:", _targetRatio);
+            // console.log("new ratio:", (_amountInAvailable - _neededSwapAmount) * 1e18 / (_amountOutAvailable + _receivedAmount));
+            // console.log("target ratio:", _targetRatio);
         }
     }
 
-    uint8  private constant MAX_ITERS = 20;
+    uint8  private constant MAX_ITERS = 10;
+    uint256 private constant TOLERANCE = 500; // 5% tolerance
 
     /// @notice Estimate how much of tokenIn to swap so that
-    ///         (in - x)/(out + y) ≈ targetRatio, then refine with a capped binary search.
+    ///         (in - x)/(out + y) ≈ targetRatio
+    /// @dev This function uses a binary search to find the optimal swap amount.
     function _findOptimalSwapAmount(
-        address _tokenIn,
-        address _tokenOut,
+        uint256 _initialGuess,
+        address _inputToken,
+        address _outputToken,
         uint24  _fee,
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 targetRatio
+        uint256 _availableInputToken,
+        uint256 _availableOutputToken,
+        uint256 _targetRatio
     ) internal returns (uint256) {
-        if (amountIn == 0 || targetRatio == 0) return 0;
+        if (_availableInputToken == 0) return 0; // We cannot swap 0 tokens
+
+        uint256 userRatio = _availableOutputToken > 0 
+            ? (_availableInputToken * 1e18) / _availableOutputToken
+            : type(uint256).max;
 
         // Quick ratio check
-        if (amountOut > 0) {
-            uint256 currentRatio = (amountIn * 1e18) / amountOut;
-            if (currentRatio == targetRatio) return 0;
-        }
+        if (userRatio == _targetRatio) return 0;
 
-        // Calculate initial guess
-        uint256 guess = _calculateInitialGuess(amountIn, amountOut, targetRatio);
-        console.log("Initial guess:", guess);
+        uint256 bestGuess = 0;
+        uint256 bestDiff = type(uint256).max;
+        uint256 tolerance = TOLERANCE * _targetRatio / 10000; // 5% tolerance
+        // console.log("tolerance:", tolerance);
         
-        // Binary search with reduced variables
-        return _binarySearch(_tokenIn, _tokenOut, _fee, amountIn, amountOut, targetRatio, guess);
+        // Start with larger steps and reduce
+        uint256 step = _initialGuess / 8; // Start with 1/8 of initial guess
+        uint256 currentGuess = _initialGuess;
+
+        // console.log("step:", step);
+        // console.log("initialGuess:", _initialGuess);
+        
+        for (uint8 i = 0; i < MAX_ITERS; ++i) {
+            // Try currentGuess position
+            uint256 y = _getQuoteResult(_inputToken, _outputToken, _fee, currentGuess);
+            // uint256 y = currentGuess; // Only for testing
+            uint256 newUserRatio = ((_availableInputToken - currentGuess) * 1e18) / (_availableOutputToken + y);
+            // console.log("newUserRatio:", newUserRatio);
+            uint256 diff = newUserRatio > _targetRatio 
+                ? newUserRatio - _targetRatio 
+                : _targetRatio - newUserRatio;
+
+            // console.log("diff:", diff);
+                
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                bestGuess = currentGuess;
+                // console.log("YESSSSS");
+            } else {
+                // console.log("NOOOOOOO");
+                // Reduce step size exponentially
+                step = step / 2;
+                // console.log("step:", step);
+                if (step == 0) break;
+            }
+            
+            if (diff <= tolerance) {
+                // console.log("PERFECT");
+                return bestGuess;
+            }
+            
+            // Determine direction and step
+            if (newUserRatio > _targetRatio) {
+                // Need to swap more (increase currentGuess)
+                currentGuess = currentGuess + step;
+            } else {
+                // Need to swap less (decrease currentGuess)
+                currentGuess = currentGuess > step ? currentGuess - step : 0;
+            }
+        }
+        
+        return bestGuess;
     }
 
     function _calculateInitialGuess(
@@ -697,10 +742,10 @@ contract UniswapV3Connector is
     ) private pure returns (uint256) {
         if (amountOut == 0) return amountIn / 2;
         
-        uint256 currentRatio = (amountIn * 1e18) / amountOut;
-        uint256 guess = currentRatio > targetRatio
-            ? ((currentRatio - targetRatio) * amountOut) / targetRatio
-            : ((targetRatio - currentRatio) * amountIn) / targetRatio;
+        uint256 userRatio = (amountIn * 1e18) / amountOut;
+        uint256 guess = userRatio > targetRatio
+            ? ((userRatio - targetRatio) * amountOut) / targetRatio
+            : ((targetRatio - userRatio) * amountIn) / targetRatio;
             
         return guess > amountIn ? amountIn : guess;
     }
@@ -728,52 +773,8 @@ contract UniswapV3Connector is
         uint24 _fee,
         uint256 amountIn,
         uint256 amountOut,
-        uint256 targetRatio,
-        uint256 guess
+        uint256 targetRatio
     ) private returns (uint256) {
-        // Set a tighter search window around the guess to save gas
-        uint256 left = guess > (amountIn / 4) ? guess - (amountIn / 4) : 0;
-        uint256 right = guess + (amountIn / 4) > amountIn ? amountIn : guess + (amountIn / 4);
 
-        uint256 bestMid = 0;
-        uint256 bestDiff = type(uint256).max;
-        uint256 tolerance = 2 * targetRatio / 100; // 2%
-
-        for (uint8 i = 0; i < MAX_ITERS && left <= right; ++i) {
-            uint256 mid = (left + right) >> 1;
-            // uint256 y = _getQuoteResult(_tokenIn, _tokenOut, _fee, mid);
-            uint256 y = mid;
-
-            if (amountOut + y == 0) {
-                right = mid - 1;
-                continue;
-            }
-
-            uint256 newRatio = ((amountIn - mid) * 1e18) / (amountOut + y);
-            console.log("newRatio:", newRatio);
-            console.log("targetRatio:", targetRatio);
-            uint256 diff = newRatio > targetRatio
-                ? newRatio - targetRatio
-                : targetRatio - newRatio;
-
-            if (diff < bestDiff) {
-                bestDiff = diff;
-                bestMid = mid;
-            }
-
-            if (diff <= tolerance) {
-                console.log("diff", diff);
-                console.log("tolerance", tolerance);
-                return bestMid;
-            }
-
-            if (newRatio > targetRatio) {
-                left = mid + 1;
-            } else {
-                right = mid - 1;
-            }
-        }
-
-        return bestMid;
     }
 }

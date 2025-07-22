@@ -254,7 +254,7 @@ describe("UniswapV3Connector - swapAndAddLiquidity", async function() {
         it("should successfully create a new position with optimal token ratios", async () => {
             console.log("=== Test: Create new position ===");
             const amount0Desired = ethers.utils.parseUnits("1000", 8); // 1000 tokenA
-            const amount1Desired = ethers.utils.parseUnits("800", 8);  // 800 tokenB (imbalanced)
+            const amount1Desired = ethers.utils.parseUnits("1100", 8);  // 800 tokenB (imbalanced)
 
             const tickLower = -500;
             const tickUpper = 500;
@@ -301,7 +301,8 @@ describe("UniswapV3Connector - swapAndAddLiquidity", async function() {
                 tickLower: tickLower,
                 tickUpper: tickUpper,
                 amount0Desired: amount0Desired,
-                amount1Desired: amount1Desired
+                amount1Desired: amount1Desired,
+                user: userAddress
             });
 
             console.log("Transaction hash:", tx.hash);
