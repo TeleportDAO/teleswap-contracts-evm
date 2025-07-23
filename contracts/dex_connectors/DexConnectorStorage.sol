@@ -13,4 +13,8 @@ abstract contract DexConnectorStorage is IDexConnector {
 
     // Additional storage variables for V3 position management
     address public positionManager;
+
+    uint256 public MAX_ITERS;
+    uint256 public TOLERANCE;
+    uint256 public constant ONE_HUNDRED_PERCENT = 10000; // 100%
 }
