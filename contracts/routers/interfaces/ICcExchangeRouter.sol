@@ -38,7 +38,7 @@ interface ICcExchangeRouter {
     /// @notice Structure for recording cross-chain exchange requests
     /// @param isRequestCompleted True if BTC to ETH exchange is processed successfully
     /// @param remainedInputAmount Amount of obtained TELEBTC on target chain
-    /// @param bridgeFee percentage of fee we have to give to across relayers to fill our request
+    /// @param bridgePercentageFee percentage of fee we have to give to across relayers to fill our request
     struct extendedCcExchangeRequest {
         uint chainId;
         bool isRequestCompleted;
@@ -125,26 +125,29 @@ interface ICcExchangeRouter {
 
     /// @notice Emits when a new filler fills a request
     /// @param filler Address of filler
-    /// @param txId Bitcoin request id
-    /// @param token that used for filling
-    /// @param fillAmount that sent for filling
+    /// @param user Address of user
+    /// @param lockerTargetAddress Address of Locker
+    /// @param bitcoinTxId The transaction ID of request on Bitcoin 
+    /// @param inputAndOutputToken [inputToken, outputToken]
     /// @param userRequestedAmount that user requested
-    /// @param finalAmount that user received
+    /// @param inputAndOutputAmount [inputAmount, outputAmount]
+    /// @param destinationChainId chain id of destination 
+    /// @param bridgePercentageFee percentage of fee we have to give to across relayers to fill our request
     event RequestFilled(
         address filler,
-        bytes32 txId,
-        address recipient, 
-        address token,
-        uint fillAmount,
+        address user,
+        address lockerTargetAddress,
+        bytes32 bitcoinTxId,
+        address[2] inputAndOutputToken,
+        uint[2] inputAndOutputAmount,
         uint userRequestedAmount,
-        uint finalAmount,
         uint destinationChainId,
         uint bridgePercentageFee
     );
 
     event FillerRefunded(
         address filler,
-        bytes32 txId,
+        bytes32 bitcoinTxId,
         uint amount
     );
 
@@ -368,7 +371,8 @@ interface ICcExchangeRouter {
         uint _fillAmount,
         uint _userRequestedAmount,
         uint _destinationChainId,
-        uint _bridgePercentageFee
+        uint _bridgePercentageFee,
+        bytes memory _lockerLockingScript
     ) external payable;
 
     function refundByOwnerOrAdmin(

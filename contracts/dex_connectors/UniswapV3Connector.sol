@@ -381,6 +381,66 @@ contract UniswapV3Connector is
         return true;
     }
 
+    function getSqrtPrice(
+        address _token0,
+        address _token1,
+        uint24 _feeTier
+    ) public view returns (uint160 _sqrtPrice) {
+        address poolAddress = IUniswapV3Factory(liquidityPoolFactory).getPool(
+            _token0, 
+            _token1, 
+            _feeTier
+        );
+        // Note: since slot0 is different in Ethereum and BNB, 
+        // we need to use staticcall to get the data
+        (bool success, bytes memory data) = poolAddress.staticcall(
+            abi.encodeWithSignature("slot0()")
+        );
+        require(success, "Failed to get slot0");
+
+        // Decode the returned data
+        (_sqrtPrice) = abi.decode(
+            data,
+            (uint160)
+        );
+    }
+
+    function getSqrtPriceAtTick(
+        int24 _tick
+    ) public pure returns (uint160) {
+        return _TickMath.getSqrtPriceAtTick(_tick);
+    }
+
+    function getLiquidityForAmounts(
+        uint160 _sqrtPrice,
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint256 _amount0Desired,
+        uint256 _amount1Desired
+    ) public pure returns (uint128) {
+        return _LiquidityAmounts.getLiquidityForAmounts(
+            _sqrtPrice,
+            _TickMath.getSqrtPriceAtTick(_tickLower),
+            _TickMath.getSqrtPriceAtTick(_tickUpper),
+            _amount0Desired,
+            _amount1Desired
+        );
+    }
+
+    function getAmountsForLiquidity(
+        uint160 _sqrtPrice,
+        int24 _tickLower,
+        int24 _tickUpper,
+        uint128 _liquidity
+    ) public pure returns (uint256, uint256) {
+        return _LiquidityAmounts.getAmountsForLiquidity(    
+            _sqrtPrice,
+            _TickMath.getSqrtPriceAtTick(_tickLower),
+            _TickMath.getSqrtPriceAtTick(_tickUpper),
+            _liquidity
+        );
+    }
+
     struct AddLiquidityParams {
         uint256 tokenId; // 0 for new position, non-zero for existing position
         address token0;
@@ -441,7 +501,7 @@ contract UniswapV3Connector is
         IERC20(params.token1).approve(positionManager, type(uint256).max);
 
         // Get current sqrt price from the pool
-        (uint160 _sqrtPrice, , , , , , ) = IUniswapV3PoolState(poolAddress).slot0();
+        uint160 _sqrtPrice = getSqrtPrice(params.token0, params.token1, params.feeTier);
 
         // Calculate the maximum liquidity that can be provided with the given token amounts
         uint128 _maxLiquidity = _LiquidityAmounts.getLiquidityForAmounts(
@@ -628,7 +688,7 @@ contract UniswapV3Connector is
 
         ISwapRouter.ExactInputSingleParams memory _params;
 
-        (uint160 _sqrtPrice, , , , , , ) = IUniswapV3PoolState(_poolAddress).slot0();
+        uint160 _sqrtPrice = getSqrtPrice(params.token0, params.token1, params.feeTier);
 
         // Get total amounts of token0 and token1 in the current range
         (uint256 _totalAmount0, uint256 _totalAmount1) = _LiquidityAmounts.getAmountsForLiquidity(

@@ -334,7 +334,8 @@ contract CcExchangeRouterLogic is
         uint _fillAmount,
         uint _userRequestedAmount,
         uint _destinationChainId,
-        uint _bridgePercentageFee
+        uint _bridgePercentageFee,
+        bytes memory _lockerLockingScript
     ) external payable nonReentrant override {
         // Checks that the request has not been processed before normally
         require(
@@ -424,12 +425,12 @@ contract CcExchangeRouterLogic is
 
         emit RequestFilled(
             _msgSender(),
-            _txId,
             _recipient,
-            _token,
-            _fillAmount,
+            ILockersManager(lockers).getLockerTargetAddress(_lockerLockingScript),
+            _txId,
+            [teleBTC, _token],
+            [_fillAmount, _finalAmount],
             _userRequestedAmount,
-            _finalAmount,
             _destinationChainId,
             _bridgePercentageFee
         );
