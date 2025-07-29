@@ -130,7 +130,7 @@ interface ICcExchangeRouter {
     /// @param bitcoinTxId The transaction ID of request on Bitcoin 
     /// @param inputAndOutputToken [inputToken, outputToken]
     /// @param userRequestedAmount that user requested
-    /// @param inputAndOutputAmount [inputAmount, outputAmount]
+    /// @param finalAmount that user received
     /// @param destinationChainId chain id of destination 
     /// @param bridgePercentageFee percentage of fee we have to give to across relayers to fill our request
     event RequestFilled(
@@ -139,7 +139,8 @@ interface ICcExchangeRouter {
         address lockerTargetAddress,
         bytes32 bitcoinTxId,
         address[2] inputAndOutputToken,
-        uint[2] inputAndOutputAmount,
+        uint fillAmount,
+        uint finalAmount,
         uint userRequestedAmount,
         uint destinationChainId,
         uint bridgePercentageFee

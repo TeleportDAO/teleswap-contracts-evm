@@ -429,7 +429,8 @@ contract CcExchangeRouterLogic is
             ILockersManager(lockers).getLockerTargetAddress(_lockerLockingScript),
             _txId,
             [teleBTC, _token],
-            [_fillAmount, _finalAmount],
+            _fillAmount,
+            _finalAmount,
             _userRequestedAmount,
             _destinationChainId,
             _bridgePercentageFee

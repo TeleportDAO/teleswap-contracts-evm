@@ -88,6 +88,10 @@ contract UniswapV3Connector is
         uint256 _totalAmount1
     );
 
+    event SwapFailed(
+        ISwapRouter.ExactInputSingleParams _params
+    );
+
     event SwapAndAddLiquidity(
         AddLiquidityParams _params,
         uint256 _remaining0,
@@ -529,10 +533,10 @@ contract UniswapV3Connector is
             ? (params.amount0Desired * 1e18) / params.amount1Desired 
             : type(uint256).max;
         
-        
+        bool _success;
         if (_userRatio > _rangeRatio) {
             // Swap token0 to token1
-            _executeSwap(
+            _success = _executeSwap(
                 poolAddress,
                 true,
                 params.amount0Desired - _optimalAmount0, // Initial guess
@@ -541,7 +545,7 @@ contract UniswapV3Connector is
             );
         } else if (_userRatio < _rangeRatio && _rangeRatio > 0) {
             // Swap token1 to token0
-            _executeSwap(
+            _success = _executeSwap(
                 poolAddress,
                 false,
                 params.amount1Desired - _optimalAmount1, // Initial guess
@@ -550,37 +554,39 @@ contract UniswapV3Connector is
             );
         }
 
-        // Mint position or increase liquidity and refund
-        if (params.tokenId == 0) {
-            // Mint new position
-            (_tokenId, , , ) = IPositionManager(positionManager).mint(
-                IPositionManager.MintParams({
-                    token0: params.token0,
-                    token1: params.token1,
-                    fee: params.feeTier,
-                    tickLower: params.tickLower,
-                    tickUpper: params.tickUpper,
-                    amount0Desired: IERC20(params.token0).balanceOf(address(this)), // Use the whole amount of token0
-                    amount1Desired: IERC20(params.token1).balanceOf(address(this)), // Use the whole amount of token1
-                    amount0Min: 0,
-                    amount1Min: 0,
-                    recipient: params.user, // Mint to user
-                    deadline: block.timestamp
-                })
-            );
-        } else {
-            // Increase liquidity of existing position
-            _tokenId = params.tokenId;
-            IPositionManager(positionManager).increaseLiquidity(
-                IPositionManager.IncreaseLiquidityParams({
-                    tokenId: params.tokenId,
-                    amount0Desired: IERC20(params.token0).balanceOf(address(this)),
-                    amount1Desired: IERC20(params.token1).balanceOf(address(this)),
-                    amount0Min: 0,
-                    amount1Min: 0,
-                    deadline: block.timestamp
-                })
-            );
+        if (_success == true) {
+            // Mint position or increase liquidity and refund
+            if (params.tokenId == 0) {
+                // Mint new position
+                (_tokenId, , , ) = IPositionManager(positionManager).mint(
+                    IPositionManager.MintParams({
+                        token0: params.token0,
+                        token1: params.token1,
+                        fee: params.feeTier,
+                        tickLower: params.tickLower,
+                        tickUpper: params.tickUpper,
+                        amount0Desired: IERC20(params.token0).balanceOf(address(this)), // Use the whole amount of token0
+                        amount1Desired: IERC20(params.token1).balanceOf(address(this)), // Use the whole amount of token1
+                        amount0Min: 0,
+                        amount1Min: 0,
+                        recipient: params.user, // Mint to user
+                        deadline: block.timestamp
+                    })
+                );
+            } else {
+                // Increase liquidity of existing position
+                _tokenId = params.tokenId;
+                IPositionManager(positionManager).increaseLiquidity(
+                    IPositionManager.IncreaseLiquidityParams({
+                        tokenId: params.tokenId,
+                        amount0Desired: IERC20(params.token0).balanceOf(address(this)),
+                        amount1Desired: IERC20(params.token1).balanceOf(address(this)),
+                        amount0Min: 0,
+                        amount1Min: 0,
+                        deadline: block.timestamp
+                    })
+                );
+            }
         }
 
         // Refund remaining tokens
@@ -684,8 +690,10 @@ contract UniswapV3Connector is
         uint256 _initialGuess,
         AddLiquidityParams memory params,
         uint256 _targetRatio
-    ) private returns (uint256 _neededSwapAmount, uint256 _receivedAmount) {
+    ) private returns (bool _success) {
 
+        uint256 _neededSwapAmount;
+        uint256 _receivedAmount;
         ISwapRouter.ExactInputSingleParams memory _params;
 
         uint160 _sqrtPrice = getSqrtPrice(params.token0, params.token1, params.feeTier);
@@ -752,16 +760,25 @@ contract UniswapV3Connector is
         }
         
         if (_neededSwapAmount > 0) {
-            _receivedAmount = ISwapRouter(exchangeRouter).exactInputSingle(_params);
+            try ISwapRouter(exchangeRouter).exactInputSingle(_params) returns (uint256 __receivedAmount) {
+                _receivedAmount = __receivedAmount;
+                _success = true;
+            } catch {
+                emit SwapFailed(
+                    _params
+                );
+                _success = false;
+            }
         }
-
-        emit ExecuteSwap(
-            _swapToken0ToToken1,
-            _neededSwapAmount,
-            _receivedAmount,
-            _totalAmount0,
-            _totalAmount1
-        );
+        if (_success == true) {
+            emit ExecuteSwap(
+                _swapToken0ToToken1,
+                _neededSwapAmount,
+                _receivedAmount,
+                _totalAmount0,
+                _totalAmount1
+            );
+        }
     }
 
     /// @notice Estimate how much of tokenIn to swap so that
@@ -807,7 +824,7 @@ contract UniswapV3Connector is
             // Difference between new user ratio and new pool ratio
             uint256 diffPercentage = newUserRatio > newTargetRatio 
                 ? (newUserRatio - newTargetRatio) * ONE_HUNDRED_PERCENT / newTargetRatio
-                : (newTargetRatio - newUserRatio) * ONE_HUNDRED_PERCENT / newUserRatio;
+                : (newTargetRatio - newUserRatio) * ONE_HUNDRED_PERCENT / newTargetRatio;
 
             if (diffPercentage < bestDiffPercentage) {
                 bestDiffPercentage = diffPercentage;
@@ -877,7 +894,22 @@ contract UniswapV3Connector is
                 sqrtPriceLimitX96: 0
             })
         );
+        emit GetQuoteResult(
+            tokenIn,
+            tokenOut,
+            fee,
+            amountIn,
+            amountOut
+        );
     }
+
+    event GetQuoteResult(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        uint256 amountIn,
+        uint256 amountOut
+    );
 
     function _binarySearch(
         address _tokenIn,
