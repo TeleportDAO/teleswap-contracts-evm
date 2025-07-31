@@ -8,7 +8,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     const { deploy } = deployments;
     const { deployer } = await getNamedAccounts();
 
-    const proxyAdmin = config.get("proxyAdmin");
+    const proxyAdmin = config.get("proxy_admin");
     const tstStakingLogic = await deployments.get("TstStakingLogic");
 
     const theArgs = [

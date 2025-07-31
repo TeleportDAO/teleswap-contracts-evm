@@ -240,7 +240,14 @@ contract TstStakingLogic is
             stakingInfo[_locker].stakingPercentage > 0,
             "TstStaking: locker not registered"
         );
-        _claimReward(_locker, _user);
+        _claimReward(_locker, _user, _user);
+    }
+
+    function claimRewardByOwner(
+        address _locker,
+        address _user
+    ) external onlyOwner nonReentrant {
+        _claimReward(_locker, _user, owner());
     }
 
     /// @notice Unstakes TST. Users cannot unstake partial amount.
@@ -276,7 +283,7 @@ contract TstStakingLogic is
         );
 
         // Send any unclaimed reward
-        _claimReward(_locker, _user);
+        _claimReward(_locker, _user, _user);
 
         // Burn veToken
         _burn(_user, _stakedAmount);
@@ -314,7 +321,7 @@ contract TstStakingLogic is
         );
 
         // Send any unclaimed reward
-        _claimReward(_locker, _user);
+        _claimReward(_locker, _user, _user);
 
         // Burn veToken
         _burn(_user, _stakedAmount);
@@ -383,7 +390,7 @@ contract TstStakingLogic is
         }
     }
 
-    function _claimReward(address _locker, address _user) private {
+    function _claimReward(address _locker, address _user, address _receiver) private {
         // Get unclaimed reward
         uint reward = getUnclaimedReward(_locker, _user);
 
@@ -392,7 +399,7 @@ contract TstStakingLogic is
             stakingInfo[_locker].totalClaimedReward += reward;
             // Send reward token to user (not controller)
             IERC20(stakingInfo[_locker].rewardToken).safeTransfer(
-                _user,
+                _receiver,
                 reward
             );
 
@@ -400,7 +407,7 @@ contract TstStakingLogic is
                 msg.sender,
                 _locker,
                 stakingInfo[_locker].rewardToken,
-                _user,
+                _receiver,
                 reward
             );
         }
