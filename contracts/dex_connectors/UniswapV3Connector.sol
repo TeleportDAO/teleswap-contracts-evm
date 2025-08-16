@@ -177,6 +177,10 @@ contract UniswapV3Connector is
         TOLERANCE = _tolerance;
     }
 
+    function setPrecision(uint256 _precision) external onlyOwner {
+        PRECISION = _precision;
+    }
+
     function convertedPath(
         address[] memory _path
     ) public view returns (bytes memory packedData) {
@@ -524,14 +528,30 @@ contract UniswapV3Connector is
             _maxLiquidity
         );
 
-        // Note: we multiply by 1e18 to add precision to the ratio
-        uint256 _rangeRatio = _optimalAmount1 > 0 
-            ? (_optimalAmount0 * 1e18) / _optimalAmount1 
-            : type(uint256).max;
+        // Note: we multiply by PRECISION to add precision to the ratio
+        uint256 _rangeRatio;
+        if (_optimalAmount1 > 0) {
+            if (_optimalAmount0 > type(uint256).max / PRECISION) {
+                // Overflow would occur, set to max
+                _rangeRatio = type(uint256).max;
+            } else {
+                _rangeRatio = (_optimalAmount0 * PRECISION) / _optimalAmount1;
+            }
+        } else {
+            _rangeRatio = type(uint256).max;
+        }
 
-        uint256 _userRatio = params.amount1Desired > 0 
-            ? (params.amount0Desired * 1e18) / params.amount1Desired 
-            : type(uint256).max;
+        uint256 _userRatio;
+        if (params.amount1Desired > 0) {
+            if (params.amount0Desired > type(uint256).max / PRECISION) {
+                // Overflow would occur, set to max
+                _userRatio = type(uint256).max;
+            } else {
+                _userRatio = (params.amount0Desired * PRECISION) / params.amount1Desired;
+            }
+        } else {
+            _userRatio = type(uint256).max;
+        }
         
         bool _success;
         if (_userRatio > _rangeRatio) {
@@ -550,7 +570,11 @@ contract UniswapV3Connector is
                 false,
                 params.amount1Desired - _optimalAmount1, // Initial guess
                 params,
-                _optimalAmount1 * 1e18 / _optimalAmount0
+                _optimalAmount0 > 0 
+                    ? (_optimalAmount1 > type(uint256).max / PRECISION 
+                        ? type(uint256).max 
+                        : _optimalAmount1 * PRECISION / _optimalAmount0)
+                    : type(uint256).max
             );
         }
 
@@ -794,7 +818,9 @@ contract UniswapV3Connector is
         if (params.amount0Desired == 0) return 0; // We cannot swap 0 tokens
 
         uint256 newUserRatio = params.amount1Desired > 0 
-            ? (params.amount0Desired * 1e18) / params.amount1Desired
+            ? (params.amount0Desired > type(uint256).max / PRECISION 
+                ? type(uint256).max 
+                : (params.amount0Desired * PRECISION) / params.amount1Desired)
             : type(uint256).max;
 
         // Quick ratio check
@@ -804,27 +830,44 @@ contract UniswapV3Connector is
         uint256 bestDiffPercentage = type(uint256).max;
         
         // Start with larger steps and then reduce
-        uint256 step = _initialGuess / 8; // Start with 1/8 of initial guess
+        uint256 step = _initialGuess > 8 ? _initialGuess / 8 : 1; // Start with 1/8 of initial guess, minimum 1
         uint256 currentGuess = _initialGuess;
 
         uint256 newTargetRatio;
-
+        uint256 y;
+        
         for (uint8 i = 0; i < MAX_ITERS; ++i) {
             // Try currentGuess position
-            uint256 y = _getQuoteResult(params.token0, params.token1, params.feeTier, currentGuess);
+            if (currentGuess == 0) {
+                y = 0;
+            } else {
+                y = _getQuoteResult(params.token0, params.token1, params.feeTier, currentGuess);
+            }
             
             // New ratio after swap
-            newUserRatio = ((params.amount0Desired - currentGuess) * 1e18) / (params.amount1Desired + y);
+            newUserRatio = (params.amount1Desired + y) > 0 
+                ? ((params.amount0Desired - currentGuess) > type(uint256).max / PRECISION
+                    ? type(uint256).max
+                    : ((params.amount0Desired - currentGuess) * PRECISION) / (params.amount1Desired + y))
+                : type(uint256).max;
 
             // New pool ratio after swap
             newTargetRatio = (_totalAmount1 - y) > 0 
-                ? (_totalAmount0 + currentGuess) * 1e18 / (_totalAmount1 - y) 
+                ? ((_totalAmount0 + currentGuess) > type(uint256).max / PRECISION
+                    ? type(uint256).max
+                    : ((_totalAmount0 + currentGuess) * PRECISION) / (_totalAmount1 - y))
                 : type(uint256).max;
 
             // Difference between new user ratio and new pool ratio
-            uint256 diffPercentage = newUserRatio > newTargetRatio 
-                ? (newUserRatio - newTargetRatio) * ONE_HUNDRED_PERCENT / newTargetRatio
-                : (newTargetRatio - newUserRatio) * ONE_HUNDRED_PERCENT / newTargetRatio;
+            uint256 diffPercentage = newTargetRatio > 0 
+                ? (newUserRatio > newTargetRatio 
+                    ? ((newUserRatio - newTargetRatio) > type(uint256).max / ONE_HUNDRED_PERCENT
+                        ? type(uint256).max
+                        : (newUserRatio - newTargetRatio) * ONE_HUNDRED_PERCENT / newTargetRatio)
+                    : ((newTargetRatio - newUserRatio) > type(uint256).max / ONE_HUNDRED_PERCENT
+                        ? type(uint256).max
+                        : (newTargetRatio - newUserRatio) * ONE_HUNDRED_PERCENT / newTargetRatio))
+                : type(uint256).max;
 
             if (diffPercentage < bestDiffPercentage) {
                 bestDiffPercentage = diffPercentage;
@@ -849,9 +892,14 @@ contract UniswapV3Connector is
             if (newUserRatio > _targetRatio) {
                 // Need to swap more (increase currentGuess)
                 currentGuess = currentGuess + step;
+                // To avoid swapping more than the amount of token0, set maximum to amount0Desired
+                if (currentGuess > params.amount0Desired) {
+                    currentGuess = params.amount0Desired;
+                }
             } else {
                 // Need to swap less (decrease currentGuess)
-                currentGuess = currentGuess > step ? currentGuess - step : 0;
+                // To avoid swapping 0 tokens, set minimum to 1
+                currentGuess = currentGuess > step ? currentGuess - step : 1;
             }
         }
 
@@ -862,21 +910,6 @@ contract UniswapV3Connector is
         );
         
         return bestGuess;
-    }
-
-    function _calculateInitialGuess(
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 targetRatio
-    ) private pure returns (uint256) {
-        if (amountOut == 0) return amountIn / 2;
-        
-        uint256 userRatio = (amountIn * 1e18) / amountOut;
-        uint256 guess = userRatio > targetRatio
-            ? ((userRatio - targetRatio) * amountOut) / targetRatio
-            : ((targetRatio - userRatio) * amountIn) / targetRatio;
-            
-        return guess > amountIn ? amountIn : guess;
     }
 
     function _getQuoteResult(
