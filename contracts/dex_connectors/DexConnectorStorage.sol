@@ -17,5 +17,6 @@ abstract contract DexConnectorStorage is IDexConnector {
     uint256 public MAX_ITERS;
     uint256 public TOLERANCE;
     uint256 public constant ONE_HUNDRED_PERCENT = 10000; // 100%
-    uint256 public PRECISION = 1e18;
+    uint256 public PRECISION;
+    uint256 public MIN_GAS_RESERVE;
 }

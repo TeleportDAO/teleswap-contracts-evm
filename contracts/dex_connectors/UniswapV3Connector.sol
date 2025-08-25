@@ -88,10 +88,6 @@ contract UniswapV3Connector is
         uint256 _totalAmount1
     );
 
-    event SwapFailed(
-        ISwapRouter.ExactInputSingleParams _params
-    );
-
     event SwapAndAddLiquidity(
         AddLiquidityParams _params,
         uint256 _remaining0,
@@ -103,6 +99,14 @@ contract UniswapV3Connector is
         uint256 _newUserRatio,
         uint256 _newTargetRatio,
         uint256 _targetRatio
+    );
+
+    event GetQuoteResult(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        uint256 amountIn,
+        uint256 amountOut
     );
 
     using SafeERC20 for IERC20;
@@ -179,6 +183,10 @@ contract UniswapV3Connector is
 
     function setPrecision(uint256 _precision) external onlyOwner {
         PRECISION = _precision;
+    }
+
+    function setMinGasReserve(uint256 _minGasReserve) external onlyOwner {
+        MIN_GAS_RESERVE = _minGasReserve;
     }
 
     function convertedPath(
@@ -462,6 +470,17 @@ contract UniswapV3Connector is
     }
 
     /// @notice Zap tokens into a Uniswap V3 position in one call
+    /// @dev This function performs the following steps:
+    ///      1. Validates gas reserve and pool existence
+    ///      2. Normalizes token order to match pool configuration
+    ///      3. Validates existing position parameters if updating
+    ///      4. Executes optimal swaps to achieve desired token ratios
+    ///      5. Mints new position or increases existing position liquidity
+    ///      6. Refunds any remaining tokens to the user
+    /// @param params Struct containing all parameters for the operation
+    /// @return _tokenId The ID of the created/updated position
+    /// @return _remaining0 Amount of token0 remaining after operation
+    /// @return _remaining1 Amount of token1 remaining after operation
     function swapAndAddLiquidity(
         AddLiquidityParams memory params
     ) external nonReentrant returns (
@@ -469,14 +488,18 @@ contract UniswapV3Connector is
         uint256 _remaining0,
         uint256 _remaining1
     ) {
-        // Find the pool address
+        // Ensure sufficient gas reserve to prevent transaction failures
+        require(gasleft() >= MIN_GAS_RESERVE, "UniswapV3Connector: low gas");
+
+        // Get the pool address for the specified token pair and fee tier
         address poolAddress = IUniswapV3Factory(liquidityPoolFactory).getPool(
-            params.token0, 
-            params.token1, 
+            params.token0,
+            params.token1,
             params.feeTier
         );
         
-        // If token order is different from pool, swap token addresses and amounts
+        // Normalize token order to match pool's internal token ordering
+        // This ensures consistent calculations and prevents errors
         if (IUniswapV3PoolImmutables(poolAddress).token0() != params.token0) {
             uint256 _tempAmount = params.amount0Desired;
             address _tempToken = params.token0;
@@ -486,32 +509,37 @@ contract UniswapV3Connector is
             params.amount1Desired = _tempAmount;
         }
 
-        // If tokenId is non-zero, validate existing position parameters
+        // Validate existing position parameters if updating an existing position
         if (params.tokenId != 0) {
             (
-                , , , , 
+                , , , ,
                 uint24 existingFee,
                 int24 existingTickLower,
                 int24 existingTickUpper,
-                , , , , 
+                , , , ,
             ) = IPositionManager(positionManager).positions(params.tokenId);
+            
             require(existingFee == params.feeTier, "UniswapV3Connector: Fee tier mismatch");
             require(existingTickLower == params.tickLower, "UniswapV3Connector: Tick lower mismatch");
             require(existingTickUpper == params.tickUpper, "UniswapV3Connector: Tick upper mismatch");
         }
 
-        // Pull in tokens and approve
+        // Transfer tokens from user and approve spending for both router and position manager
         IERC20(params.token0).safeTransferFrom(msg.sender, address(this), params.amount0Desired);
         IERC20(params.token1).safeTransferFrom(msg.sender, address(this), params.amount1Desired);
+        
+        // Approve exchange router for swap operations
         IERC20(params.token0).approve(exchangeRouter, params.amount0Desired);
         IERC20(params.token1).approve(exchangeRouter, params.amount1Desired);
+        
+        // Approve position manager for liquidity operations (unlimited approval)
         IERC20(params.token0).approve(positionManager, type(uint256).max);
         IERC20(params.token1).approve(positionManager, type(uint256).max);
 
-        // Get current sqrt price from the pool
+        // Get current sqrt price from the pool for ratio calculations
         uint160 _sqrtPrice = getSqrtPrice(params.token0, params.token1, params.feeTier);
 
-        // Calculate the maximum liquidity that can be provided with the given token amounts
+        // Calculate maximum liquidity possible with current token amounts
         uint128 _maxLiquidity = _LiquidityAmounts.getLiquidityForAmounts(
             _sqrtPrice,
             _TickMath.getSqrtPriceAtTick(params.tickLower),
@@ -520,7 +548,7 @@ contract UniswapV3Connector is
             params.amount1Desired
         );
 
-        // Then get the optimal amounts for that liquidity
+        // Calculate optimal token amounts for the calculated liquidity
         (uint256 _optimalAmount0, uint256 _optimalAmount1) = _LiquidityAmounts.getAmountsForLiquidity(
             _sqrtPrice,
             _TickMath.getSqrtPriceAtTick(params.tickLower),
@@ -528,7 +556,8 @@ contract UniswapV3Connector is
             _maxLiquidity
         );
 
-        // Note: we multiply by PRECISION to add precision to the ratio
+        // Calculate the optimal ratio for the position range
+        // Use PRECISION multiplier to maintain precision in ratio calculations
         uint256 _rangeRatio;
         if (_optimalAmount1 > 0 && _optimalAmount0 <= type(uint256).max / PRECISION) {
             _rangeRatio = (_optimalAmount0 * PRECISION) / _optimalAmount1;
@@ -536,6 +565,7 @@ contract UniswapV3Connector is
             _rangeRatio = type(uint256).max;
         }
 
+        // Calculate the user's current token ratio
         uint256 _userRatio;
         if (params.amount1Desired > 0 && params.amount0Desired <= type(uint256).max / PRECISION) {
             _userRatio = (params.amount0Desired * PRECISION) / params.amount1Desired;
@@ -543,22 +573,23 @@ contract UniswapV3Connector is
             _userRatio = type(uint256).max;
         }
         
+        // Execute swaps to achieve optimal token ratios for the position
         bool _success;
         if (_userRatio > _rangeRatio) {
-            // Swap token0 to token1
+            // User has too much token0 relative to token1 - swap token0 for token1
             _success = _executeSwap(
                 poolAddress,
                 true,
-                params.amount0Desired, // Initial guess
+                params.amount0Desired, // Initial swap amount estimate
                 params,
                 _rangeRatio
             );
         } else if (_userRatio < _rangeRatio && _rangeRatio > 0) {
-            // Swap token1 to token0
+            // User has too much token1 relative to token0 - swap token1 for token0
             _success = _executeSwap(
                 poolAddress,
                 false,
-                params.amount1Desired, // Initial guess
+                params.amount1Desired, // Initial swap amount estimate
                 params,
                 _optimalAmount0 > 0 && _optimalAmount1 <= type(uint256).max / PRECISION
                     ? _optimalAmount1 * PRECISION / _optimalAmount0
@@ -566,10 +597,10 @@ contract UniswapV3Connector is
             );
         }
 
+        // If swaps were successful, proceed with liquidity operations
         if (_success == true) {
-            // Mint position or increase liquidity and refund
             if (params.tokenId == 0) {
-                // Mint new position
+                // Mint a new position with the optimized token amounts
                 (_tokenId, , , ) = IPositionManager(positionManager).mint(
                     IPositionManager.MintParams({
                         token0: params.token0,
@@ -577,11 +608,11 @@ contract UniswapV3Connector is
                         fee: params.feeTier,
                         tickLower: params.tickLower,
                         tickUpper: params.tickUpper,
-                        amount0Desired: IERC20(params.token0).balanceOf(address(this)), // Use the whole amount of token0
-                        amount1Desired: IERC20(params.token1).balanceOf(address(this)), // Use the whole amount of token1
+                        amount0Desired: IERC20(params.token0).balanceOf(address(this)),
+                        amount1Desired: IERC20(params.token1).balanceOf(address(this)),
                         amount0Min: 0,
                         amount1Min: 0,
-                        recipient: params.user, // Mint to user
+                        recipient: params.user,
                         deadline: block.timestamp
                     })
                 );
@@ -601,13 +632,19 @@ contract UniswapV3Connector is
             }
         }
 
-        // Refund remaining tokens
-        _remaining0 = IERC20(params.token0).balanceOf(address(this)); // Remaining amount of token0
-        _remaining1 = IERC20(params.token1).balanceOf(address(this)); // Remaining amount of token1
+        // Calculate remaining token amounts after all operations
+        _remaining0 = IERC20(params.token0).balanceOf(address(this));
+        _remaining1 = IERC20(params.token1).balanceOf(address(this));
         
-        if (_remaining0 > 0) IERC20(params.token0).safeTransfer(msg.sender, _remaining0);
-        if (_remaining1 > 0) IERC20(params.token1).safeTransfer(msg.sender, _remaining1);
+        // Refund any remaining tokens back to the user
+        if (_remaining0 > 0) {
+            IERC20(params.token0).safeTransfer(msg.sender, _remaining0);
+        }
+        if (_remaining1 > 0) {
+            IERC20(params.token1).safeTransfer(msg.sender, _remaining1);
+        }
         
+        // Emit event for tracking and transparency
         emit SwapAndAddLiquidity(
             params,
             _remaining0,
@@ -718,11 +755,6 @@ contract UniswapV3Connector is
             IUniswapV3PoolState(_poolAddress).liquidity() // Total liquidity in the current range
         );
 
-        emit TotalAmounts(
-            _totalAmount0,
-            _totalAmount1
-        );
-
         if (_swapToken0ToToken1) {
             // Swap token0 to token1
             _neededSwapAmount = _findOptimalSwapAmount(
@@ -781,9 +813,6 @@ contract UniswapV3Connector is
                 _receivedAmount = __receivedAmount;
                 _success = true;
             } catch {
-                emit SwapFailed(
-                    _params
-                );
                 _success = false;
             }
         }
@@ -798,56 +827,92 @@ contract UniswapV3Connector is
         }
     }
 
-    /// @notice Estimate how much of tokenIn to swap so that
-    ///         (in - x)/(out + y) ≈ targetRatio
-    /// @dev This function uses a binary search to find the optimal swap amount.
+    /// @notice Find the optimal swap amount using binary search to achieve target ratio
+    /// @dev This function implements a binary search algorithm to find the optimal amount of token0
+    ///      to swap for token1, such that the resulting ratio between remaining assets matches
+    ///      the target ratio. The search minimizes the difference between user's ratio and pool's ratio.
+    ///      
+    ///      Algorithm steps:
+    ///      1. Calculate initial user ratio from current token amounts
+    ///      2. Use binary search between 0 and amount0Desired to find optimal swap amount
+    ///      3. For each midpoint, calculate new ratios after swap simulation
+    ///      4. Track the best guess that minimizes the percentage difference
+    ///      5. Continue until tolerance is met or max iterations reached
+    ///      
+    ///      Safety features:
+    ///      - Guards against underflow/overflow in all calculations
+    ///      - Early exit if already optimal
+    ///      - Prevents infinite loops with MAX_ITERS
+    ///      - Handles edge cases like zero amounts and extreme ratios
+    /// @param params Struct containing token amounts, addresses, and fee tier
+    /// @param _targetRatio The desired ratio between remaining assets (scaled by PRECISION)
+    /// @param _totalAmount0 Total amount of token0 in the pool before swap
+    /// @param _totalAmount1 Total amount of token1 in the pool before swap
+    /// @return bestGuess The optimal amount of token0 to swap for token1
     function _findOptimalSwapAmount(
-        uint256 _initialGuess,
+        uint256, // Unused parameter kept for signature compatibility
         AddLiquidityParams memory params,
         uint256 _targetRatio,
         uint256 _totalAmount0,
         uint256 _totalAmount1
-    ) internal returns (uint256) {
-        if (params.amount0Desired == 0) return 0; // We cannot swap 0 tokens
+    ) internal returns (uint256 bestGuess) {
+        if (params.amount0Desired == 0) return 0;
 
         uint256 newUserRatio = params.amount1Desired > 0 && params.amount0Desired <= type(uint256).max / PRECISION
             ? (params.amount0Desired * PRECISION) / params.amount1Desired
             : type(uint256).max;
 
-        // Quick ratio check
+        // Early exit if already optimal
         if (newUserRatio == _targetRatio) return 0;
 
-        uint256 bestGuess = 0;
         uint256 bestDiffPercentage = type(uint256).max;
-        
-        // Start with larger steps and then reduce
-        uint256 step = _initialGuess > 8 ? _initialGuess / 8 : 1; // Start with 1/8 of initial guess, minimum 1
-        uint256 currentGuess = _initialGuess;
+
+        uint256 lo = 0;
+        uint256 hi = params.amount0Desired;
 
         uint256 newTargetRatio;
         uint256 y;
-        
-        for (uint8 i = 0; i < MAX_ITERS; ++i) {
-            // Try currentGuess position
-            if (currentGuess == 0) {
+
+        for (uint8 i = 0; i < MAX_ITERS && lo <= hi; ++i) {
+            uint256 mid = (lo + hi) >> 1;
+
+            // Quote for swapping `mid` of token0 -> token1
+            if (mid == 0) {
                 y = 0;
             } else {
-                y = _getQuoteResult(params.token0, params.token1, params.feeTier, currentGuess);
+                y = _getQuoteResult(params.token0, params.token1, params.feeTier, mid);
             }
-            
-            // New ratio after swap
-            newUserRatio = (params.amount1Desired + y) > 0 && (params.amount0Desired - currentGuess) <= type(uint256).max / PRECISION
-                ? ((params.amount0Desired - currentGuess) * PRECISION) / (params.amount1Desired + y)
-                : type(uint256).max;
 
-            // New pool ratio after swap
-            newTargetRatio = (_totalAmount1 - y) > 0 && (_totalAmount0 + currentGuess) <= type(uint256).max / PRECISION
-                ? ((_totalAmount0 + currentGuess) * PRECISION) / (_totalAmount1 - y)
-                : type(uint256).max;
+            // New ratio after swap (guard user-side underflow + addition overflow)
+            newUserRatio =
+                // safe denom: params.amount1Desired + y
+                ((y <= type(uint256).max - params.amount1Desired)
+                    ? (params.amount1Desired + y)
+                    : type(uint256).max) > 0
+                &&
+                // safe numer: (params.amount0Desired - mid) * PRECISION
+                (params.amount0Desired >= mid ? (params.amount0Desired - mid) : 0) <= type(uint256).max / PRECISION
+                    ? (((params.amount0Desired >= mid ? (params.amount0Desired - mid) : 0) * PRECISION) /
+                    ((y <= type(uint256).max - params.amount1Desired)
+                            ? (params.amount1Desired + y)
+                            : type(uint256).max))
+                    : type(uint256).max;
 
-            // Difference between new user ratio and new pool ratio
-            uint256 diffPercentage = newTargetRatio > 0 
-                ? (newUserRatio > newTargetRatio 
+            // New pool ratio after swap (guard pool-side underflow + addition overflow)
+            newTargetRatio =
+                // safe denom: _totalAmount1 - y
+                (_totalAmount1 > y ? (_totalAmount1 - y) : 0) > 0
+                &&
+                // safe numer pre-mul: _totalAmount0 + mid
+                (_totalAmount0 <= type(uint256).max - mid) &&
+                ((_totalAmount0 + mid) <= type(uint256).max / PRECISION)
+                    ? (((_totalAmount0 + mid) * PRECISION) /
+                    (_totalAmount1 > y ? (_totalAmount1 - y) : 0))
+                    : type(uint256).max;
+
+            // |user - pool| / pool * 100%
+            uint256 diffPercentage = newTargetRatio > 0
+                ? (newUserRatio > newTargetRatio
                     ? ((newUserRatio - newTargetRatio) <= type(uint256).max / ONE_HUNDRED_PERCENT
                         ? (newUserRatio - newTargetRatio) * ONE_HUNDRED_PERCENT / newTargetRatio
                         : type(uint256).max)
@@ -856,48 +921,139 @@ contract UniswapV3Connector is
                         : type(uint256).max))
                 : type(uint256).max;
 
+            // Track best-so-far
             if (diffPercentage < bestDiffPercentage) {
                 bestDiffPercentage = diffPercentage;
-                bestGuess = currentGuess;
-            } else {
-                // Reduce step size exponentially
-                step = step / 2;
-                if (step == 0) break;
+                bestGuess = mid;
             }
-            
-            // If difference is less than tolerance, return the best guess
+
+            // Close enough?
             if (diffPercentage <= TOLERANCE) {
-                emit FindOptimalSwapAmount(
-                    newUserRatio,
-                    newTargetRatio,
-                    _targetRatio
-                );
+                emit FindOptimalSwapAmount(newUserRatio, newTargetRatio, _targetRatio);
                 return bestGuess;
             }
-            
-            // Determine direction and step
+
+            // Binary search direction:
+            // If userRatio > poolRatio, we need to swap MORE -> move right
             if (newUserRatio > newTargetRatio) {
-                // Need to swap more (increase currentGuess)
-                currentGuess = currentGuess + step;
-                // To avoid swapping more than the amount of token0, set maximum to amount0Desired
-                if (currentGuess > params.amount0Desired) {
-                    currentGuess = params.amount0Desired;
-                }
+                lo = mid + 1;
             } else {
-                // Need to swap less (decrease currentGuess)
-                // To avoid swapping 0 tokens, set minimum to 1
-                currentGuess = currentGuess > step ? currentGuess - step : 1;
+                if (mid == 0) break; // prevent underflow on hi = mid - 1
+                hi = mid - 1;
             }
         }
 
-        emit FindOptimalSwapAmount(
-            newUserRatio,
-            newTargetRatio,
-            _targetRatio
-        );
-        
-        return bestGuess;
+        emit FindOptimalSwapAmount(newUserRatio, newTargetRatio, _targetRatio);
     }
+
+    // /// @notice Estimate how much of tokenIn to swap so that
+    // ///         (in - x)/(out + y) ≈ targetRatio
+    // /// @dev This function uses a binary search to find the optimal swap amount.
+    // function _findOptimalSwapAmount(
+    //     uint256 _initialGuess,
+    //     AddLiquidityParams memory params,
+    //     uint256 _targetRatio,
+    //     uint256 _totalAmount0,
+    //     uint256 _totalAmount1
+    // ) internal returns (uint256) {
+    //     if (params.amount0Desired == 0) return 0; // We cannot swap 0 tokens
+
+    //     uint256 newUserRatio = params.amount1Desired > 0 && params.amount0Desired <= type(uint256).max / PRECISION
+    //         ? (params.amount0Desired * PRECISION) / params.amount1Desired
+    //         : type(uint256).max;
+
+    //     // Quick ratio check - early exit if already optimal
+    //     if (newUserRatio == _targetRatio) return 0;
+
+    //     uint256 bestGuess = 0;
+    //     uint256 bestDiffPercentage = type(uint256).max;
+        
+    //     // Start with larger steps and then reduce
+    //     uint256 step = _initialGuess > 8 ? _initialGuess / 8 : 1; // Start with 1/8 of initial guess, minimum 1
+    //     uint256 currentGuess = _initialGuess;
+
+    //     uint256 newTargetRatio;
+    //     uint256 y;
+    //     uint256 consecutiveNoImprovement = 0;
+        
+    //     for (uint8 i = 0; i < MAX_ITERS; ++i) {
+    //         // Try currentGuess position
+    //         if (currentGuess == 0) {
+    //             y = 0;
+    //         } else {
+    //             y = _getQuoteResult(params.token0, params.token1, params.feeTier, currentGuess);
+    //         }
+            
+    //         // New ratio after swap
+    //         newUserRatio = (params.amount1Desired + y) > 0 && (params.amount0Desired - currentGuess) <= type(uint256).max / PRECISION
+    //             ? ((params.amount0Desired - currentGuess) * PRECISION) / (params.amount1Desired + y)
+    //             : type(uint256).max;
+
+    //         // New pool ratio after swap
+    //         newTargetRatio = (_totalAmount1 - y) > 0 && (_totalAmount0 + currentGuess) <= type(uint256).max / PRECISION
+    //             ? ((_totalAmount0 + currentGuess) * PRECISION) / (_totalAmount1 - y)
+    //             : type(uint256).max;
+
+    //         // Difference between new user ratio and new pool ratio
+    //         uint256 diffPercentage = newTargetRatio > 0 
+    //             ? (newUserRatio > newTargetRatio 
+    //                 ? ((newUserRatio - newTargetRatio) <= type(uint256).max / ONE_HUNDRED_PERCENT
+    //                     ? (newUserRatio - newTargetRatio) * ONE_HUNDRED_PERCENT / newTargetRatio
+    //                     : type(uint256).max)
+    //                 : ((newTargetRatio - newUserRatio) <= type(uint256).max / ONE_HUNDRED_PERCENT
+    //                     ? (newTargetRatio - newUserRatio) * ONE_HUNDRED_PERCENT / newTargetRatio
+    //                     : type(uint256).max))
+    //             : type(uint256).max;
+
+    //         if (diffPercentage < bestDiffPercentage) {
+    //             bestDiffPercentage = diffPercentage;
+    //             bestGuess = currentGuess;
+    //             consecutiveNoImprovement = 0; // Reset counter on improvement
+    //         } else {
+    //             consecutiveNoImprovement++;
+    //             // Early exit if no improvement for multiple iterations
+    //             if (consecutiveNoImprovement >= 3) {
+    //                 consecutiveNoImprovement = 0;
+    //                 step = step / 2;
+    //                 if (step == 0) break;
+    //             }
+    //         }
+            
+    //         // If difference is less than tolerance, return the best guess
+    //         if (diffPercentage <= TOLERANCE) {
+    //             emit FindOptimalSwapAmount(
+    //                 newUserRatio,
+    //                 newTargetRatio,
+    //                 _targetRatio
+    //             );
+    //             return bestGuess;
+    //         }
+            
+    //         // Determine direction and step
+    //         if (newUserRatio > newTargetRatio) {
+    //             // Need to swap more (increase currentGuess)
+    //             currentGuess = currentGuess + step;
+    //             // To avoid swapping more than the amount of token0, set maximum to amount0Desired
+    //             if (currentGuess > params.amount0Desired) {
+    //                 currentGuess = params.amount0Desired;
+    //                 // Early exit if we hit the maximum and can't improve further
+    //                 if (i > 0) break;
+    //             }
+    //         } else {
+    //             // Need to swap less (decrease currentGuess)
+    //             // To avoid swapping 0 tokens, set minimum to 1
+    //             currentGuess = currentGuess > step ? currentGuess - step : 1;
+    //         }
+    //     }
+
+    //     emit FindOptimalSwapAmount(
+    //         newUserRatio,
+    //         newTargetRatio,
+    //         _targetRatio
+    //     );
+        
+    //     return bestGuess;
+    // }
 
     function _getQuoteResult(
         address tokenIn,
@@ -926,28 +1082,4 @@ contract UniswapV3Connector is
             amountOut
         );
     }
-
-    event GetQuoteResult(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee,
-        uint256 amountIn,
-        uint256 amountOut
-    );
-
-    function _binarySearch(
-        address _tokenIn,
-        address _tokenOut,
-        uint24 _fee,
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 targetRatio
-    ) private returns (uint256) {
-
-    }
-
-    event TotalAmounts(
-        uint256 _totalAmount0,
-        uint256 _totalAmount1
-    );
 }
