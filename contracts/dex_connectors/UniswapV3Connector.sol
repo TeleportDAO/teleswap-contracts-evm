@@ -530,25 +530,15 @@ contract UniswapV3Connector is
 
         // Note: we multiply by PRECISION to add precision to the ratio
         uint256 _rangeRatio;
-        if (_optimalAmount1 > 0) {
-            if (_optimalAmount0 > type(uint256).max / PRECISION) {
-                // Overflow would occur, set to max
-                _rangeRatio = type(uint256).max;
-            } else {
-                _rangeRatio = (_optimalAmount0 * PRECISION) / _optimalAmount1;
-            }
+        if (_optimalAmount1 > 0 && _optimalAmount0 <= type(uint256).max / PRECISION) {
+            _rangeRatio = (_optimalAmount0 * PRECISION) / _optimalAmount1;
         } else {
             _rangeRatio = type(uint256).max;
         }
 
         uint256 _userRatio;
-        if (params.amount1Desired > 0) {
-            if (params.amount0Desired > type(uint256).max / PRECISION) {
-                // Overflow would occur, set to max
-                _userRatio = type(uint256).max;
-            } else {
-                _userRatio = (params.amount0Desired * PRECISION) / params.amount1Desired;
-            }
+        if (params.amount1Desired > 0 && params.amount0Desired <= type(uint256).max / PRECISION) {
+            _userRatio = (params.amount0Desired * PRECISION) / params.amount1Desired;
         } else {
             _userRatio = type(uint256).max;
         }
@@ -559,7 +549,7 @@ contract UniswapV3Connector is
             _success = _executeSwap(
                 poolAddress,
                 true,
-                params.amount0Desired - _optimalAmount0, // Initial guess
+                params.amount0Desired, // Initial guess
                 params,
                 _rangeRatio
             );
@@ -568,12 +558,10 @@ contract UniswapV3Connector is
             _success = _executeSwap(
                 poolAddress,
                 false,
-                params.amount1Desired - _optimalAmount1, // Initial guess
+                params.amount1Desired, // Initial guess
                 params,
-                _optimalAmount0 > 0 
-                    ? (_optimalAmount1 > type(uint256).max / PRECISION 
-                        ? type(uint256).max 
-                        : _optimalAmount1 * PRECISION / _optimalAmount0)
+                _optimalAmount0 > 0 && _optimalAmount1 <= type(uint256).max / PRECISION
+                    ? _optimalAmount1 * PRECISION / _optimalAmount0
                     : type(uint256).max
             );
         }
@@ -730,6 +718,11 @@ contract UniswapV3Connector is
             IUniswapV3PoolState(_poolAddress).liquidity() // Total liquidity in the current range
         );
 
+        emit TotalAmounts(
+            _totalAmount0,
+            _totalAmount1
+        );
+
         if (_swapToken0ToToken1) {
             // Swap token0 to token1
             _neededSwapAmount = _findOptimalSwapAmount(
@@ -817,10 +810,8 @@ contract UniswapV3Connector is
     ) internal returns (uint256) {
         if (params.amount0Desired == 0) return 0; // We cannot swap 0 tokens
 
-        uint256 newUserRatio = params.amount1Desired > 0 
-            ? (params.amount0Desired > type(uint256).max / PRECISION 
-                ? type(uint256).max 
-                : (params.amount0Desired * PRECISION) / params.amount1Desired)
+        uint256 newUserRatio = params.amount1Desired > 0 && params.amount0Desired <= type(uint256).max / PRECISION
+            ? (params.amount0Desired * PRECISION) / params.amount1Desired
             : type(uint256).max;
 
         // Quick ratio check
@@ -845,28 +836,24 @@ contract UniswapV3Connector is
             }
             
             // New ratio after swap
-            newUserRatio = (params.amount1Desired + y) > 0 
-                ? ((params.amount0Desired - currentGuess) > type(uint256).max / PRECISION
-                    ? type(uint256).max
-                    : ((params.amount0Desired - currentGuess) * PRECISION) / (params.amount1Desired + y))
+            newUserRatio = (params.amount1Desired + y) > 0 && (params.amount0Desired - currentGuess) <= type(uint256).max / PRECISION
+                ? ((params.amount0Desired - currentGuess) * PRECISION) / (params.amount1Desired + y)
                 : type(uint256).max;
 
             // New pool ratio after swap
-            newTargetRatio = (_totalAmount1 - y) > 0 
-                ? ((_totalAmount0 + currentGuess) > type(uint256).max / PRECISION
-                    ? type(uint256).max
-                    : ((_totalAmount0 + currentGuess) * PRECISION) / (_totalAmount1 - y))
+            newTargetRatio = (_totalAmount1 - y) > 0 && (_totalAmount0 + currentGuess) <= type(uint256).max / PRECISION
+                ? ((_totalAmount0 + currentGuess) * PRECISION) / (_totalAmount1 - y)
                 : type(uint256).max;
 
             // Difference between new user ratio and new pool ratio
             uint256 diffPercentage = newTargetRatio > 0 
                 ? (newUserRatio > newTargetRatio 
-                    ? ((newUserRatio - newTargetRatio) > type(uint256).max / ONE_HUNDRED_PERCENT
-                        ? type(uint256).max
-                        : (newUserRatio - newTargetRatio) * ONE_HUNDRED_PERCENT / newTargetRatio)
-                    : ((newTargetRatio - newUserRatio) > type(uint256).max / ONE_HUNDRED_PERCENT
-                        ? type(uint256).max
-                        : (newTargetRatio - newUserRatio) * ONE_HUNDRED_PERCENT / newTargetRatio))
+                    ? ((newUserRatio - newTargetRatio) <= type(uint256).max / ONE_HUNDRED_PERCENT
+                        ? (newUserRatio - newTargetRatio) * ONE_HUNDRED_PERCENT / newTargetRatio
+                        : type(uint256).max)
+                    : ((newTargetRatio - newUserRatio) <= type(uint256).max / ONE_HUNDRED_PERCENT
+                        ? (newTargetRatio - newUserRatio) * ONE_HUNDRED_PERCENT / newTargetRatio
+                        : type(uint256).max))
                 : type(uint256).max;
 
             if (diffPercentage < bestDiffPercentage) {
@@ -889,7 +876,7 @@ contract UniswapV3Connector is
             }
             
             // Determine direction and step
-            if (newUserRatio > _targetRatio) {
+            if (newUserRatio > newTargetRatio) {
                 // Need to swap more (increase currentGuess)
                 currentGuess = currentGuess + step;
                 // To avoid swapping more than the amount of token0, set maximum to amount0Desired
@@ -918,7 +905,7 @@ contract UniswapV3Connector is
         uint24 fee,
         uint256 amountIn
     ) private returns (uint256 amountOut) {
-        (amountOut, , , ) = IQuoterV2(quoterAddress).quoteExactInputSingle(
+        try IQuoterV2(quoterAddress).quoteExactInputSingle(
             IQuoterV2.QuoteExactInputSingleParams({
                 tokenIn: tokenIn,
                 tokenOut: tokenOut,
@@ -926,7 +913,11 @@ contract UniswapV3Connector is
                 amountIn: amountIn,
                 sqrtPriceLimitX96: 0
             })
-        );
+        ) returns (uint256 _amountOut, uint160, uint32, uint256) {
+            amountOut = _amountOut;
+        } catch {
+            amountOut = 0;
+        }
         emit GetQuoteResult(
             tokenIn,
             tokenOut,
@@ -954,4 +945,9 @@ contract UniswapV3Connector is
     ) private returns (uint256) {
 
     }
+
+    event TotalAmounts(
+        uint256 _totalAmount0,
+        uint256 _totalAmount1
+    );
 }
