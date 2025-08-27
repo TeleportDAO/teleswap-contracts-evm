@@ -13,4 +13,6 @@ abstract contract CcTransferRouterStorageV2 {
 
     uint public lockerPercentageFee;
     address public rewardDistributor;
+
+    mapping(address => bool) public isTeleporter;
 }

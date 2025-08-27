@@ -55,4 +55,6 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
 
     mapping(bytes32 => uint) public finalAmount;
     // ^ txId to final amount
+
+    mapping(address => bool) public isTeleporter;
 }

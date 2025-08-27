@@ -114,17 +114,6 @@ contract CcTransferRouterLogic is
         _setLockers(_lockers);
     }
 
-    /// @notice Setter for special teleporter
-    /// @dev Only owner can call this
-    /// @param _specialTeleporter Address of the special teleporter contract
-    function setSpecialTeleporter(address _specialTeleporter)
-        external
-        override
-        onlyOwner
-    {
-        _setSpecialTeleporter(_specialTeleporter);
-    }
-
     /// @notice Setter for teleBTC
     /// @dev Only owner can call this
     /// @param _teleBTC TeleportDAO BTC ERC20 token address
@@ -176,6 +165,14 @@ contract CcTransferRouterLogic is
         rewardDistributor = _rewardDistributor;
     }
 
+    /// @notice Setter for teleporter
+    function setTeleporter(
+        address _teleporter, 
+        bool _isTeleporter
+    ) external override onlyOwner {
+        isTeleporter[_teleporter] = _isTeleporter;
+    }
+
     ///@notice Internal setter for protocol percentage fee
     ///@param _protocolPercentageFee Percentage amount of protocol fee
     function _setProtocolPercentageFee(uint256 _protocolPercentageFee) private {
@@ -221,16 +218,6 @@ contract CcTransferRouterLogic is
     function _setLockers(address _lockers) private nonZeroAddress(_lockers) {
         emit NewLockers(lockers, _lockers);
         lockers = _lockers;
-    }
-
-    ///@notice Internal setter for special teleporter
-    ///@param _specialTeleporter Address of the special teleporter contract
-    function _setSpecialTeleporter(address _specialTeleporter)
-        private
-        nonZeroAddress(_specialTeleporter)
-    {
-        emit NewSpecialTeleporter(specialTeleporter, _specialTeleporter);
-        specialTeleporter = _specialTeleporter;
     }
 
     ///@notice Internal setter for teleBTC
@@ -300,7 +287,7 @@ contract CcTransferRouterLogic is
         bytes calldata _lockerLockingScript
     ) external payable override nonReentrant returns (bool) {
         require(
-            _msgSender() == specialTeleporter,
+            isTeleporter[_msgSender()],
             "CCTransferRouter: invalid sender"
         );
         require(

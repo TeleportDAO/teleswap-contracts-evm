@@ -83,13 +83,6 @@ contract CcExchangeRouterLogic is
         _setRelay(_relay);
     }
 
-    /// @notice Address of special Teleporter that can submit requests
-    function setSpecialTeleporter(
-        address _specialTeleporter
-    ) external override onlyOwner {
-        _setSpecialTeleporter(_specialTeleporter);
-    }
-
     /// @notice Update LockersManager address
     function setLockers(address _lockers) external override onlyOwner {
         _setLockers(_lockers);
@@ -201,6 +194,14 @@ contract CcExchangeRouterLogic is
         bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
     }
 
+    /// @notice Setter for teleporter
+    function setTeleporter(
+        address _teleporter, 
+        bool _isTeleporter
+    ) external override onlyOwner {
+        isTeleporter[_teleporter] = _isTeleporter;
+    }
+
     /// @notice Check if a request has been processed
     /// @dev It prevents re-submitting a processed request
     /// @param _txId The transaction ID of request on Bitcoin
@@ -235,13 +236,15 @@ contract CcExchangeRouterLogic is
     ) external payable virtual override nonReentrant returns (bool) {
         // Basic checks
         require(
-            _msgSender() == specialTeleporter,
+            isTeleporter[_msgSender()],
             "ExchangeRouter: invalid sender"
         ); // Only Teleporter can submit requests
+        
         require(
             _txAndProof.blockNumber >= startingBlockNumber,
             "ExchangeRouter: old request"
         );
+        
         require(
             _txAndProof.locktime == bytes4(0),
             "ExchangeRouter: non-zero locktime"
@@ -867,14 +870,6 @@ contract CcExchangeRouterLogic is
     function _setRelay(address _relay) private nonZeroAddress(_relay) {
         emit NewRelay(relay, _relay);
         relay = _relay;
-    }
-
-    /// @notice Internal setter for specialTeleporter address
-    function _setSpecialTeleporter(
-        address _specialTeleporter
-    ) private nonZeroAddress(_specialTeleporter) {
-        emit NewSpecialTeleporter(specialTeleporter, _specialTeleporter);
-        specialTeleporter = _specialTeleporter;
     }
 
     /// @notice Internal setter for lockers contract address

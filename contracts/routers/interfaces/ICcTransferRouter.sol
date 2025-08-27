@@ -67,12 +67,6 @@ interface ICcTransferRouter {
         address newRelay
     );
 
-    /// @notice                     Emits when changes made to SpecialTeleporter address
-    event NewSpecialTeleporter (
-        address oldSpecialTeleporter, 
-        address newSpecialTeleporter
-    );
-
     /// @notice                     Emits when changes made to Lockers address
     event NewLockers (
         address oldLockers, 
@@ -125,7 +119,6 @@ interface ICcTransferRouter {
 
 	function relay() external view returns (address);
 
-	function specialTeleporter() external view returns (address);
 
 	function lockers() external view returns (address);
 
@@ -139,7 +132,7 @@ interface ICcTransferRouter {
 
 	function setRelay(address _relay) external;
 
-	function setSpecialTeleporter(address _specialTeleporter) external;
+	function setTeleporter(address _teleporter, bool _isTeleporter) external;
 
 	function setLockers(address _lockers) external;
 
