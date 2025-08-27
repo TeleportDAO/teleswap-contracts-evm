@@ -94,6 +94,7 @@ contract UniswapV3Connector is
     );
 
     event FindOptimalSwapAmount(
+        uint256 _neededSwapAmount,
         uint256 _newUserRatio,
         uint256 _newTargetRatio
     );
@@ -570,8 +571,8 @@ contract UniswapV3Connector is
             _executeSwap(
                 false,
                 params, 
-                _totalAmount1,
-                _totalAmount0
+                _totalAmount0,
+                _totalAmount1
             );
         }
 
@@ -583,7 +584,7 @@ contract UniswapV3Connector is
         // or increase liquidity of existing position
         if (params.tokenId == 0) {
             // Mint a new position with the optimized token amounts
-            (_tokenId, , , ) = IPositionManager(positionManager).mint(
+            try IPositionManager(positionManager).mint(
                 IPositionManager.MintParams({
                     token0: params.token0,
                     token1: params.token1,
@@ -597,11 +598,15 @@ contract UniswapV3Connector is
                     recipient: params.user,
                     deadline: block.timestamp
                 })
-            );
+            ) returns (uint256 tokenId, uint128, uint256, uint256) {
+                _tokenId = tokenId;
+            } catch {
+                _tokenId = 0; // Mint failed
+            }
         } else {
             // Increase liquidity of existing position
             _tokenId = params.tokenId;
-            IPositionManager(positionManager).increaseLiquidity(
+            try IPositionManager(positionManager).increaseLiquidity(
                 IPositionManager.IncreaseLiquidityParams({
                     tokenId: params.tokenId,
                     amount0Desired: IERC20(params.token0).balanceOf(address(this)),
@@ -610,7 +615,11 @@ contract UniswapV3Connector is
                     amount1Min: 0,
                     deadline: block.timestamp
                 })
-            );
+            ) returns (uint128, uint256, uint256) {
+                // Liquidity increased successfully
+            } catch {
+                _tokenId = 0; // Increase liquidity failed
+            }
         }
 
         // Calculate remaining token amounts after all operations
@@ -897,7 +906,7 @@ contract UniswapV3Connector is
 
             // Close enough?
             if (diffPercentage <= TOLERANCE) {
-                emit FindOptimalSwapAmount(newUserRatio, newTargetRatio);
+                emit FindOptimalSwapAmount(bestGuess, newUserRatio, newTargetRatio);
                 return bestGuess;
             }
 
@@ -911,7 +920,7 @@ contract UniswapV3Connector is
             }
         }
 
-        emit FindOptimalSwapAmount(newUserRatio, newTargetRatio);
+        emit FindOptimalSwapAmount(bestGuess, newUserRatio, newTargetRatio);
     }
 
     function _getQuoteResult(
