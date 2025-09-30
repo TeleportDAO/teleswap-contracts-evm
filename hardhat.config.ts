@@ -108,6 +108,11 @@ const config: HardhatUserConfig = {
 			chainId: 60808,
 			accounts: [process.env.PRIVATE_KEY ?? ""],
 		},
+		plasma: {
+			url: "https://rpc.plasma.to",
+			chainId: 9745,
+			accounts: [process.env.PRIVATE_KEY ?? ""],
+		},
 		hardhat: {
 			allowUnlimitedContractSize: true,
 		},
@@ -143,7 +148,8 @@ const config: HardhatUserConfig = {
 			sepolia: process.env.SEPOLIA_API_KEY??"",
 			bob: process.env.BOB_API_KEY??"",
 			unichain: process.env.UNICHAIN_API_KEY??"",
-			worldchain: process.env.WORLDCHAIN_API_KEY??""
+			worldchain: process.env.WORLDCHAIN_API_KEY??"",
+			plasma: process.env.PLASMA_API_KEY??""
   		},
 		customChains: [
 			{
@@ -224,6 +230,14 @@ const config: HardhatUserConfig = {
 				urls: {
 					apiURL: "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/BOB",
 					browserURL: "https://www.oklink.com/bob"
+				}
+			},
+			{
+				network: "plasma",
+				chainId: 9745,
+				urls: {
+					apiURL: "https://api.routescan.io/v2/network/mainnet/evm/9745/etherscan",
+					browserURL: "https://plasmascan.to/"
 				}
 			},
 			{
