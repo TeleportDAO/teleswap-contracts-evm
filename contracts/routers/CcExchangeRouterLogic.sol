@@ -245,10 +245,10 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: old request"
         );
         
-        require(
-            _txAndProof.locktime == bytes4(0),
-            "ExchangeRouter: non-zero locktime"
-        );
+        // require(
+        //     _txAndProof.locktime == bytes4(0),
+        //     "ExchangeRouter: non-zero locktime"
+        // );
 
         // Check that the given script hash is Locker
         require(
