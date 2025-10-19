@@ -925,7 +925,7 @@ describe("CcExchangeRouter", async function () {
                     ]
                 )
             )
-                .to.emit(ccExchangeRouter, "NewWrapAndSwapToSolana")
+                .to.emit(ccExchangeRouter, "NewWrapAndSwapV3")
                 .withArgs(
                     LOCKER_TARGET_ADDRESS, // locker target address
                     ethers.utils.hexZeroPad(

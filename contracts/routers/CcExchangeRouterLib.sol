@@ -253,9 +253,9 @@ library CcExchangeRouterLib {
         );
 
         // Note: default exchange path is: [teleBTC, exchangeToken]
-        request.path = new bytes8[](2);
-        request.path[0] = bytes8("teleBTC");
-        request.path[1] = destTokenTicker;
+        request.tokenTickers = new bytes8[](2);
+        request.tokenTickers[0] = bytes8("teleBTC");
+        request.tokenTickers[1] = destTokenTicker;
 
         // Finds Teleporter fee
         uint networkFee = RequestParser.parseNetworkFeeNew(arbitraryData);

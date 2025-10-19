@@ -22,5 +22,4 @@ abstract contract CcExchangeRouterStorage is ICcExchangeRouter {
 
     // Private variables
     mapping(bytes32 => ccExchangeRequest) internal ccExchangeRequests;
-    mapping(bytes32 => ccExchangeToSolanaRequest) internal ccExchangeToSolanaRequests;
 }

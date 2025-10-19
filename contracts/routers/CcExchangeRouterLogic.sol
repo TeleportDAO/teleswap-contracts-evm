@@ -1018,11 +1018,11 @@ contract CcExchangeRouterLogic is
     ///      5.3 Keep TeleBTC if exchange fails and the request doesn't belong to the current chain
     /// @param _txAndProof Transaction and inclusion proof data
     /// @param _lockerLockingScript Script hash of Locker that user has sent BTC to it
-    /// @param _path (Optional) Exchange path from teleBTC to the output token, token tickers
+    /// @param _tokenTickers (Optional) Exchange path token tickers from teleBTC to the output token
     function wrapAndSwapToSolana(
         TxAndProof memory _txAndProof,
         bytes calldata _lockerLockingScript,
-        bytes8[] memory _path
+        bytes8[] memory _tokenTickers
     ) external payable virtual override nonReentrant returns (bool) {
         // Basic checks
         require(
@@ -1104,7 +1104,7 @@ contract CcExchangeRouterLogic is
             _exchangeConnector,
             _lockerLockingScript,
             txId,
-            _path,
+            _tokenTickers,
             extendedCcExchangeRequests[txId].bridgePercentageFee,
             destinationChainId
         );
@@ -1146,13 +1146,13 @@ contract CcExchangeRouterLogic is
         address _exchangeConnector,
         bytes memory _lockerLockingScript,
         bytes32 _txId,
-        bytes8[] memory _tickers,
+        bytes8[] memory _tokenTickers,
         uint256 _bridgePercentageFee,
         uint256 _chainId
     ) private {
-        bytes32[] memory _path = new bytes32[](2);
-        _path[0] = bridgeTokenTickerMapping[_tickers[0]][chainId];
-        _path[1] = bridgeTokenTickerMapping[_tickers[_tickers.length - 1]][chainId];
+        bytes32[] memory path = new bytes32[](2);
+        path[0] = bridgeTokenTickerMapping[_tokenTickers[0]][chainId];
+        path[1] = bridgeTokenTickerMapping[_tokenTickers[_tokenTickers.length - 1]][chainId];
         (bool result, uint256[] memory amounts) = _swapToSolana(
             ICcExchangeRouter.swapToSolanaArguments(
                 _chainId,
@@ -1160,8 +1160,7 @@ contract CcExchangeRouterLogic is
                 ccExchangeToSolanaRequests[_txId],
                 extendedCcExchangeRequests[_txId],
                 _txId,
-                _path,
-                _tickers,
+                path,
                 _exchangeConnector
             )
         );
@@ -1177,8 +1176,8 @@ contract CcExchangeRouterLogic is
             if (_chainId == 101) { // if the destination chain is Solana (101)
                 _sendTokenToSolana(
                     extendedCcExchangeRequests[_txId].chainId,
-                    address(uint160(uint256(_path[_path.length - 1]))),
-                    _tickers,
+                    address(uint160(uint256(path[path.length - 1]))),
+                    _tokenTickers,
                     amounts[amounts.length - 1],
                     ccExchangeToSolanaRequests[_txId].recipientAddress,
                     _bridgePercentageFee
@@ -1203,7 +1202,7 @@ contract CcExchangeRouterLogic is
         (result, amounts) = CcExchangeToSolanaRouterLib.swapToSolana(
             swapArguments,
             bridgeTokenTickerMapping,
-            ICcExchangeRouter.SwapToSolanaDate(
+            ICcExchangeRouter.SwapToSolanaData(
                 teleBTC,
                 wrappedNativeToken,
                 chainId,

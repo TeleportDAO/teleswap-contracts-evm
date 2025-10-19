@@ -395,7 +395,7 @@ interface ICcExchangeRouter {
         bytes32 recipientAddress;
         uint fee;
         bool isUsed;
-        bytes8[] path;
+        bytes8[] tokenTickers;
         uint deadline;
         uint speed;
         uint destinationChain;
@@ -409,11 +409,10 @@ interface ICcExchangeRouter {
         extendedCcExchangeRequest _extendedCcExchangeRequest;
         bytes32 _txId;
         bytes32[] _path;
-        bytes8[] _tokenTickers;
         address _exchangeConnector;
     }
 
-    struct SwapToSolanaDate {
+    struct SwapToSolanaData {
         address teleBTC;
         address wrappedNativeToken;
         uint256 currentChainId;
@@ -433,7 +432,7 @@ interface ICcExchangeRouter {
     /// @param thirdPartyId Id of third party
     /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]
     /// @param destinationChainId chain id of destination 
-    event NewWrapAndSwapToSolana(
+    event NewWrapAndSwapV3(
         address lockerTargetAddress,
         bytes32 indexed user,
         bytes32[2] inputAndOutputToken,
@@ -460,7 +459,7 @@ interface ICcExchangeRouter {
     /// @param thirdPartyId Id of third party
     /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]   
     /// @param destinationChainId chain id of destination 
-    event FailedWrapAndSwapToSolana(
+    event FailedWrapAndSwapV3(
         address lockerTargetAddress,
         bytes32 indexed recipientAddress,
         bytes32[2] inputAndOutputToken,
