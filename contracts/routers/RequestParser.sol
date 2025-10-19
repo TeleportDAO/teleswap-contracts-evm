@@ -116,4 +116,90 @@ library RequestParser {
             _result = abi.encodePacked(_result, temp);
         }
     }
+
+    /// @notice Returns recipient address
+    /// @dev Minted TeleBTC or exchanged tokens will be sent to this address
+    function parseRecipientDestAddress(
+        bytes memory _arbitraryData
+    ) internal pure returns (bytes32 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 3, 34);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 32))
+        }
+    }
+
+    /// @notice Returns network fee
+    /// @dev This fee goes to Teleporter who submitted the request
+    function parseNetworkFeeNew(
+        bytes memory _arbitraryData
+    ) internal pure returns (uint24 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 35, 37);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 3))
+        }
+    }
+
+    /// @notice Determines type of the request
+    /// @dev 0 for normal requests, 1 for fixed-rate requests
+    function parseSpeedNew(
+        bytes memory _arbitraryData
+    ) internal pure returns (uint8 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 38, 38);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 1))
+        }
+    }
+
+    /// @notice Returns id of third party
+    /// @dev 0 for no third party
+    function parseThirdPartyID(
+        bytes memory _arbitraryData
+    ) internal pure returns (uint8 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 39, 39);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 1))
+        }
+    }
+
+    /// @notice Returns token ticker of the destination token
+    /// @dev Minted TeleBTC will be exchanged for this token
+    function parseDestTokenTicker(
+        bytes memory _arbitraryData
+    ) internal pure returns (uint64 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 40, 47);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 8))
+        }
+    }
+
+    /// @notice Returns min expected output (exchange) amount
+    function parseMinDestTokenAmount(
+        bytes memory _arbitraryData
+    ) internal pure returns (uint104 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 48, 60);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 13))
+        }
+    }
+
+    /// @notice Returns min expected output (exchange) amount
+    function parseMinIntermediaryTokenAmount(
+        bytes memory _arbitraryData
+    ) internal pure returns (uint104 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 61, 73);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 13))
+        }
+    }
+
+    /// @notice Returns across percentage fee
+    /// @dev This fee goes to across relayers
+    function parseBridgeFeePercentage(
+        bytes memory _arbitraryData
+    ) internal pure returns (uint24 parsedValue) {
+        bytes memory slicedBytes = sliceBytes(_arbitraryData, 74, 76);
+        assembly {
+            parsedValue := mload(add(slicedBytes, 3))
+        }
+    }
 }

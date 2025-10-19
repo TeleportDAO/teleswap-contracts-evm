@@ -15,6 +15,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         skipIfAlreadyDeployed: true,
     });
 
+    const ccExchangeToSolanaRouterLib = await deploy(
+        "CcExchangeToSolanaRouterLib",
+        {
+            from: deployer,
+            log: true,
+            skipIfAlreadyDeployed: true,
+        }
+    );
+
     const deployedContract = await deploy("CcExchangeRouterLogic", {
         from: deployer,
         log: true,
@@ -22,6 +31,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         args: [],
         libraries: {
             CcExchangeRouterLib: ccExchangeRouterLib.address,
+            CcExchangeToSolanaRouterLib: ccExchangeToSolanaRouterLib.address,
         },
     });
 
@@ -30,11 +40,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         process.env[`${network.name.toUpperCase()}_API_KEY`] &&
         process.env.VERIFY_OPTION == "1"
     ) {
-         // Verify the library
+        // Verify the library
         await verify(
             ccExchangeRouterLib.address,
             [],
             "contracts/routers/CcExchangeRouterLib.sol:CcExchangeRouterLib"
+        );
+        await verify(
+            ccExchangeToSolanaRouterLib.address,
+            [],
+            "contracts/routers/CcExchangeToSolanaRouterLib.sol:CcExchangeToSolanaRouterLib"
         );
         await verify(
             deployedContract.address,

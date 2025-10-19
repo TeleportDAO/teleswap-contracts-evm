@@ -345,5 +345,31 @@
 		"desiredRecipient": "0x4062c8aeed4f81c2d73ff854a2957021191e20b6",
 		"thirdParty": 0,
 		"acrossFee": 69905
-	}
+	},
+
+	"normalCCExchangeToSolana_fixedInput": {
+        "txId": "0xe50cbc3274f47d566ee77fb48a6ee0d3d8fb576d6798a6838471b1d4da26b208",
+        "version": "0x02000000",
+        "vin": "0x014733e8212b204c372ad637f569ce4eab5c9206b791e69a55a5facb02f8cc0cd50100000000feffffff",
+        "vout": "0x03102700000000000017a9144062c8aeed4f81c2d73ff854a2957021191e20b6870000000000000000506a004d006501250ea65b387a5682fd02740c4b6f26d2b4cae877b410d292d8473b5356d68d39000064000000000000555344430000000000000000000000001100000000000000000000000010011111533b0000000000001600140c92227de5c4bbe76247335b078cf2de137285db",
+        "opReturn": "006501250ea65b387a5682fd02740c4b6f26d2b4cae877b410d292d8473b5356d68d39000064000000000000555344430000000000000000000000001100000000000000000000000010011111",
+        "locktime": "0x00000000",
+        "blockNumber": 283,
+        "intermediateNodes": "0x1bc04ab7091f1608b47ed4ec422ede9496c377f4dc139a3afcf7bced9e9a9e50",
+        "index": 1,
+        "bitcoinAmount": 10000,
+        "recipientAddress": "0x250ea65b387a5682fd02740c4b6f26d2b4cae877b410d292d8473b5356d68d39",
+        "chainId": 101,
+        "appId": 1,
+        "teleporterFee": 100,
+        "isExchange": 1,
+        "speed": 0,
+        "exchangeTokenAddress": "0xXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "exchangeAmount": 17,
+        "deadline": 2576980377,
+        "isFixedToken": 1,
+        "desiredRecipient": "0x4062c8aeed4f81c2d73ff854a2957021191e20b6",
+        "thirdParty": 0,
+        "acrossFee": 69905
+    }
 }

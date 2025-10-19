@@ -9,6 +9,7 @@ import "../erc20/interfaces/ITeleBTC.sol";
 import "../erc20/WETH.sol";
 import "../lockersManager/interfaces/ILockersManager.sol";
 import "./CcExchangeRouterLib.sol";
+import "./CcExchangeToSolanaRouterLib.sol";
 import "../routers/BurnRouterStorage.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -768,28 +769,40 @@ contract CcExchangeRouterLogic is
         bytes memory _lockerLockingScript,
         bytes32 _txId
     ) private {
+        uint256 destinationChainId = getDestChainId(
+            extendedCcExchangeRequests[_txId].chainId
+        );
+        uint256 inputAmount = 0;
+        uint256 networkFee = 0;
+        if (destinationChainId == 101) {
+            inputAmount = ccExchangeToSolanaRequests[_txId].inputAmount;
+            networkFee = ccExchangeToSolanaRequests[_txId].fee;
+        } else {
+            inputAmount = ccExchangeRequests[_txId].inputAmount;
+            networkFee = ccExchangeRequests[_txId].fee;
+        }
         // Mints teleBTC for cc exchange router
         ILockersManager(lockers).mint(
             _lockerLockingScript,
             address(this),
-            ccExchangeRequests[_txId].inputAmount
+            inputAmount
         );
 
         // Calculates fees
         extendedCcExchangeRequests[_txId].protocolFee =
-            (ccExchangeRequests[_txId].inputAmount * protocolPercentageFee) /
+            (inputAmount * protocolPercentageFee) /
             MAX_PERCENTAGE_FEE;
-        uint256 networkFee = ccExchangeRequests[_txId].fee;
+        
         extendedCcExchangeRequests[_txId].thirdPartyFee =
-            (ccExchangeRequests[_txId].inputAmount *
+            (inputAmount *
                 thirdPartyFee[extendedCcExchangeRequests[_txId].thirdParty]) /
             MAX_PERCENTAGE_FEE;
         extendedCcExchangeRequests[_txId].lockerFee =
-            (ccExchangeRequests[_txId].inputAmount * lockerPercentageFee) /
+            (inputAmount * lockerPercentageFee) /
             MAX_PERCENTAGE_FEE;
 
         extendedCcExchangeRequests[_txId].remainedInputAmount =
-            ccExchangeRequests[_txId].inputAmount -
+            inputAmount -
             (
                 extendedCcExchangeRequests[_txId].lockerFee +
                 extendedCcExchangeRequests[_txId].protocolFee +
@@ -809,10 +822,17 @@ contract CcExchangeRouterLogic is
             4. Locker fee
         */
         // Transfer network fee to teleporter
+        uint256 networkFee = 0;
         if (ccExchangeRequests[_txId].fee > 0) {
+            networkFee = ccExchangeRequests[_txId].fee;
+        } else if (ccExchangeToSolanaRequests[_txId].fee > 0) {
+            networkFee = ccExchangeToSolanaRequests[_txId].fee;
+        }
+        
+        if (networkFee > 0) {
             ITeleBTC(teleBTC).transfer(
                 _msgSender(),
-                ccExchangeRequests[_txId].fee
+                networkFee
             );
         }
         
@@ -973,5 +993,223 @@ contract CcExchangeRouterLogic is
     ) private {
         emit NewChainIdMapping(_destinationChain, _mappedId);
         chainIdMapping[_mappedId] = chainIdStruct(chainId, _destinationChain);
+    }
+
+    /// @notice Setter for bridge token ticker mapping
+    /// @param _tokenTicker Ticker symbol of the token (8 bytes)
+    /// @param _destinationChainId Chain ID of the destination chain
+    /// @param _destinationToken Address of the token on the target chain (32 bytes)
+    function setBridgeTokenTickerMapping(
+        bytes8 _tokenTicker,
+        uint256 _destinationChainId,
+        bytes32 _destinationToken
+    ) external override onlyOwner {
+        bridgeTokenTickerMapping[_tokenTicker][_destinationChainId] = _destinationToken;
+    }
+
+    /// @notice Process a wrapAndSwap to Solana request after checking its inclusion on Bitcoin
+    /// @dev Steps to process a request:
+    ///      1. Check transaction inclusion on Bitcoin
+    ///      2. Extract the request info
+    ///      3. Mint TeleBTC and send fees to protocol, Locker, and third party
+    ///      4. Exchange TeleBTC for the output token
+    ///      5.1 Send the output token to the user
+    ///      5.2 Send TeleBTC to user if exchange fails and the request belongs to the current chain
+    ///      5.3 Keep TeleBTC if exchange fails and the request doesn't belong to the current chain
+    /// @param _txAndProof Transaction and inclusion proof data
+    /// @param _lockerLockingScript Script hash of Locker that user has sent BTC to it
+    /// @param _path (Optional) Exchange path from teleBTC to the output token, token tickers
+    function wrapAndSwapToSolana(
+        TxAndProof memory _txAndProof,
+        bytes calldata _lockerLockingScript,
+        bytes8[] memory _path
+    ) external payable virtual override nonReentrant returns (bool) {
+        // Basic checks
+        require(
+            isTeleporter[_msgSender()],
+            "ExchangeRouter: invalid sender"
+        ); // Only Teleporter can submit requests
+        
+        require(
+            _txAndProof.blockNumber >= startingBlockNumber,
+            "ExchangeRouter: old request"
+        );
+        
+        require(
+            _txAndProof.locktime == bytes4(0),
+            "ExchangeRouter: non-zero locktime"
+        );
+
+        // Check that the given script hash is Locker
+        require(
+            ILockersManager(lockers).isLocker(_lockerLockingScript),
+            "ExchangeRouter: not locker"
+        );
+
+        // Extract request info and check if tx has been finalized on Bitcoin
+        bytes32 txId = CcExchangeRouterLib.ccExchangeToSolanaHelper(
+            _txAndProof,
+            ccExchangeToSolanaRequests,
+            extendedCcExchangeRequests,
+            _lockerLockingScript,
+            relay
+        );
+
+        // Find destination chain Id (the final chain that user gets its token on it)
+        uint256 destinationChainId = getDestChainId(
+            extendedCcExchangeRequests[txId].chainId
+        );
+
+        require(
+            destinationChainId != 0,
+            "ExchangeRouter: invalid chain id"
+        );
+
+        ccExchangeToSolanaRequest memory request = ccExchangeToSolanaRequests[txId];
+
+        address _exchangeConnector = exchangeConnector[request.appId];
+        require(
+            _exchangeConnector != address(0),
+            "ExchangeRouter: invalid appId"
+        );
+
+        _mintAndCalculateFees(_lockerLockingScript, txId);
+
+        // todo: fast request is not supported for Solana requests
+        // if (request.speed == 1) { // Handle fast request
+        //     /* 
+        //         If there was a filler who filled the request with the same parameters,
+        //         we will send the TeleBTC to the filler
+        //     */
+        //     address filler = fillerAddress[txId][request.recipientAddress][
+        //         request.path[request.path.length - 1]
+        //     ][request.outputAmount][destinationChainId][extendedCcExchangeRequests[txId].bridgePercentageFee];
+
+        //     if (filler != address(0)) { // Request has been filled
+        //         // Send TeleBTC to filler who filled the request
+        //         _sendTeleBtcToFiller(
+        //             filler,
+        //             txId,
+        //             _lockerLockingScript,
+        //             destinationChainId
+        //         );
+        //         return true;
+        //     } else { // Request has not been filled
+        //         // Treat it as a normal request
+        //         ccExchangeRequests[txId].speed = 0;
+        //     }
+        // }
+
+        _wrapAndSwapToSolana(
+            _exchangeConnector,
+            _lockerLockingScript,
+            txId,
+            _path,
+            extendedCcExchangeRequests[txId].bridgePercentageFee,
+            destinationChainId
+        );
+
+        return true;
+    }
+
+    /// @notice Send tokens to Solana using Across
+    function _sendTokenToSolana(
+        uint256 _chainId,
+        address _token,
+        bytes8[] memory _tokenTickers,
+        uint256 _amount,
+        bytes32 _user,
+        uint256 _bridgePercentageFee
+    ) private {
+        IERC20(_token).approve(across, _amount);
+        bytes memory callData = abi.encodeWithSignature(
+            "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
+            bytes32(uint256(uint160(acrossAdmin))),
+            _user,
+            bytes32(uint256(uint160(_token))),
+            bridgeTokenTickerMapping[_tokenTickers[_tokenTickers.length - 1]][chainIdMapping[_chainId].destinationChain],
+            _amount,
+            _amount * (1e18 - _bridgePercentageFee) / 1e18,
+            chainIdMapping[_chainId].destinationChain,
+            bytes32(0),
+            uint32(block.timestamp),
+            uint32(block.timestamp + 4 hours),
+            0,
+            bytes("")
+        );
+
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
+        Address.functionCall(across, finalCallData);
+    }
+
+    function _wrapAndSwapToSolana(
+        address _exchangeConnector,
+        bytes memory _lockerLockingScript,
+        bytes32 _txId,
+        bytes8[] memory _tickers,
+        uint256 _bridgePercentageFee,
+        uint256 _chainId
+    ) private {
+        bytes32[] memory _path = new bytes32[](2);
+        _path[0] = bridgeTokenTickerMapping[_tickers[0]][chainId];
+        _path[1] = bridgeTokenTickerMapping[_tickers[_tickers.length - 1]][chainId];
+        (bool result, uint256[] memory amounts) = _swapToSolana(
+            ICcExchangeRouter.swapToSolanaArguments(
+                _chainId,
+                _lockerLockingScript,
+                ccExchangeToSolanaRequests[_txId],
+                extendedCcExchangeRequests[_txId],
+                _txId,
+                _path,
+                _tickers,
+                _exchangeConnector
+            )
+        );
+
+        if (result) {
+            // If swap was successful, user will get tokens on destination chain
+            extendedCcExchangeRequests[_txId].isRequestCompleted = true;
+
+            // Send fees to the teleporter, treasury, third party, and locker
+            _sendFees(_txId, _lockerLockingScript);
+
+            
+            if (_chainId == 101) { // if the destination chain is Solana (101)
+                _sendTokenToSolana(
+                    extendedCcExchangeRequests[_txId].chainId,
+                    address(uint160(uint256(_path[_path.length - 1]))),
+                    _tickers,
+                    amounts[amounts.length - 1],
+                    ccExchangeToSolanaRequests[_txId].recipientAddress,
+                    _bridgePercentageFee
+                );
+            }
+        } else {
+            // If swap failed, keep TeleBTC in the contract for retry
+            uint fees = extendedCcExchangeRequests[_txId].thirdPartyFee +
+                       extendedCcExchangeRequests[_txId].protocolFee +
+                       ccExchangeToSolanaRequests[_txId].fee +
+                       extendedCcExchangeRequests[_txId].lockerFee;
+
+            // We don't take fees (except the locker fee) in the case of failed wrapAndSwap
+            extendedCcExchangeRequests[_txId].remainedInputAmount += fees;
+        }
+    }
+
+    /// @notice Swap TeleBTC for the output token
+    function _swapToSolana(
+        ICcExchangeRouter.swapToSolanaArguments memory swapArguments
+    ) private returns (bool result, uint256[] memory amounts) {
+        (result, amounts) = CcExchangeToSolanaRouterLib.swapToSolana(
+            swapArguments,
+            bridgeTokenTickerMapping,
+            ICcExchangeRouter.SwapToSolanaDate(
+                teleBTC,
+                wrappedNativeToken,
+                chainId,
+                lockers,
+                _msgSender()
+            )
+        );
     }
 }
