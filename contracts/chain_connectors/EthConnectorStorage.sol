@@ -19,4 +19,5 @@ abstract contract EthConnectorStorage is IEthConnector {
     uint256 public unwrapFee;
     address public acrossAdmin;
     mapping(address => mapping(uint => address)) public bridgeTokenMapping;
+    address public stargate;
 }

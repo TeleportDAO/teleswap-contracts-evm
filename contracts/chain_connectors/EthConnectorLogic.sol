@@ -6,6 +6,9 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+// import { IStargate } from "@stargatefinance/stg-evm-v2/src/interfaces/IStargate.sol";
+// import { MessagingFee, OFTReceipt, SendParam } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
+// import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import "./EthConnectorStorage.sol";
 import "./interfaces/IEthConnector.sol";
 
@@ -169,12 +172,24 @@ contract EthConnectorLogic is
         );
 
         emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
-        _sendMsgUsingAcross(
-            _token,
-            _amounts[0],
-            message,
-            _relayerFeePercentage
-        );
+
+        // if (_relayerFeePercentage == 0) {
+        //     // Here we are using Stargate to send the message
+        //     _sendMsgUsingStargate(
+        //         _token,
+        //         _amounts[0],
+        //         message,
+        //         _refundAddress
+        //     );
+        // } else {
+            // Here we are using Across to send the message
+            _sendMsgUsingAcross(
+                _token,
+                _amounts[0],
+                message,
+                _relayerFeePercentage
+            );
+        // }
     }
 
     /// @notice Request exchanging token for RUNE
@@ -269,6 +284,47 @@ contract EthConnectorLogic is
         );
     }
 
+    // function _sendMsgUsingStargate(
+    //     address _token,
+    //     uint256 _amount,
+    //     bytes memory _message,
+    //     address _refundAddress
+    // ) internal {
+
+    //     bytes memory extraOptions = _message.length > 0
+    //         ? OptionsBuilder.newOptions().addExecutorLzComposeOption(0, 200_000, 0) // compose gas limit
+    //         : bytes("");
+ 
+    //     sendParam = SendParam({
+    //         dstEid: _dstEid,
+    //         to: _addressToBytes32(targetChainConnectorProxy), // composer address
+    //         amountLD: _amount,
+    //         minAmountLD: _amount,
+    //         extraOptions: extraOptions,
+    //         composeMsg: _message,
+    //         oftCmd: ""
+    //     });
+ 
+    //     IStargate stargateContract = IStargate(stargate);
+ 
+    //     (, , OFTReceipt memory receipt) = stargateContract.quoteOFT(sendParam);
+    //     // Min received amount on the destination chain
+    //     sendParam.minAmountLD = receipt.amountReceivedLD;
+ 
+    //     messagingFee = stargateContract.quoteSend(
+    //         sendParam, 
+    //         false // pay fee with lz token
+    //     );
+    //     // Native fee to send the message
+    //     valueToSend = messagingFee.nativeFee;
+ 
+    //     if (stargateContract.token() == address(0x0)) {
+    //         valueToSend += sendParam.amountLD;
+    //     }
+
+    //     stargateContract.sendToken{ value: valueToSend }(sendParam, messagingFee, _refundAddress);
+    // }
+
     function _setAcross(address _across) private nonZeroAddress(_across) {
         emit AcrossUpdated(across, _across);
         across = _across;
@@ -291,5 +347,9 @@ contract EthConnectorLogic is
         emit WrappedNativeTokenUpdated(wrappedNativeToken, _wrappedNativeToken);
 
         wrappedNativeToken = _wrappedNativeToken;
+    }
+
+    function _addressToBytes32(address _addr) private pure returns (bytes32) {
+        return bytes32(uint256(uint160(_addr)));
     }
 }

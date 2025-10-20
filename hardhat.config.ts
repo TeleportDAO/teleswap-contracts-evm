@@ -164,7 +164,7 @@ const config: HardhatUserConfig = {
 				network: "polygon",
 				chainId: 137,
 				urls: {
-					apiURL: "https://api.polygonscan.com/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=137",
 					browserURL: "https://polygonscan.com/"
 				}
 			},
@@ -180,7 +180,7 @@ const config: HardhatUserConfig = {
 				network: "bsc",
 				chainId: 56,
 				urls: {
-					apiURL: "https://api.bscscan.com/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=56",
 					browserURL: "https://bscscan.com/"
 				}
 			},
