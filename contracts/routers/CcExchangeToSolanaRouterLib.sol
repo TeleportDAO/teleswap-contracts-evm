@@ -63,7 +63,7 @@ library CcExchangeToSolanaRouterLib {
                 swapArguments._path[swapArguments._path.length - 1] == _bridgeTokenTickerMapping[swapArguments._ccExchangeToSolanaRequest.tokenTickers[
                 swapArguments._ccExchangeToSolanaRequest.tokenTickers.length - 1
             ]][_swapToSolanaData.currentChainId],
-            "CcExchangeRouter: invalid path"
+            "CcExchangeToSolanaRouter: invalid path"
         );
 
         // Swap teleBTC for the output token

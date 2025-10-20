@@ -769,12 +769,9 @@ contract CcExchangeRouterLogic is
         bytes memory _lockerLockingScript,
         bytes32 _txId
     ) private {
-        uint256 destinationChainId = getDestChainId(
-            extendedCcExchangeRequests[_txId].chainId
-        );
         uint256 inputAmount = 0;
         uint256 networkFee = 0;
-        if (destinationChainId == 101) {
+        if (extendedCcExchangeRequests[_txId].chainId == 101) {
             inputAmount = ccExchangeToSolanaRequests[_txId].inputAmount;
             networkFee = ccExchangeToSolanaRequests[_txId].fee;
         } else {
@@ -1035,10 +1032,11 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: old request"
         );
         
-        require(
-            _txAndProof.locktime == bytes4(0),
-            "ExchangeRouter: non-zero locktime"
-        );
+        // not needed
+        // require(
+        //     _txAndProof.locktime == bytes4(0),
+        //     "ExchangeRouter: non-zero locktime"
+        // );
 
         // Check that the given script hash is Locker
         require(
@@ -1173,7 +1171,7 @@ contract CcExchangeRouterLogic is
             _sendFees(_txId, _lockerLockingScript);
 
             
-            if (_chainId == 101) { // if the destination chain is Solana (101)
+            if (_chainId != chainId) { 
                 _sendTokenToSolana(
                     extendedCcExchangeRequests[_txId].chainId,
                     address(uint160(uint256(path[path.length - 1]))),
@@ -1205,7 +1203,7 @@ contract CcExchangeRouterLogic is
             ICcExchangeRouter.SwapToSolanaData(
                 teleBTC,
                 wrappedNativeToken,
-                chainId,
+                getDestChainId(chainId),
                 lockers,
                 _msgSender()
             )

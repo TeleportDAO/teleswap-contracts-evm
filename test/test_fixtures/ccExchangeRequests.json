@@ -360,6 +360,7 @@
         "bitcoinAmount": 10000,
         "recipientAddress": "0x250ea65b387a5682fd02740c4b6f26d2b4cae877b410d292d8473b5356d68d39",
         "chainId": 101,
+		"destChainId": 34268394551451,
         "appId": 1,
         "teleporterFee": 100,
         "isExchange": 1,

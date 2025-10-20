@@ -408,7 +408,7 @@ describe("CcExchangeRouter", async function () {
 
         // set chain id mapping
         await ccExchangeRouter.setChainIdMapping(1, 1);
-        await ccExchangeRouter.setChainIdMapping(101, 101);
+        await ccExchangeRouter.setChainIdMapping(34268394551451, 101);
 
         // Set teleBTC and exchange token mapping for current chain (Ethereum)
         await ccExchangeRouter.setBridgeTokenTickerMapping(
@@ -430,7 +430,7 @@ describe("CcExchangeRouter", async function () {
 
         await ccExchangeRouter.setBridgeTokenTickerMapping(
             ethers.utils.hexZeroPad(ethers.utils.toUtf8Bytes("USDC"), 8),
-            101, // destination chain ID for Solana
+            34268394551451, // destination chain ID for Solana
             solanaUSDCBytes
         );
     });
@@ -957,7 +957,7 @@ describe("CcExchangeRouter", async function () {
                     0, // third party id
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
                     CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
-                        .chainId // destination chain id
+                        .destChainId
                 );
 
             await checksWhenExchangeSucceed(
