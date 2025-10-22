@@ -412,12 +412,14 @@ describe("CcExchangeRouter", async function () {
 
         // Set teleBTC and exchange token mapping for current chain (Ethereum)
         await ccExchangeRouter.setBridgeTokenTickerMapping(
-            ethers.utils.hexZeroPad(ethers.utils.toUtf8Bytes("teleBTC"), 8),
+            // ethers.utils.hexlify("0xad5dbb30d61cc685"),
+            "0x" + teleBTC.address.slice(-16),
             1, // current chain ID for Ethereum
             ethers.utils.hexZeroPad(teleBTC.address, 32)
         );
         await ccExchangeRouter.setBridgeTokenTickerMapping(
-            ethers.utils.hexZeroPad(ethers.utils.toUtf8Bytes("USDC"), 8),
+            // ethers.utils.hexlify("0xbf2abebb90635942"),
+            "0x" + exchangeToken.address.slice(-16),
             1, // current chain ID for Ethereum
             ethers.utils.hexZeroPad(exchangeToken.address, 32)
         );
@@ -429,7 +431,8 @@ describe("CcExchangeRouter", async function () {
         const solanaUSDCBytes = solanaAddressToBytes32(solanaUSDCAddress);
 
         await ccExchangeRouter.setBridgeTokenTickerMapping(
-            ethers.utils.hexZeroPad(ethers.utils.toUtf8Bytes("USDC"), 8),
+            // ethers.utils.hexZeroPad(ethers.utils.toUtf8Bytes("USDC"), 8),
+            "0x" + exchangeToken.address.slice(-16),
             34268394551451, // destination chain ID for Solana
             solanaUSDCBytes
         );
@@ -889,7 +892,7 @@ describe("CcExchangeRouter", async function () {
 
             // Exchanges teleBTC for TT
             await expect(
-                ccExchangeRouter.wrapAndSwapToSolana(
+                ccExchangeRouter.wrapAndSwapV2(
                     {
                         version:
                             CC_EXCHANGE_REQUESTS
@@ -913,19 +916,10 @@ describe("CcExchangeRouter", async function () {
                             .normalCCExchangeToSolana_fixedInput.index,
                     },
                     LOCKER1_LOCKING_SCRIPT,
-                    [
-                        ethers.utils.hexZeroPad(
-                            ethers.utils.toUtf8Bytes("teleBTC"),
-                            8
-                        ),
-                        ethers.utils.hexZeroPad(
-                            ethers.utils.toUtf8Bytes("USDC"),
-                            8
-                        ),
-                    ]
+                    [teleBTC.address, exchangeToken.address]
                 )
             )
-                .to.emit(ccExchangeRouter, "NewWrapAndSwapV3")
+                .to.emit(ccExchangeRouter, "NewWrapAndSwapV2")
                 .withArgs(
                     LOCKER_TARGET_ADDRESS, // locker target address
                     ethers.utils.hexZeroPad(

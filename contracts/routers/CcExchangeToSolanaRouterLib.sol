@@ -17,7 +17,7 @@ library CcExchangeToSolanaRouterLib {
     uint256 constant MAX_BRIDGE_FEE = 10 ** 18;
 
     // Events
-    event NewWrapAndSwapV3(
+    event NewWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed user,
         bytes32[2] inputAndOutputToken,
@@ -31,7 +31,7 @@ library CcExchangeToSolanaRouterLib {
         uint destinationChainId
     );
 
-    event FailedWrapAndSwapV3(
+    event FailedWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed recipientAddress,
         bytes32[2] inputAndOutputToken,
@@ -48,7 +48,6 @@ library CcExchangeToSolanaRouterLib {
     /// @notice Swap TeleBTC for the output token
     function swapToSolana(
         ICcExchangeRouter.swapToSolanaArguments memory swapArguments,
-        mapping(bytes8 => mapping(uint => bytes32)) storage _bridgeTokenTickerMapping,
         ICcExchangeRouter.SwapToSolanaData memory _swapToSolanaData
     ) external returns (bool result, uint256[] memory amounts) {
         // Give allowance to exchange connector for swapping
@@ -59,10 +58,11 @@ library CcExchangeToSolanaRouterLib {
 
         // Check if the provided path is valid
         require(
-            swapArguments._path[0] == bytes32(uint256(uint160(_swapToSolanaData.teleBTC))) &&
-                swapArguments._path[swapArguments._path.length - 1] == _bridgeTokenTickerMapping[swapArguments._ccExchangeToSolanaRequest.tokenTickers[
-                swapArguments._ccExchangeToSolanaRequest.tokenTickers.length - 1
-            ]][_swapToSolanaData.currentChainId],
+            address(uint160(uint256(swapArguments._path[0]))) == _swapToSolanaData.teleBTC &&
+                swapArguments._path[swapArguments._path.length - 1] ==
+                swapArguments._ccExchangeToSolanaRequest.path[
+                    swapArguments._ccExchangeToSolanaRequest.path.length - 1
+                ],
             "CcExchangeToSolanaRouter: invalid path"
         );
 
@@ -125,7 +125,7 @@ library CcExchangeToSolanaRouterLib {
             bridgeFee
         ];
 
-        emit NewWrapAndSwapV3(
+        emit NewWrapAndSwapV2(
             ILockersManager(_swapToSolanaData.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
             swapArguments._ccExchangeToSolanaRequest.recipientAddress,
             [bytes32(uint256(uint160(_swapToSolanaData.teleBTC))), swapArguments._path[swapArguments._path.length - 1]],
@@ -147,7 +147,7 @@ library CcExchangeToSolanaRouterLib {
     ) private {
         uint256[5] memory fees = [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)];
         
-        emit FailedWrapAndSwapV3(
+        emit FailedWrapAndSwapV2(
             ILockersManager(_swapToSolanaData.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
             swapArguments._ccExchangeToSolanaRequest.recipientAddress,
             [bytes32(uint256(uint160(_swapToSolanaData.teleBTC))), swapArguments._path[swapArguments._path.length - 1]],

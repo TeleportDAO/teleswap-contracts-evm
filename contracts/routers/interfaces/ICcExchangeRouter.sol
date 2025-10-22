@@ -396,6 +396,7 @@ interface ICcExchangeRouter {
         uint fee;
         bool isUsed;
         bytes8[] tokenTickers;
+        bytes32[] path;
         uint deadline;
         uint speed;
         uint destinationChain;
@@ -432,7 +433,7 @@ interface ICcExchangeRouter {
     /// @param thirdPartyId Id of third party
     /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]
     /// @param destinationChainId chain id of destination 
-    event NewWrapAndSwapV3(
+    event NewWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed user,
         bytes32[2] inputAndOutputToken,
@@ -459,7 +460,7 @@ interface ICcExchangeRouter {
     /// @param thirdPartyId Id of third party
     /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]   
     /// @param destinationChainId chain id of destination 
-    event FailedWrapAndSwapV3(
+    event FailedWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed recipientAddress,
         bytes32[2] inputAndOutputToken,
@@ -479,9 +480,9 @@ interface ICcExchangeRouter {
         bytes32 _destinationToken
     ) external;
 
-    function wrapAndSwapToSolana(
+    function wrapAndSwapV2(
         TxAndProof memory _txAndProof,
         bytes calldata _lockerLockingScript,
-        bytes8[] memory _path
+        address[] memory _path
     ) external payable returns(bool);
 }

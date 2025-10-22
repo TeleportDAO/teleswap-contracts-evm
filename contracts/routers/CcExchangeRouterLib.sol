@@ -184,6 +184,7 @@ library CcExchangeRouterLib {
             storage ccExchangeToSolanaRequests,
         mapping(bytes32 => ICcExchangeRouter.extendedCcExchangeRequest)
             storage extendedCcExchangeRequests,
+        address _teleBTC,
         bytes memory _lockerLockingScript,
         address _relay
     ) external returns (bytes32) {
@@ -254,7 +255,7 @@ library CcExchangeRouterLib {
 
         // Note: default exchange path is: [teleBTC, exchangeToken]
         request.tokenTickers = new bytes8[](2);
-        request.tokenTickers[0] = bytes8("teleBTC");
+        request.tokenTickers[0] = bytes8(uint64(uint160(_teleBTC)));
         request.tokenTickers[1] = destTokenTicker;
 
         // Finds Teleporter fee

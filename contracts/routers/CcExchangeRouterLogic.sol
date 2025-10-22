@@ -1015,11 +1015,11 @@ contract CcExchangeRouterLogic is
     ///      5.3 Keep TeleBTC if exchange fails and the request doesn't belong to the current chain
     /// @param _txAndProof Transaction and inclusion proof data
     /// @param _lockerLockingScript Script hash of Locker that user has sent BTC to it
-    /// @param _tokenTickers (Optional) Exchange path token tickers from teleBTC to the output token
-    function wrapAndSwapToSolana(
+    /// @param _path (Optional) Exchange path from teleBTC to the output token
+    function wrapAndSwapV2(
         TxAndProof memory _txAndProof,
         bytes calldata _lockerLockingScript,
-        bytes8[] memory _tokenTickers
+        address[] memory _path
     ) external payable virtual override nonReentrant returns (bool) {
         // Basic checks
         require(
@@ -1032,7 +1032,6 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: old request"
         );
         
-        // not needed
         // require(
         //     _txAndProof.locktime == bytes4(0),
         //     "ExchangeRouter: non-zero locktime"
@@ -1049,6 +1048,7 @@ contract CcExchangeRouterLogic is
             _txAndProof,
             ccExchangeToSolanaRequests,
             extendedCcExchangeRequests,
+            teleBTC,
             _lockerLockingScript,
             relay
         );
@@ -1102,7 +1102,7 @@ contract CcExchangeRouterLogic is
             _exchangeConnector,
             _lockerLockingScript,
             txId,
-            _tokenTickers,
+            _path,
             extendedCcExchangeRequests[txId].bridgePercentageFee,
             destinationChainId
         );
@@ -1144,13 +1144,14 @@ contract CcExchangeRouterLogic is
         address _exchangeConnector,
         bytes memory _lockerLockingScript,
         bytes32 _txId,
-        bytes8[] memory _tokenTickers,
+        address[] memory _path,
         uint256 _bridgePercentageFee,
         uint256 _chainId
     ) private {
         bytes32[] memory path = new bytes32[](2);
-        path[0] = bridgeTokenTickerMapping[_tokenTickers[0]][chainId];
-        path[1] = bridgeTokenTickerMapping[_tokenTickers[_tokenTickers.length - 1]][chainId];
+        path[0] = bridgeTokenTickerMapping[ccExchangeToSolanaRequests[_txId].tokenTickers[0]][chainId];
+        path[1] = bridgeTokenTickerMapping[ccExchangeToSolanaRequests[_txId].tokenTickers[ccExchangeToSolanaRequests[_txId].tokenTickers.length - 1]][chainId];
+        ccExchangeToSolanaRequests[_txId].path = path; 
         (bool result, uint256[] memory amounts) = _swapToSolana(
             ICcExchangeRouter.swapToSolanaArguments(
                 _chainId,
@@ -1174,8 +1175,8 @@ contract CcExchangeRouterLogic is
             if (_chainId != chainId) { 
                 _sendTokenToSolana(
                     extendedCcExchangeRequests[_txId].chainId,
-                    address(uint160(uint256(path[path.length - 1]))),
-                    _tokenTickers,
+                    _path[_path.length - 1],
+                    ccExchangeToSolanaRequests[_txId].tokenTickers,
                     amounts[amounts.length - 1],
                     ccExchangeToSolanaRequests[_txId].recipientAddress,
                     _bridgePercentageFee
@@ -1199,7 +1200,6 @@ contract CcExchangeRouterLogic is
     ) private returns (bool result, uint256[] memory amounts) {
         (result, amounts) = CcExchangeToSolanaRouterLib.swapToSolana(
             swapArguments,
-            bridgeTokenTickerMapping,
             ICcExchangeRouter.SwapToSolanaData(
                 teleBTC,
                 wrappedNativeToken,
