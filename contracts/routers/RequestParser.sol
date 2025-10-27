@@ -161,9 +161,9 @@ library RequestParser {
         }
     }
 
-    /// @notice Returns token ticker of the destination token
+    /// @notice Returns token ID of the destination token
     /// @dev Minted TeleBTC will be exchanged for this token
-    function parseDestTokenTicker(
+    function parseDestTokenID(
         bytes memory _arbitraryData
     ) internal pure returns (uint64 parsedValue) {
         bytes memory slicedBytes = sliceBytes(_arbitraryData, 40, 47);

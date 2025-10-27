@@ -46,22 +46,22 @@ library CcExchangeToSolanaRouterLib {
     );
 
     /// @notice Swap TeleBTC for the output token
-    function swapToSolana(
-        ICcExchangeRouter.swapToSolanaArguments memory swapArguments,
-        ICcExchangeRouter.SwapToSolanaData memory _swapToSolanaData
+    function swapV2(
+        ICcExchangeRouter.swapArgumentsV2 memory swapArguments,
+        ICcExchangeRouter.SwapV2Data memory _swapV2Data
     ) external returns (bool result, uint256[] memory amounts) {
         // Give allowance to exchange connector for swapping
-        ITeleBTC(_swapToSolanaData.teleBTC).approve(
+        ITeleBTC(_swapV2Data.teleBTC).approve(
             swapArguments._exchangeConnector,
             swapArguments._extendedCcExchangeRequest.remainedInputAmount
         );
 
         // Check if the provided path is valid
         require(
-            address(uint160(uint256(swapArguments._path[0]))) == _swapToSolanaData.teleBTC &&
+            address(uint160(uint256(swapArguments._path[0]))) == _swapV2Data.teleBTC &&
                 swapArguments._path[swapArguments._path.length - 1] ==
-                swapArguments._ccExchangeToSolanaRequest.path[
-                    swapArguments._ccExchangeToSolanaRequest.path.length - 1
+                swapArguments._ccExchangeRequestV2.path[
+                    swapArguments._ccExchangeRequestV2.path.length - 1
                 ],
             "CcExchangeToSolanaRouter: invalid path"
         );
@@ -72,7 +72,7 @@ library CcExchangeToSolanaRouterLib {
         _path[0] = address(uint160(uint256(swapArguments._path[0])));
         _path[1] = address(uint160(uint256(swapArguments._path[swapArguments._path.length - 1])));
         
-        uint256 outputAmount = swapArguments._ccExchangeToSolanaRequest.outputAmount;
+        uint256 outputAmount = swapArguments._ccExchangeRequestV2.outputAmount;
         uint256 bridgePercentageFee = swapArguments._extendedCcExchangeRequest.bridgePercentageFee;
         uint256 minAmountOut = (outputAmount * MAX_BRIDGE_FEE) / (MAX_BRIDGE_FEE - bridgePercentageFee);
         
@@ -87,9 +87,9 @@ library CcExchangeToSolanaRouterLib {
             );
 
         if (result) {
-            _handleSuccessfulSwap(swapArguments, amounts, _swapToSolanaData);
+            _handleSuccessfulSwap(swapArguments, amounts, _swapV2Data);
         } else {
-            _handleFailedSwap(swapArguments, _swapToSolanaData);
+            _handleFailedSwap(swapArguments, _swapV2Data);
         }
 
         return (result, amounts);
@@ -97,20 +97,20 @@ library CcExchangeToSolanaRouterLib {
 
     /// @notice Handle successful swap logic
     function _handleSuccessfulSwap(
-        ICcExchangeRouter.swapToSolanaArguments memory swapArguments,
+        ICcExchangeRouter.swapArgumentsV2 memory swapArguments,
         uint256[] memory amounts,
-        ICcExchangeRouter.SwapToSolanaData memory _swapToSolanaData
+        ICcExchangeRouter.SwapV2Data memory _swapV2Data
     ) private {
         // Send tokens to user if on current chain
         if (swapArguments.destinationChainId == block.chainid) {
             address outputToken = address(uint160(uint256(swapArguments._path[swapArguments._path.length - 1])));
             uint256 outputAmount = amounts[amounts.length - 1];
-            address recipient = address(uint160(uint256(swapArguments._ccExchangeToSolanaRequest.recipientAddress)));
+            address recipient = address(uint160(uint256(swapArguments._ccExchangeRequestV2.recipientAddress)));
             
-            if (outputToken != _swapToSolanaData.wrappedNativeToken) {
+            if (outputToken != _swapV2Data.wrappedNativeToken) {
                 ITeleBTC(outputToken).transfer(recipient, outputAmount);
             } else {
-                WETH(_swapToSolanaData.wrappedNativeToken).withdraw(outputAmount);
+                WETH(_swapV2Data.wrappedNativeToken).withdraw(outputAmount);
                 Address.sendValue(payable(recipient), outputAmount);
             }
         }
@@ -118,7 +118,7 @@ library CcExchangeToSolanaRouterLib {
         // Emit success event
         uint256 bridgeFee = (amounts[amounts.length - 1] * swapArguments._extendedCcExchangeRequest.bridgePercentageFee) / MAX_BRIDGE_FEE;
         uint256[5] memory fees = [
-            swapArguments._ccExchangeToSolanaRequest.fee,
+            swapArguments._ccExchangeRequestV2.fee,
             swapArguments._extendedCcExchangeRequest.lockerFee,
             swapArguments._extendedCcExchangeRequest.protocolFee,
             swapArguments._extendedCcExchangeRequest.thirdPartyFee,
@@ -126,14 +126,14 @@ library CcExchangeToSolanaRouterLib {
         ];
 
         emit NewWrapAndSwapV2(
-            ILockersManager(_swapToSolanaData.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
-            swapArguments._ccExchangeToSolanaRequest.recipientAddress,
-            [bytes32(uint256(uint160(_swapToSolanaData.teleBTC))), swapArguments._path[swapArguments._path.length - 1]],
+            ILockersManager(_swapV2Data.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
+            swapArguments._ccExchangeRequestV2.recipientAddress,
+            [bytes32(uint256(uint160(_swapV2Data.teleBTC))), swapArguments._path[swapArguments._path.length - 1]],
             [amounts[0], amounts[amounts.length - 1] - bridgeFee],
-            swapArguments._ccExchangeToSolanaRequest.speed,
-            _swapToSolanaData.teleporter,
+            swapArguments._ccExchangeRequestV2.speed,
+            _swapV2Data.teleporter,
             swapArguments._txId,
-            swapArguments._ccExchangeToSolanaRequest.appId,
+            swapArguments._ccExchangeRequestV2.appId,
             swapArguments._extendedCcExchangeRequest.thirdParty,
             fees,
             swapArguments.destinationChainId
@@ -142,20 +142,20 @@ library CcExchangeToSolanaRouterLib {
 
     /// @notice Handle failed swap logic
     function _handleFailedSwap(
-        ICcExchangeRouter.swapToSolanaArguments memory swapArguments,
-        ICcExchangeRouter.SwapToSolanaData memory _swapToSolanaData
+        ICcExchangeRouter.swapArgumentsV2 memory swapArguments,
+        ICcExchangeRouter.SwapV2Data memory _swapV2Data
     ) private {
         uint256[5] memory fees = [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)];
         
         emit FailedWrapAndSwapV2(
-            ILockersManager(_swapToSolanaData.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
-            swapArguments._ccExchangeToSolanaRequest.recipientAddress,
-            [bytes32(uint256(uint160(_swapToSolanaData.teleBTC))), swapArguments._path[swapArguments._path.length - 1]],
+            ILockersManager(_swapV2Data.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
+            swapArguments._ccExchangeRequestV2.recipientAddress,
+            [bytes32(uint256(uint160(_swapV2Data.teleBTC))), swapArguments._path[swapArguments._path.length - 1]],
             [swapArguments._extendedCcExchangeRequest.remainedInputAmount, 0],
-            swapArguments._ccExchangeToSolanaRequest.speed,
-            _swapToSolanaData.teleporter,
+            swapArguments._ccExchangeRequestV2.speed,
+            _swapV2Data.teleporter,
             swapArguments._txId,
-            swapArguments._ccExchangeToSolanaRequest.appId,
+            swapArguments._ccExchangeRequestV2.appId,
             swapArguments._extendedCcExchangeRequest.thirdParty,
             fees,
             swapArguments.destinationChainId

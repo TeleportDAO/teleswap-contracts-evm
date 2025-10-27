@@ -58,6 +58,7 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
 
     mapping(address => bool) public isTeleporter;
 
-    mapping(bytes8 => mapping(uint => bytes32)) public bridgeTokenTickerMapping;
-    mapping(bytes32 => ccExchangeToSolanaRequest) internal ccExchangeToSolanaRequests;
+    mapping(bytes8 => mapping(uint => bytes32)) public bridgeTokenIDMapping;
+    mapping(bytes32 => ccExchangeRequestV2) internal ccExchangeRequestsV2;
+    mapping(bytes8 => bytes8) public intermediaryTokenIDMapping;
 }

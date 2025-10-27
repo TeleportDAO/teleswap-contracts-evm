@@ -178,10 +178,10 @@ library CcExchangeRouterLib {
     }
 
     /// @notice Parses and stores exchange request if it's valid for Solana requests
-    function ccExchangeToSolanaHelper(
+    function ccExchangeHelperV2(
         ICcExchangeRouter.TxAndProof memory _txAndProof,
-        mapping(bytes32 => ICcExchangeRouter.ccExchangeToSolanaRequest)
-            storage ccExchangeToSolanaRequests,
+        mapping(bytes32 => ICcExchangeRouter.ccExchangeRequestV2)
+            storage ccExchangeRequests,
         mapping(bytes32 => ICcExchangeRouter.extendedCcExchangeRequest)
             storage extendedCcExchangeRequests,
         address _teleBTC,
@@ -198,12 +198,12 @@ library CcExchangeRouterLib {
 
         // Checks that the request has not been processed before
         require(
-            !ccExchangeToSolanaRequests[txId].isUsed,
+            !ccExchangeRequests[txId].isUsed,
             "ExchangeRouterLib: already used"
         );
 
         // Extracts value and OP_RETURN data from the request
-        ICcExchangeRouter.ccExchangeToSolanaRequest memory request;
+        ICcExchangeRouter.ccExchangeRequestV2 memory request;
         bytes memory arbitraryData;
 
         (request.inputAmount, arbitraryData) = BitcoinHelper
@@ -220,7 +220,7 @@ library CcExchangeRouterLib {
             4) networkFee, 3 byte
             5) speed, 1 byte: {0,1}
             6) thirdPartyID, 1 byte: max 256 third parties, default is 0 for no third party
-            7) destTokenTicker, 8 byte: token ticker
+            7) destTokenID, 8 byte: token ID
             8) minDestTokenAmount, 13 byte: minimum expected destination token amount (output amount)
             9) minIntermediaryTokenAmount, 13 byte: minimum intermediary token amount (slippage guard on Polygon)
             10) bridgePercentageFee, 3 byte: will be multiply by 10^11, 10^18 means 100%, so the minimum 
@@ -240,7 +240,7 @@ library CcExchangeRouterLib {
             .parseThirdPartyID(arbitraryData);
 
         request.appId = RequestParser.parseAppId(arbitraryData);
-        bytes8 destTokenTicker = bytes8(RequestParser.parseDestTokenTicker(arbitraryData));
+        bytes8 destTokenID = bytes8(RequestParser.parseDestTokenID(arbitraryData));
         request.outputAmount = RequestParser.parseMinDestTokenAmount(
             arbitraryData
         );
@@ -254,9 +254,9 @@ library CcExchangeRouterLib {
         );
 
         // Note: default exchange path is: [teleBTC, exchangeToken]
-        request.tokenTickers = new bytes8[](2);
-        request.tokenTickers[0] = bytes8(uint64(uint160(_teleBTC)));
-        request.tokenTickers[1] = destTokenTicker;
+        request.tokenIDs = new bytes8[](2);
+        request.tokenIDs[0] = bytes8(uint64(uint160(_teleBTC)));
+        request.tokenIDs[1] = destTokenID;
 
         // Finds Teleporter fee
         uint networkFee = RequestParser.parseNetworkFeeNew(arbitraryData);
@@ -273,7 +273,7 @@ library CcExchangeRouterLib {
         request.isUsed = true;
 
         // Saves request
-        ccExchangeToSolanaRequests[txId] = request;
+        ccExchangeRequests[txId] = request;
 
         require(
             _isConfirmed(_txAndProof, _relay, txId),

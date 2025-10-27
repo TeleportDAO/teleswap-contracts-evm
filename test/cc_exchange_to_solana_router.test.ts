@@ -156,6 +156,8 @@ describe("CcExchangeRouter", async function () {
     let weth: WETH;
     let burnRouterLib: BurnRouterLib;
     let burnRouter: Contract;
+    let exchangeTokenOnSolanaAddress: string;
+    let wrappedSOL: string;
 
     // Mock contracts
     let mockBitcoinRelay: MockContract;
@@ -411,30 +413,53 @@ describe("CcExchangeRouter", async function () {
         await ccExchangeRouter.setChainIdMapping(34268394551451, 101);
 
         // Set teleBTC and exchange token mapping for current chain (Ethereum)
-        await ccExchangeRouter.setBridgeTokenTickerMapping(
+        await ccExchangeRouter.setBridgeTokenIDMapping(
             // ethers.utils.hexlify("0xad5dbb30d61cc685"),
             "0x" + teleBTC.address.slice(-16),
             1, // current chain ID for Ethereum
             ethers.utils.hexZeroPad(teleBTC.address, 32)
         );
-        await ccExchangeRouter.setBridgeTokenTickerMapping(
-            // ethers.utils.hexlify("0xbf2abebb90635942"),
+        await ccExchangeRouter.setBridgeTokenIDMapping(
+            // ethers.utils.hexlify("0x0000000000012345"),
             "0x" + exchangeToken.address.slice(-16),
             1, // current chain ID for Ethereum
             ethers.utils.hexZeroPad(exchangeToken.address, 32)
         );
 
-        // set bridge token ticker mapping for Solana
+        // set bridge token ID mapping for Solana
         // Solana USDC address (EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v) as bytes32
         const solanaUSDCAddress =
             "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-        const solanaUSDCBytes = solanaAddressToBytes32(solanaUSDCAddress);
+        exchangeTokenOnSolanaAddress =
+            solanaAddressToBytes32(solanaUSDCAddress);
 
-        await ccExchangeRouter.setBridgeTokenTickerMapping(
+        await ccExchangeRouter.setBridgeTokenIDMapping(
             // ethers.utils.hexZeroPad(ethers.utils.toUtf8Bytes("USDC"), 8),
-            "0x" + exchangeToken.address.slice(-16),
+            "0x" + exchangeTokenOnSolanaAddress.slice(-16),
+            // ethers.utils.hexlify("0x0000000000012345"),
             34268394551451, // destination chain ID for Solana
-            solanaUSDCBytes
+            exchangeTokenOnSolanaAddress
+        );
+
+        wrappedSOL = "So11111111111111111111111111111111111111112";
+        await ccExchangeRouter.setBridgeTokenIDMapping(
+            // ethers.utils.hexZeroPad(ethers.utils.toUtf8Bytes("USDC"), 8),
+            "0x" + solanaAddressToBytes32(wrappedSOL).slice(-16),
+            // ethers.utils.hexlify("0x0000000000012345"),
+            34268394551451, // destination chain ID for Solana
+            solanaAddressToBytes32(wrappedSOL)
+        );
+
+        // set intermediary token ID mapping for USDC on Solana (USDC.Sol -> USDC.Pol)
+        await ccExchangeRouter.setIntermediaryTokenIDMapping(
+            "0x" + exchangeTokenOnSolanaAddress.slice(-16),
+            "0x" + exchangeToken.address.slice(-16)
+        );
+
+        // SOL -> USDC.Pol
+        await ccExchangeRouter.setIntermediaryTokenIDMapping(
+            "0x" + solanaAddressToBytes32(wrappedSOL).slice(-16),
+            "0x" + exchangeToken.address.slice(-16)
         );
     });
 
@@ -857,12 +882,19 @@ describe("CcExchangeRouter", async function () {
             await revertProvider(signer1.provider, snapshotId);
         });
 
-        it("Send token to Solana chain using across", async function () {
+        it("Send token (USDC) to Solana chain using across", async function () {
+            const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
+            let vout =
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput.vout;
+            vout = vout.replace(
+                DUMMY_TOKEN_ID,
+                exchangeTokenOnSolanaAddress.slice(-16)
+            );
             let cc_exchange_request_txId = calculateTxId(
                 CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
                     .version,
                 CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput.vin,
-                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput.vout,
+                vout,
                 CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
                     .locktime
             );
@@ -899,8 +931,134 @@ describe("CcExchangeRouter", async function () {
                                 .normalCCExchangeToSolana_fixedInput.version,
                         vin: CC_EXCHANGE_REQUESTS
                             .normalCCExchangeToSolana_fixedInput.vin,
-                        vout: CC_EXCHANGE_REQUESTS
-                            .normalCCExchangeToSolana_fixedInput.vout,
+                        vout: vout,
+                        locktime:
+                            CC_EXCHANGE_REQUESTS
+                                .normalCCExchangeToSolana_fixedInput.locktime,
+                        blockNumber:
+                            CC_EXCHANGE_REQUESTS
+                                .normalCCExchangeToSolana_fixedInput
+                                .blockNumber,
+                        intermediateNodes:
+                            CC_EXCHANGE_REQUESTS
+                                .normalCCExchangeToSolana_fixedInput
+                                .intermediateNodes,
+                        index: CC_EXCHANGE_REQUESTS
+                            .normalCCExchangeToSolana_fixedInput.index,
+                    },
+                    LOCKER1_LOCKING_SCRIPT,
+                    [teleBTC.address, exchangeToken.address]
+                )
+            )
+                .to.emit(ccExchangeRouter, "NewWrapAndSwapV2")
+                .withArgs(
+                    LOCKER_TARGET_ADDRESS, // locker target address
+                    ethers.utils.hexZeroPad(
+                        CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                            .recipientAddress,
+                        32
+                    ), // recipient address as bytes32
+                    [
+                        ethers.utils
+                            .hexZeroPad(teleBTC.address, 32)
+                            .toLowerCase(),
+                        ethers.utils
+                            .hexZeroPad(exchangeToken.address, 32)
+                            .toLowerCase(),
+                    ], // input and output tokens
+                    [
+                        CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                            .bitcoinAmount -
+                            teleporterFee -
+                            lockerFee -
+                            protocolFee,
+                        expectedOutputAmount.sub(bridgeFee),
+                    ],
+                    0, // speed
+                    deployerAddress, // teleporter
+                    cc_exchange_request_txId, // bitcoin tx id
+                    CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                        .appId, // app id
+                    0, // third party id
+                    [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
+                    CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                        .destChainId
+                );
+
+            await checksWhenExchangeSucceed(
+                exchangeToken,
+                true,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                    .recipientAddress,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                    .bitcoinAmount,
+                teleporterFee,
+                protocolFee,
+                lockerFee,
+                0 // User receives TT on destination chain, so user TT balance shouldn't change in the current chain
+            );
+
+            await expect(
+                await exchangeToken.allowance(
+                    ccExchangeRouter.address,
+                    mockAcross.address
+                )
+            ).to.be.equal(expectedOutputAmount.toNumber());
+            await expect(
+                await exchangeToken.balanceOf(ccExchangeRouter.address)
+            ).to.be.equal(expectedOutputAmount.toNumber());
+        });
+
+        it("Receive SOL on Solana using across", async function () {
+            const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
+            let vout =
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput.vout;
+            vout = vout.replace(
+                DUMMY_TOKEN_ID,
+                solanaAddressToBytes32(wrappedSOL).slice(-16)
+            );
+            let cc_exchange_request_txId = calculateTxId(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                    .version,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput.vin,
+                vout,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                    .locktime
+            );
+
+            // Calculates fees
+            let [lockerFee, teleporterFee, protocolFee] = calculateFees(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+            );
+
+            // Finds expected output amount that user receives (input token is fixed)
+            let expectedOutputAmount = await uniswapV2Router02.getAmountOut(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                    .bitcoinAmount -
+                    teleporterFee -
+                    lockerFee -
+                    protocolFee,
+                oldReserveTeleBTC,
+                oldReserveTT
+            );
+
+            let bridgeFee = expectedOutputAmount
+                .mul(
+                    CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                        .acrossFee
+                )
+                .div(10 ** 7);
+
+            // Exchanges teleBTC for TT
+            await expect(
+                ccExchangeRouter.wrapAndSwapV2(
+                    {
+                        version:
+                            CC_EXCHANGE_REQUESTS
+                                .normalCCExchangeToSolana_fixedInput.version,
+                        vin: CC_EXCHANGE_REQUESTS
+                            .normalCCExchangeToSolana_fixedInput.vin,
+                        vout: vout,
                         locktime:
                             CC_EXCHANGE_REQUESTS
                                 .normalCCExchangeToSolana_fixedInput.locktime,

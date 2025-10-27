@@ -772,8 +772,8 @@ contract CcExchangeRouterLogic is
         uint256 inputAmount = 0;
         uint256 networkFee = 0;
         if (extendedCcExchangeRequests[_txId].chainId == 101) {
-            inputAmount = ccExchangeToSolanaRequests[_txId].inputAmount;
-            networkFee = ccExchangeToSolanaRequests[_txId].fee;
+            inputAmount = ccExchangeRequestsV2[_txId].inputAmount;
+            networkFee = ccExchangeRequestsV2[_txId].fee;
         } else {
             inputAmount = ccExchangeRequests[_txId].inputAmount;
             networkFee = ccExchangeRequests[_txId].fee;
@@ -822,8 +822,8 @@ contract CcExchangeRouterLogic is
         uint256 networkFee = 0;
         if (ccExchangeRequests[_txId].fee > 0) {
             networkFee = ccExchangeRequests[_txId].fee;
-        } else if (ccExchangeToSolanaRequests[_txId].fee > 0) {
-            networkFee = ccExchangeToSolanaRequests[_txId].fee;
+        } else if (ccExchangeRequestsV2[_txId].fee > 0) {
+            networkFee = ccExchangeRequestsV2[_txId].fee;
         }
         
         if (networkFee > 0) {
@@ -992,16 +992,26 @@ contract CcExchangeRouterLogic is
         chainIdMapping[_mappedId] = chainIdStruct(chainId, _destinationChain);
     }
 
-    /// @notice Setter for bridge token ticker mapping
-    /// @param _tokenTicker Ticker symbol of the token (8 bytes)
+    /// @notice Setter for bridge token ID mapping
+    /// @param _tokenID Token ID (8 bytes)
     /// @param _destinationChainId Chain ID of the destination chain
     /// @param _destinationToken Address of the token on the target chain (32 bytes)
-    function setBridgeTokenTickerMapping(
-        bytes8 _tokenTicker,
+    function setBridgeTokenIDMapping(
+        bytes8 _tokenID,
         uint256 _destinationChainId,
         bytes32 _destinationToken
     ) external override onlyOwner {
-        bridgeTokenTickerMapping[_tokenTicker][_destinationChainId] = _destinationToken;
+        bridgeTokenIDMapping[_tokenID][_destinationChainId] = _destinationToken;
+    }
+
+    /// @notice Setter for intermediary token ID mapping
+    /// @param _destinationTokenID Destination token ID (8 bytes)
+    /// @param _intermediaryTokenID Intermediary token ID (8 bytes)
+    function setIntermediaryTokenIDMapping(
+        bytes8 _destinationTokenID, 
+        bytes8 _intermediaryTokenID
+    ) external override onlyOwner {
+        intermediaryTokenIDMapping[_destinationTokenID] = _intermediaryTokenID;
     }
 
     /// @notice Process a wrapAndSwap to Solana request after checking its inclusion on Bitcoin
@@ -1044,9 +1054,9 @@ contract CcExchangeRouterLogic is
         );
 
         // Extract request info and check if tx has been finalized on Bitcoin
-        bytes32 txId = CcExchangeRouterLib.ccExchangeToSolanaHelper(
+        bytes32 txId = CcExchangeRouterLib.ccExchangeHelperV2(
             _txAndProof,
-            ccExchangeToSolanaRequests,
+            ccExchangeRequestsV2,
             extendedCcExchangeRequests,
             teleBTC,
             _lockerLockingScript,
@@ -1063,9 +1073,7 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: invalid chain id"
         );
 
-        ccExchangeToSolanaRequest memory request = ccExchangeToSolanaRequests[txId];
-
-        address _exchangeConnector = exchangeConnector[request.appId];
+        address _exchangeConnector = exchangeConnector[ccExchangeRequestsV2[txId].appId];
         require(
             _exchangeConnector != address(0),
             "ExchangeRouter: invalid appId"
@@ -1098,7 +1106,7 @@ contract CcExchangeRouterLogic is
         //     }
         // }
 
-        _wrapAndSwapToSolana(
+        _wrapAndSwapV2(
             _exchangeConnector,
             _lockerLockingScript,
             txId,
@@ -1111,10 +1119,10 @@ contract CcExchangeRouterLogic is
     }
 
     /// @notice Send tokens to Solana using Across
-    function _sendTokenToSolana(
+    function _sendTokenToOtherChainV2(
         uint256 _chainId,
         address _token,
-        bytes8[] memory _tokenTickers,
+        bytes8[] memory _tokenIDs,
         uint256 _amount,
         bytes32 _user,
         uint256 _bridgePercentageFee
@@ -1125,7 +1133,7 @@ contract CcExchangeRouterLogic is
             bytes32(uint256(uint160(acrossAdmin))),
             _user,
             bytes32(uint256(uint160(_token))),
-            bridgeTokenTickerMapping[_tokenTickers[_tokenTickers.length - 1]][chainIdMapping[_chainId].destinationChain],
+            bridgeTokenIDMapping[_tokenIDs[_tokenIDs.length - 1]][chainIdMapping[_chainId].destinationChain],
             _amount,
             _amount * (1e18 - _bridgePercentageFee) / 1e18,
             chainIdMapping[_chainId].destinationChain,
@@ -1140,7 +1148,7 @@ contract CcExchangeRouterLogic is
         Address.functionCall(across, finalCallData);
     }
 
-    function _wrapAndSwapToSolana(
+    function _wrapAndSwapV2(
         address _exchangeConnector,
         bytes memory _lockerLockingScript,
         bytes32 _txId,
@@ -1149,14 +1157,14 @@ contract CcExchangeRouterLogic is
         uint256 _chainId
     ) private {
         bytes32[] memory path = new bytes32[](2);
-        path[0] = bridgeTokenTickerMapping[ccExchangeToSolanaRequests[_txId].tokenTickers[0]][chainId];
-        path[1] = bridgeTokenTickerMapping[ccExchangeToSolanaRequests[_txId].tokenTickers[ccExchangeToSolanaRequests[_txId].tokenTickers.length - 1]][chainId];
-        ccExchangeToSolanaRequests[_txId].path = path; 
-        (bool result, uint256[] memory amounts) = _swapToSolana(
-            ICcExchangeRouter.swapToSolanaArguments(
+        path[0] = bridgeTokenIDMapping[ccExchangeRequestsV2[_txId].tokenIDs[0]][chainId];
+        path[1] = bridgeTokenIDMapping[intermediaryTokenIDMapping[ccExchangeRequestsV2[_txId].tokenIDs[ccExchangeRequestsV2[_txId].tokenIDs.length - 1]]][chainId];
+        ccExchangeRequestsV2[_txId].path = path; 
+        (bool result, uint256[] memory amounts) = _swapV2(
+            ICcExchangeRouter.swapArgumentsV2(
                 _chainId,
                 _lockerLockingScript,
-                ccExchangeToSolanaRequests[_txId],
+                ccExchangeRequestsV2[_txId],
                 extendedCcExchangeRequests[_txId],
                 _txId,
                 path,
@@ -1173,12 +1181,12 @@ contract CcExchangeRouterLogic is
 
             
             if (_chainId != chainId) { 
-                _sendTokenToSolana(
+                _sendTokenToOtherChainV2(
                     extendedCcExchangeRequests[_txId].chainId,
                     _path[_path.length - 1],
-                    ccExchangeToSolanaRequests[_txId].tokenTickers,
+                    ccExchangeRequestsV2[_txId].tokenIDs,
                     amounts[amounts.length - 1],
-                    ccExchangeToSolanaRequests[_txId].recipientAddress,
+                    ccExchangeRequestsV2[_txId].recipientAddress,
                     _bridgePercentageFee
                 );
             }
@@ -1186,7 +1194,7 @@ contract CcExchangeRouterLogic is
             // If swap failed, keep TeleBTC in the contract for retry
             uint fees = extendedCcExchangeRequests[_txId].thirdPartyFee +
                        extendedCcExchangeRequests[_txId].protocolFee +
-                       ccExchangeToSolanaRequests[_txId].fee +
+                       ccExchangeRequestsV2[_txId].fee +
                        extendedCcExchangeRequests[_txId].lockerFee;
 
             // We don't take fees (except the locker fee) in the case of failed wrapAndSwap
@@ -1195,12 +1203,12 @@ contract CcExchangeRouterLogic is
     }
 
     /// @notice Swap TeleBTC for the output token
-    function _swapToSolana(
-        ICcExchangeRouter.swapToSolanaArguments memory swapArguments
+    function _swapV2(
+        ICcExchangeRouter.swapArgumentsV2 memory swapArguments
     ) private returns (bool result, uint256[] memory amounts) {
-        (result, amounts) = CcExchangeToSolanaRouterLib.swapToSolana(
+        (result, amounts) = CcExchangeToSolanaRouterLib.swapV2(
             swapArguments,
-            ICcExchangeRouter.SwapToSolanaData(
+            ICcExchangeRouter.SwapV2Data(
                 teleBTC,
                 wrappedNativeToken,
                 getDestChainId(chainId),

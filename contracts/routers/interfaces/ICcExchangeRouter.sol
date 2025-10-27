@@ -383,10 +383,11 @@ interface ICcExchangeRouter {
     /// @param recipientAddress Address of exchange recipient: Solana address, or zero padded EVM address
     /// @param fee Amount of fee that is paid to Teleporter (for tx, relayer and teleporter fees)
     /// @param isUsed True if tx has been submitted before
-    /// @param path Exchange path from input token to output token, token tickers
+    /// @param tokenIDs Token IDs of the input and output tokens
+    /// @param path Exchange path from input token to output token
     /// @param deadline for exchanging tokens (not used anymore)
     /// @param speed of the request (normal or instant)
-    struct ccExchangeToSolanaRequest {
+    struct ccExchangeRequestV2 {
         uint appId;
         uint inputAmount;
         uint outputAmount; // min expected output amount
@@ -395,7 +396,7 @@ interface ICcExchangeRouter {
         bytes32 recipientAddress;
         uint fee;
         bool isUsed;
-        bytes8[] tokenTickers;
+        bytes8[] tokenIDs;
         bytes32[] path;
         uint deadline;
         uint speed;
@@ -403,17 +404,17 @@ interface ICcExchangeRouter {
     }
 
     /// @notice Structure for passing arguments to swap function
-    struct swapToSolanaArguments {
+    struct swapArgumentsV2 {
         uint destinationChainId;
         bytes _lockerLockingScript;
-        ccExchangeToSolanaRequest _ccExchangeToSolanaRequest;
+        ccExchangeRequestV2 _ccExchangeRequestV2;
         extendedCcExchangeRequest _extendedCcExchangeRequest;
         bytes32 _txId;
         bytes32[] _path;
         address _exchangeConnector;
     }
 
-    struct SwapToSolanaData {
+    struct SwapV2Data {
         address teleBTC;
         address wrappedNativeToken;
         uint256 currentChainId;
@@ -474,10 +475,15 @@ interface ICcExchangeRouter {
         uint destinationChainId
     );
 
-    function setBridgeTokenTickerMapping(
-        bytes8 _tokenTicker,
+    function setBridgeTokenIDMapping(
+        bytes8 _tokenID,
         uint256 _destinationChainId,
         bytes32 _destinationToken
+    ) external;
+
+    function setIntermediaryTokenIDMapping(
+        bytes8 _destinationTokenID,
+        bytes8 _intermediaryTokenID
     ) external;
 
     function wrapAndSwapV2(
