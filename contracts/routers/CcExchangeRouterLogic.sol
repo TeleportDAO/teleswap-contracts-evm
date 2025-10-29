@@ -267,11 +267,6 @@ contract CcExchangeRouterLogic is
             _txAndProof.blockNumber >= startingBlockNumber,
             "ExchangeRouter: old request"
         );
-        
-        // require(
-        //     _txAndProof.locktime == bytes4(0),
-        //     "ExchangeRouter: non-zero locktime"
-        // );
 
         // Check that the given script hash is Locker
         require(
@@ -373,11 +368,6 @@ contract CcExchangeRouterLogic is
             _txAndProof.blockNumber >= startingBlockNumber,
             "ExchangeRouter: old request"
         );
-        
-        // require(
-        //     _txAndProof.locktime == bytes4(0),
-        //     "ExchangeRouter: non-zero locktime"
-        // );
 
         // Check that the given script hash is Locker
         require(
@@ -803,7 +793,7 @@ contract CcExchangeRouterLogic is
                        ccExchangeRequests[_txId].fee +
                        extendedCcExchangeRequests[_txId].lockerFee;
 
-            // We don't take fees (except the locker fee) in the case of failed wrapAndSwap
+            // We don't take fees in the case of failed wrapAndSwap
             extendedCcExchangeRequests[_txId].remainedInputAmount += fees;
         }
     }
@@ -834,7 +824,6 @@ contract CcExchangeRouterLogic is
 
             // Send fees to the teleporter, treasury, third party, and locker
             _sendFees(_txId, _lockerLockingScript);
-
             
             if (_destRealChainId != chainId) { 
                 _sendTokenToOtherChainV2(
@@ -853,7 +842,7 @@ contract CcExchangeRouterLogic is
                        ccExchangeRequestsV2[_txId].fee +
                        extendedCcExchangeRequests[_txId].lockerFee;
 
-            // We don't take fees (except the locker fee) in the case of failed wrapAndSwap
+            // We don't take fees in the case of failed wrapAndSwap
             extendedCcExchangeRequests[_txId].remainedInputAmount += fees;
         }
     }

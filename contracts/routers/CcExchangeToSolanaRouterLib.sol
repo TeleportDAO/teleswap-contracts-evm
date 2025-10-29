@@ -16,7 +16,10 @@ library CcExchangeToSolanaRouterLib {
     // Constants
     uint256 constant MAX_BRIDGE_FEE = 10 ** 18;
 
-    // Events need to be re-defined here because we use them in the CcExchangeRouterLogic contract and libraries can not use interface events
+    /*
+        Events need to be re-defined here because we use them 
+        in the CcExchangeRouterLogic contract and libraries can not use interface events.
+    */
     event NewWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed user,
@@ -56,7 +59,10 @@ library CcExchangeToSolanaRouterLib {
             swapArguments._extendedCcExchangeRequest.remainedInputAmount
         );
 
-        // We don't need to calculate the minimum output amount because the minIntermediaryTokenAmount is already set in the request
+        /*
+            We don't need to calculate the minimum output amount because 
+            the minIntermediaryTokenAmount is already set in the request.
+        */
         // uint256 outputAmount = swapArguments._ccExchangeRequestV2.outputAmount;
         // uint256 bridgePercentageFee = swapArguments._extendedCcExchangeRequest.bridgePercentageFee;
         // uint256 minAmountOut = (outputAmount * MAX_BRIDGE_FEE) / (MAX_BRIDGE_FEE - bridgePercentageFee);
@@ -101,7 +107,10 @@ library CcExchangeToSolanaRouterLib {
         }
 
         // Emit success event
-        uint256 bridgeFee = (amounts[amounts.length - 1] * swapArguments._extendedCcExchangeRequest.bridgePercentageFee) / MAX_BRIDGE_FEE;
+        uint256 bridgeFee = (
+            amounts[amounts.length - 1] *
+            swapArguments._extendedCcExchangeRequest.bridgePercentageFee
+        ) / MAX_BRIDGE_FEE;
         uint256[5] memory fees = [
             swapArguments._ccExchangeRequestV2.fee,
             swapArguments._extendedCcExchangeRequest.lockerFee,

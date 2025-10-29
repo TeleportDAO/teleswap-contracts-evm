@@ -115,7 +115,7 @@ library CcExchangeRouterLib {
     function ccExchangeHelperV2(
         ICcExchangeRouter.TxAndProof memory _txAndProof,
         mapping(bytes32 => ICcExchangeRouter.ccExchangeRequestV2)
-            storage ccExchangeRequests,
+            storage ccExchangeRequestV2,
         mapping(bytes32 => ICcExchangeRouter.extendedCcExchangeRequest)
             storage extendedCcExchangeRequests,
         address _teleBTC,
@@ -132,7 +132,7 @@ library CcExchangeRouterLib {
 
         // Checks that the request has not been processed before
         require(
-            !ccExchangeRequests[txId].isUsed,
+            !ccExchangeRequestV2[txId].isUsed,
             "ExchangeRouterLib: already used"
         );
 
@@ -148,7 +148,7 @@ library CcExchangeRouterLib {
 
         /*  
             Exchange requests structure:
-            1) destChainId, 2 byte: max 65535 chains
+            1) destAssignedChainId, 2 byte: max 65535 chains
             2) appId, 1 byte: max 256 apps
             3) recipientDestAddress, 32 byte: Solana address, or zero padded EVM address
             4) networkFee, 3 byte
@@ -205,7 +205,7 @@ library CcExchangeRouterLib {
         request.isUsed = true;
 
         // Saves request
-        ccExchangeRequests[txId] = request;
+        ccExchangeRequestV2[txId] = request;
 
         require(
             _isConfirmed(_txAndProof, _relay, txId),
