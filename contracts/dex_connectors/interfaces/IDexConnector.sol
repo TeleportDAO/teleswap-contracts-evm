@@ -6,6 +6,39 @@ interface IDexConnector {
     // Events
     
     event Swap(address[] path, uint[] amounts, address receiver);
+    
+    event ExecuteSwap(
+        bool _swapToken0ToToken1,
+        uint256 _neededSwapAmount,
+        uint256 _receivedAmount
+    );
+
+    event SwapAndAddLiquidity(
+        AddLiquidityParams _params,
+        uint256 _remaining0,
+        uint256 _remaining1,
+        uint256 _tokenId
+    );
+
+    event FindOptimalSwapAmount(
+        uint256 _neededSwapAmount,
+        uint256 _newUserRatio,
+        uint256 _newTargetRatio
+    );
+
+    // Structs
+    
+    struct AddLiquidityParams {
+        uint256 tokenId; // 0 for new position, non-zero for existing position
+        address token0;
+        address token1;
+        uint24 feeTier;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        address user;
+    }
 
     // Read-only functions
 

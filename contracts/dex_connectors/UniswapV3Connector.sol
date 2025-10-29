@@ -2,6 +2,7 @@
 pragma solidity >=0.8.0;
 
 import "./DexConnectorStorage.sol";
+import "./interfaces/IPositionManager.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import "@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolState.sol";
@@ -16,98 +17,17 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 // import "hardhat/console.sol";
 
-// Simplified interface for Uniswap V3 Position Manager
-interface IPositionManager {
-    struct MintParams {
-        address token0;
-        address token1;
-        uint24 fee;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        address recipient;
-        uint256 deadline;
-    }
-
-    struct IncreaseLiquidityParams {
-        uint256 tokenId;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        uint256 deadline;
-    }
-
-    function mint(MintParams calldata params) external payable returns (
-        uint256 tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
-
-    function increaseLiquidity(IncreaseLiquidityParams calldata params) external payable returns (
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
-
-    function positions(uint256 tokenId) external view returns (
-        uint96 nonce,
-        address operator,
-        address token0,
-        address token1,
-        uint24 fee,
-        int24 tickLower,
-        int24 tickUpper,
-        uint128 liquidity,
-        uint256 feeGrowthInside0LastX128,
-        uint256 feeGrowthInside1LastX128,
-        uint128 tokensOwed0,
-        uint128 tokensOwed1
-    );
-}
-
 contract UniswapV3Connector is
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
     DexConnectorStorage
 {
+    using SafeERC20 for IERC20;
+
     modifier nonZeroAddress(address _address) {
         require(_address != address(0), "UniswapV3Connector: zero address");
         _;
     }
-
-    event ExecuteSwap(
-        bool _swapToken0ToToken1,
-        uint256 _neededSwapAmount,
-        uint256 _receivedAmount
-    );
-
-    event SwapAndAddLiquidity(
-        AddLiquidityParams _params,
-        uint256 _remaining0,
-        uint256 _remaining1,
-        uint256 _tokenId
-    );
-
-    event FindOptimalSwapAmount(
-        uint256 _neededSwapAmount,
-        uint256 _newUserRatio,
-        uint256 _newTargetRatio
-    );
-
-    event GetQuoteResult(
-        address tokenIn,
-        address tokenOut,
-        uint24 fee,
-        uint256 amountIn,
-        uint256 amountOut
-    );
-
-    using SafeERC20 for IERC20;
 
     /// @notice This contract is used for interacting with UniswapV3 contract
     /// @param _name Name of the underlying DEX
@@ -126,66 +46,7 @@ contract UniswapV3Connector is
         wrappedNativeToken = IPeripheryImmutableState(exchangeRouter).WETH9();
     }
 
-    function renounceOwnership() public virtual override onlyOwner {}
-
-    /// @notice Setter for wrapped native token
-    /// @dev Get address from exchange router
-    function setWrappedNativeToken() external override onlyOwner {
-        wrappedNativeToken = IPeripheryImmutableState(exchangeRouter).WETH9();
-    }
-
-    /// @notice Setter for exchange router
-    /// @dev Set address of liquidity pool factory from the exchange router
-    /// @param _exchangeRouter Address of the new exchange router contract
-    function setExchangeRouter(
-        address _exchangeRouter
-    ) external override nonZeroAddress(_exchangeRouter) onlyOwner {
-        exchangeRouter = _exchangeRouter;
-        liquidityPoolFactory = IPeripheryImmutableState(exchangeRouter).factory();
-    }
-
-    /// @notice Setter for liquidity pool factory
-    /// @dev Set address from exchange router
-    function setLiquidityPoolFactory() external override onlyOwner {
-        liquidityPoolFactory = IPeripheryImmutableState(exchangeRouter).factory();
-    }
-
-    /// @notice Setter for quoter
-    function setQuoter(address _quoterAddress) external onlyOwner {
-        quoterAddress = _quoterAddress;
-    }
-
-    /// @notice Setter for position manager
-    function setPositionManager(address _positionManager) external onlyOwner {
-        positionManager = _positionManager;
-    }
-
-    /// @notice Setter for fee tier
-    /// @dev We set the fee tier that is used for exchanging tokens
-    function setFeeTier(
-        address _firstToken,
-        address _secondToken,
-        uint24 _feeTier
-    ) external onlyOwner {
-        feeTier[_firstToken][_secondToken] = _feeTier;
-        feeTier[_secondToken][_firstToken] = _feeTier;
-    }
-
-    function setMaxIters(uint256 _maxIters) external onlyOwner {
-        MAX_ITERS = _maxIters;
-    }
-
-    function setTolerance(uint256 _tolerance) external onlyOwner {
-        TOLERANCE = _tolerance;
-    }
-
-    function setPrecision(uint256 _precision) external onlyOwner {
-        PRECISION = _precision;
-    }
-
-    function setMinGasReserve(uint256 _minGasReserve) external onlyOwner {
-        MIN_GAS_RESERVE = _minGasReserve;
-    }
+    // ============ Public Getters ============
 
     function convertedPath(
         address[] memory _path
@@ -291,84 +152,6 @@ contract UniswapV3Connector is
         }
     }
 
-    /// @notice Exchange input token for output token through exchange router
-    /// @dev Check exchange conditions before exchanging
-    ///      We assume that the input token is not WETH (it is teleBTC)
-    /// @param _inputAmount Amount of input token
-    /// @param _outputAmount Amount of output token
-    /// @param _path List of tokens that are used for exchanging
-    /// @param _to Receiver address
-    /// @param _deadline Deadline of exchanging tokens
-    /// @param _isFixedToken True if the input token amount is fixed
-    /// @return _result True if the exchange is successful
-    /// @return _amounts Amounts of tokens that are involved in exchanging
-    function swap(
-        uint256 _inputAmount,
-        uint256 _outputAmount,
-        address[] memory _path,
-        address _to,
-        uint256 _deadline,
-        bool _isFixedToken
-    )
-        external
-        override
-        nonReentrant
-        nonZeroAddress(_to)
-        returns (bool _result, uint[] memory _amounts)
-    {
-        uint neededInputAmount;
-        (_result, neededInputAmount) = _checkExchangeConditions(
-            _inputAmount,
-            _outputAmount,
-            _path,
-            _deadline,
-            _isFixedToken
-        );
-
-        if (_result) {
-            uint _amount;
-            _amounts = new uint[](2);
-            // Get tokens from user
-            IERC20(_path[0]).safeTransferFrom(
-                _msgSender(),
-                address(this),
-                neededInputAmount
-            );
-
-            // Give allowance to exchange router
-            IERC20(_path[0]).approve(exchangeRouter, neededInputAmount);
-
-            if (_isFixedToken == true) {
-                _amount = ISwapRouter(exchangeRouter).exactInput(
-                    _buildInputSwap(
-                        neededInputAmount,
-                        _outputAmount,
-                        _path,
-                        _to,
-                        _deadline
-                    )
-                );
-                _amounts[0] = neededInputAmount;
-                _amounts[1] = _amount;
-            }
-
-            if (_isFixedToken == false) {
-                _amount = ISwapRouter(exchangeRouter).exactOutput(
-                    _buildOutputSwap(
-                        neededInputAmount,
-                        _outputAmount,
-                        _path,
-                        _to,
-                        _deadline
-                    )
-                );
-                _amounts[0] = _amount;
-                _amounts[1] = _outputAmount;
-            }
-            emit Swap(_path, _amounts, _to);
-        }
-    }
-
     /// @notice Return true if the exchange path is valid
     /// @param _path List of tokens that are used for exchanging
     function isPathValid(
@@ -455,19 +238,169 @@ contract UniswapV3Connector is
         );
     }
 
-    struct AddLiquidityParams {
-        uint256 tokenId; // 0 for new position, non-zero for existing position
-        address token0;
-        address token1;
-        uint24 feeTier;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        address user;
+    // ============ Public Setters ============
+
+    /// @notice Setter for wrapped native token
+    /// @dev Get address from exchange router
+    function setWrappedNativeToken() external override onlyOwner {
+        wrappedNativeToken = IPeripheryImmutableState(exchangeRouter).WETH9();
     }
 
-    event Ratios(uint256 _userRatio, uint256 _rangeRatio, uint256 _totalAmount0, uint256 _totalAmount1);
+    /// @notice Setter for exchange router
+    /// @dev Set address of liquidity pool factory from the exchange router
+    /// @param _exchangeRouter Address of the new exchange router contract
+    function setExchangeRouter(
+        address _exchangeRouter
+    ) external override nonZeroAddress(_exchangeRouter) onlyOwner {
+        exchangeRouter = _exchangeRouter;
+        liquidityPoolFactory = IPeripheryImmutableState(exchangeRouter).factory();
+    }
+
+    /// @notice Setter for liquidity pool factory
+    /// @dev Set address from exchange router
+    function setLiquidityPoolFactory() external override onlyOwner {
+        liquidityPoolFactory = IPeripheryImmutableState(exchangeRouter).factory();
+    }
+
+    /// @notice Setter for quoter
+    function setQuoter(address _quoterAddress) external onlyOwner {
+        quoterAddress = _quoterAddress;
+    }
+
+    /// @notice Setter for position manager
+    function setPositionManager(address _positionManager) external onlyOwner {
+        positionManager = _positionManager;
+    }
+
+    /// @notice Setter for fee tier
+    /// @dev We set the fee tier that is used for exchanging tokens
+    function setFeeTier(
+        address _firstToken,
+        address _secondToken,
+        uint24 _feeTier
+    ) external onlyOwner {
+        feeTier[_firstToken][_secondToken] = _feeTier;
+        feeTier[_secondToken][_firstToken] = _feeTier;
+    }
+
+    function setMaxIters(uint256 _maxIters) external onlyOwner {
+        MAX_ITERS = _maxIters;
+    }
+
+    function setTolerance(uint256 _tolerance) external onlyOwner {
+        TOLERANCE = _tolerance;
+    }
+
+    function setPrecision(uint256 _precision) external onlyOwner {
+        PRECISION = _precision;
+    }
+
+    function setMinGasReserve(uint256 _minGasReserve) external onlyOwner {
+        MIN_GAS_RESERVE = _minGasReserve;
+    }
+
+    /// @notice Emergency withdrawal function to withdraw tokens by owner
+    function emergencyWithdraw(
+        address _token,
+        address _to,
+        uint256 _amount
+    ) external onlyOwner nonZeroAddress(_to) {
+        if (_token == address(0)) {
+            // Withdraw native token
+            uint256 balance = address(this).balance;
+            uint256 amount = _amount == 0 ? balance : _amount;
+            (bool success, ) = _to.call{value: amount}("");
+            require(success, "UniswapV3Connector: transfer failed");
+        } else {
+            // Withdraw ERC20 token
+            uint256 balance = IERC20(_token).balanceOf(address(this));
+            uint256 amount = _amount == 0 ? balance : _amount;
+            require(amount <= balance, "UniswapV3Connector: insufficient balance");
+            IERC20(_token).safeTransfer(_to, amount);
+        }
+    }
+
+    function renounceOwnership() public virtual override onlyOwner {}
+
+    // ============ Public Business Logic ============
+
+    /// @notice Exchange input token for output token through exchange router
+    /// @dev Check exchange conditions before exchanging
+    ///      We assume that the input token is not WETH (it is teleBTC)
+    /// @param _inputAmount Amount of input token
+    /// @param _outputAmount Amount of output token
+    /// @param _path List of tokens that are used for exchanging
+    /// @param _to Receiver address
+    /// @param _deadline Deadline of exchanging tokens
+    /// @param _isFixedToken True if the input token amount is fixed
+    /// @return _result True if the exchange is successful
+    /// @return _amounts Amounts of tokens that are involved in exchanging
+    function swap(
+        uint256 _inputAmount,
+        uint256 _outputAmount,
+        address[] memory _path,
+        address _to,
+        uint256 _deadline,
+        bool _isFixedToken
+    )
+        external
+        override
+        nonReentrant
+        nonZeroAddress(_to)
+        returns (bool _result, uint[] memory _amounts)
+    {
+        uint neededInputAmount;
+        (_result, neededInputAmount) = _checkExchangeConditions(
+            _inputAmount,
+            _outputAmount,
+            _path,
+            _deadline,
+            _isFixedToken
+        );
+
+        if (_result) {
+            uint _amount;
+            _amounts = new uint[](2);
+            // Get tokens from user
+            IERC20(_path[0]).safeTransferFrom(
+                _msgSender(),
+                address(this),
+                neededInputAmount
+            );
+
+            // Give allowance to exchange router
+            IERC20(_path[0]).approve(exchangeRouter, neededInputAmount);
+
+            if (_isFixedToken == true) {
+                _amount = ISwapRouter(exchangeRouter).exactInput(
+                    _buildInputSwap(
+                        neededInputAmount,
+                        _outputAmount,
+                        _path,
+                        _to,
+                        _deadline
+                    )
+                );
+                _amounts[0] = neededInputAmount;
+                _amounts[1] = _amount;
+            }
+
+            if (_isFixedToken == false) {
+                _amount = ISwapRouter(exchangeRouter).exactOutput(
+                    _buildOutputSwap(
+                        neededInputAmount,
+                        _outputAmount,
+                        _path,
+                        _to,
+                        _deadline
+                    )
+                );
+                _amounts[0] = _amount;
+                _amounts[1] = _outputAmount;
+            }
+            emit Swap(_path, _amounts, _to);
+        }
+    }
 
     /// @notice Zap tokens into a Uniswap V3 position in one call
     /// @dev This function performs the following steps:
@@ -554,8 +487,6 @@ contract UniswapV3Connector is
         } else {
             _userRatio = type(uint256).max;
         }
-
-        emit Ratios(_userRatio, _rangeRatio, _totalAmount0, _totalAmount1);
         
         // Execute swaps to achieve optimal token ratios for the position
         if (_userRatio > _rangeRatio) {
@@ -643,7 +574,8 @@ contract UniswapV3Connector is
         );
     }
 
-    // Private functions
+    // ============ Private Functions ============
+
     function _buildInputSwap(
         uint _amountIn,
         uint _amountOutMin,
@@ -943,12 +875,5 @@ contract UniswapV3Connector is
             // If the quote fails, set the amount out to 0
             amountOut = 0;
         }
-        emit GetQuoteResult(
-            tokenIn,
-            tokenOut,
-            fee,
-            amountIn,
-            amountOut
-        );
     }
 }
