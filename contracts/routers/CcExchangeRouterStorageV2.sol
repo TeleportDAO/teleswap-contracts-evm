@@ -58,7 +58,7 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
 
     mapping(address => bool) public isTeleporter;
 
-    mapping(bytes8 => mapping(uint => bytes32)) public bridgeTokenIDMapping;
-    mapping(bytes32 => ccExchangeRequestV2) internal ccExchangeRequestsV2;
-    mapping(bytes8 => bytes8) public intermediaryTokenIDMapping;
+    mapping(bytes8 => mapping(uint => bytes32)) public bridgeTokenIDMapping; // Token ID => Chain ID => Token address
+    mapping(bytes32 => ccExchangeRequestV2) internal ccExchangeRequestsV2; // txId => ccExchangeRequestV2
+    mapping(bytes8 => address) public intermediaryTokenMapping; // Token ID of the destination token => Intermediary token on the current chain
 }

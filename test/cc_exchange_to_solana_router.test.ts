@@ -451,15 +451,15 @@ describe("CcExchangeRouter", async function () {
         );
 
         // set intermediary token ID mapping for USDC on Solana (USDC.Sol -> USDC.Pol)
-        await ccExchangeRouter.setIntermediaryTokenIDMapping(
+        await ccExchangeRouter.setIntermediaryTokenMapping(
             "0x" + exchangeTokenOnSolanaAddress.slice(-16),
-            "0x" + exchangeToken.address.slice(-16)
+            exchangeToken.address
         );
 
         // SOL -> USDC.Pol
-        await ccExchangeRouter.setIntermediaryTokenIDMapping(
+        await ccExchangeRouter.setIntermediaryTokenMapping(
             "0x" + solanaAddressToBytes32(wrappedSOL).slice(-16),
-            "0x" + exchangeToken.address.slice(-16)
+            exchangeToken.address
         );
     });
 
@@ -963,7 +963,7 @@ describe("CcExchangeRouter", async function () {
                             .hexZeroPad(teleBTC.address, 32)
                             .toLowerCase(),
                         ethers.utils
-                            .hexZeroPad(exchangeToken.address, 32)
+                            .hexZeroPad(exchangeTokenOnSolanaAddress, 32)
                             .toLowerCase(),
                     ], // input and output tokens
                     [
@@ -1090,7 +1090,7 @@ describe("CcExchangeRouter", async function () {
                             .hexZeroPad(teleBTC.address, 32)
                             .toLowerCase(),
                         ethers.utils
-                            .hexZeroPad(exchangeToken.address, 32)
+                            .hexZeroPad(solanaAddressToBytes32(wrappedSOL), 32)
                             .toLowerCase(),
                     ], // input and output tokens
                     [

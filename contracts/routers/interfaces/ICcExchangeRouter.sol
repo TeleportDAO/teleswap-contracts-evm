@@ -36,11 +36,39 @@ interface ICcExchangeRouter {
     }
 
     /// @notice Structure for recording cross-chain exchange requests
+    /// @param appId that user wants to use (which DEX)
+    /// @param inputAmount Amount of locked BTC on source chain
+    /// @param outputAmount Amount of output token
+    /// @param isFixedToken True if amount of input token is fixed
+    /// @param recipientAddress Address of exchange recipient: Solana address, or zero padded EVM address
+    /// @param fee Amount of fee that is paid to Teleporter (for tx, relayer and teleporter fees)
+    /// @param isUsed True if tx has been submitted before
+    /// @param tokenIDs Token IDs of the input and output tokens
+    /// @param outputToken Output token on the destination chain (32 bytes)
+    /// @param deadline for exchanging tokens (not used anymore)
+    /// @param speed of the request (normal or instant)
+    struct ccExchangeRequestV2 {
+        uint appId;
+        uint inputAmount;
+        uint outputAmount; // min expected output amount
+        uint minIntermediaryTokenAmount;
+        bool isFixedToken;
+        bytes32 recipientAddress;
+        uint fee;
+        bool isUsed;
+        bytes8[2] tokenIDs;
+        bytes32 outputToken;
+        uint deadline;
+        uint speed;
+        uint destRealChainId;
+    }
+
+    /// @notice Structure for recording cross-chain exchange requests
     /// @param isRequestCompleted True if BTC to ETH exchange is processed successfully
     /// @param remainedInputAmount Amount of obtained TELEBTC on target chain
     /// @param bridgePercentageFee percentage of fee we have to give to across relayers to fill our request
     struct extendedCcExchangeRequest {
-        uint chainId;
+        uint destAssignedChainId;
         bool isRequestCompleted;
         uint remainedInputAmount;
         uint bridgePercentageFee;
@@ -102,13 +130,33 @@ interface ICcExchangeRouter {
 
     /// @notice Structure for passing arguments to swap function
     struct swapArguments {
-        uint destinationChainId;
+        uint destRealChainId;
         bytes _lockerLockingScript;
         ccExchangeRequest _ccExchangeRequest;
         extendedCcExchangeRequest _extendedCcExchangeRequest;
         bytes32 _txId;
         address[] _path;
         address _exchangeConnector;
+    }
+
+    /// @notice Structure for passing arguments to swap function
+    struct swapArgumentsV2 {
+        uint destRealChainId;
+        bytes _lockerLockingScript;
+        ccExchangeRequestV2 _ccExchangeRequestV2;
+        extendedCcExchangeRequest _extendedCcExchangeRequest;
+        bytes32 _txId;
+        address[] _path;
+        address _exchangeConnector;
+    }
+
+    /// @notice Structure for passing data to swapV2 function
+    struct SwapV2Data {
+        address teleBTC;
+        address wrappedNativeToken;
+        uint256 currentChainId;
+        address lockers;
+        address teleporter;
     }
 
     // Events
@@ -178,6 +226,32 @@ interface ICcExchangeRouter {
         uint destinationChainId
     );
 
+    /// @notice Emits when a cc exchange request gets done
+    /// @param lockerTargetAddress Address of Locker
+    /// @param user Exchange recipient address
+    /// @param inputAndOutputToken [inputToken, outputToken]
+    /// @param inputAndOutputAmount [inputAmount, outputAmount]
+    /// @param speed Speed of the request (normal or instant)
+    /// @param teleporter Address of teleporter who submitted the request
+    /// @param bitcoinTxId The transaction ID of request on Bitcoin 
+    /// @param appId Assigned application id to exchange
+    /// @param thirdPartyId Id of third party
+    /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]
+    /// @param destinationChainId chain id of destination 
+    event NewWrapAndSwapV2(
+        address lockerTargetAddress,
+        bytes32 indexed user,
+        bytes32[2] inputAndOutputToken,
+        uint[2] inputAndOutputAmount,
+        uint indexed speed,
+        address indexed teleporter,
+        bytes32 bitcoinTxId,
+        uint appId,
+        uint thirdPartyId,
+        uint[5] fees,
+        uint destinationChainId
+    );
+
     /// @notice Emits when a cc exchange request fails
     /// @dev We mint teleBTC and send it to the user
     /// @param lockerTargetAddress Address of Locker
@@ -195,6 +269,33 @@ interface ICcExchangeRouter {
         address lockerTargetAddress,
         address indexed recipientAddress,
         address[2] inputAndOutputToken,
+        uint[2] inputAndOutputAmount,
+        uint indexed speed,
+        address indexed teleporter,
+        bytes32 bitcoinTxId,
+        uint appId,
+        uint thirdPartyId,
+        uint[5] fees,
+        uint destinationChainId
+    );
+
+    /// @notice Emits when a cc exchange request fails
+    /// @dev We mint teleBTC and send it to the user
+    /// @param lockerTargetAddress Address of Locker
+    /// @param recipientAddress Exchange recipient address
+    /// @param inputAndOutputToken [inputToken, outputToken]
+    /// @param inputAndOutputAmount [inputAmount, outputAmount]
+    /// @param speed Speed of the request (normal or instant)
+    /// @param teleporter Address of teleporter who submitted the request
+    /// @param bitcoinTxId The transaction ID of request on Bitcoin 
+    /// @param appId Assigned application id to exchange
+    /// @param thirdPartyId Id of third party
+    /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]   
+    /// @param destinationChainId chain id of destination 
+    event FailedWrapAndSwapV2(
+        address lockerTargetAddress,
+        bytes32 indexed recipientAddress,
+        bytes32[2] inputAndOutputToken,
         uint[2] inputAndOutputAmount,
         uint indexed speed,
         address indexed teleporter,
@@ -375,115 +476,15 @@ interface ICcExchangeRouter {
         bytes calldata _lockerLockingScript
     ) external;
 
-    /// @notice Structure for recording cross-chain exchange requests
-    /// @param appId that user wants to use (which DEX)
-    /// @param inputAmount Amount of locked BTC on source chain
-    /// @param outputAmount Amount of output token
-    /// @param isFixedToken True if amount of input token is fixed
-    /// @param recipientAddress Address of exchange recipient: Solana address, or zero padded EVM address
-    /// @param fee Amount of fee that is paid to Teleporter (for tx, relayer and teleporter fees)
-    /// @param isUsed True if tx has been submitted before
-    /// @param tokenIDs Token IDs of the input and output tokens
-    /// @param path Exchange path from input token to output token
-    /// @param deadline for exchanging tokens (not used anymore)
-    /// @param speed of the request (normal or instant)
-    struct ccExchangeRequestV2 {
-        uint appId;
-        uint inputAmount;
-        uint outputAmount; // min expected output amount
-        uint minIntermediaryTokenAmount;
-        bool isFixedToken;
-        bytes32 recipientAddress;
-        uint fee;
-        bool isUsed;
-        bytes8[] tokenIDs;
-        bytes32[] path;
-        uint deadline;
-        uint speed;
-        uint destinationChain;
-    }
-
-    /// @notice Structure for passing arguments to swap function
-    struct swapArgumentsV2 {
-        uint destinationChainId;
-        bytes _lockerLockingScript;
-        ccExchangeRequestV2 _ccExchangeRequestV2;
-        extendedCcExchangeRequest _extendedCcExchangeRequest;
-        bytes32 _txId;
-        bytes32[] _path;
-        address _exchangeConnector;
-    }
-
-    struct SwapV2Data {
-        address teleBTC;
-        address wrappedNativeToken;
-        uint256 currentChainId;
-        address lockers;
-        address teleporter;
-    }
-
-    /// @notice Emits when a cc exchange request gets done
-    /// @param lockerTargetAddress Address of Locker
-    /// @param user Exchange recipient address
-    /// @param inputAndOutputToken [inputToken, outputToken]
-    /// @param inputAndOutputAmount [inputAmount, outputAmount]
-    /// @param speed Speed of the request (normal or instant)
-    /// @param teleporter Address of teleporter who submitted the request
-    /// @param bitcoinTxId The transaction ID of request on Bitcoin 
-    /// @param appId Assigned application id to exchange
-    /// @param thirdPartyId Id of third party
-    /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]
-    /// @param destinationChainId chain id of destination 
-    event NewWrapAndSwapV2(
-        address lockerTargetAddress,
-        bytes32 indexed user,
-        bytes32[2] inputAndOutputToken,
-        uint[2] inputAndOutputAmount,
-        uint indexed speed,
-        address indexed teleporter,
-        bytes32 bitcoinTxId,
-        uint appId,
-        uint thirdPartyId,
-        uint[5] fees,
-        uint destinationChainId
-    );
-
-    /// @notice Emits when a cc exchange request fails
-    /// @dev We mint teleBTC and send it to the user
-    /// @param lockerTargetAddress Address of Locker
-    /// @param recipientAddress Exchange recipient address
-    /// @param inputAndOutputToken [inputToken, outputToken]
-    /// @param inputAndOutputAmount [inputAmount, outputAmount]
-    /// @param speed Speed of the request (normal or instant)
-    /// @param teleporter Address of teleporter who submitted the request
-    /// @param bitcoinTxId The transaction ID of request on Bitcoin 
-    /// @param appId Assigned application id to exchange
-    /// @param thirdPartyId Id of third party
-    /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]   
-    /// @param destinationChainId chain id of destination 
-    event FailedWrapAndSwapV2(
-        address lockerTargetAddress,
-        bytes32 indexed recipientAddress,
-        bytes32[2] inputAndOutputToken,
-        uint[2] inputAndOutputAmount,
-        uint indexed speed,
-        address indexed teleporter,
-        bytes32 bitcoinTxId,
-        uint appId,
-        uint thirdPartyId,
-        uint[5] fees,
-        uint destinationChainId
-    );
-
     function setBridgeTokenIDMapping(
         bytes8 _tokenID,
-        uint256 _destinationChainId,
+        uint256 _destRealChainId,
         bytes32 _destinationToken
     ) external;
 
-    function setIntermediaryTokenIDMapping(
+    function setIntermediaryTokenMapping(
         bytes8 _destinationTokenID,
-        bytes8 _intermediaryTokenID
+        address _intermediaryToken
     ) external;
 
     function wrapAndSwapV2(
