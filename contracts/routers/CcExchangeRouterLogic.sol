@@ -9,7 +9,7 @@ import "../erc20/interfaces/ITeleBTC.sol";
 import "../erc20/WETH.sol";
 import "../lockersManager/interfaces/ILockersManager.sol";
 import "./CcExchangeRouterLib.sol";
-import "./CcExchangeToSolanaRouterLib.sol";
+import "./CcExchangeRouterLibExtension.sol";
 import "../routers/BurnRouterStorage.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -236,8 +236,8 @@ contract CcExchangeRouterLogic is
     }
 
     /// @notice Return the destination chain
-    function getDestChainId(uint256 chainId) public view returns (uint256) {
-        return chainIdMapping[chainId].destinationChain;
+    function getRealChainId(uint256 _assignedChainId) public view returns (uint256) {
+        return chainIdMapping[_assignedChainId].destinationChain;
     }
 
     /// @notice Process a wrapAndSwap request after checking its inclusion on Bitcoin
@@ -285,7 +285,7 @@ contract CcExchangeRouterLogic is
         );
 
         // Find destination chain Id (the final chain that user gets its token on it)
-        uint256 destRealChainId = getDestChainId(
+        uint256 destRealChainId = getRealChainId(
             extendedCcExchangeRequests[txId].destAssignedChainId
         );
 
@@ -394,7 +394,7 @@ contract CcExchangeRouterLogic is
 
 
         // Find destination chain Id (the final chain that user gets its token on it)
-        uint256 destRealChainId = getDestChainId(
+        uint256 destRealChainId = getRealChainId(
             extendedCcExchangeRequests[txId].destAssignedChainId
         );
 
@@ -698,10 +698,10 @@ contract CcExchangeRouterLogic is
             acrossAdmin, // depositor
             _user, // recipient
             _token, // inputToken
-            bridgeTokenMapping[_token][getDestChainId(_destAssignedChainId)], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
+            bridgeTokenMapping[_token][getRealChainId(_destAssignedChainId)], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
             _amount * (1e18 - _bridgePercentageFee) / 1e18, // outputAmount
-            getDestChainId(_destAssignedChainId), // destinationChainId
+            getRealChainId(_destAssignedChainId), // destinationChainId
             address(0), // exclusiveRelayer (none for now)
             uint32(block.timestamp), // quoteTimestamp
             uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
@@ -972,7 +972,7 @@ contract CcExchangeRouterLogic is
     function _swapV2(
         ICcExchangeRouter.swapArgumentsV2 memory swapArguments
     ) private returns (bool result, uint256[] memory amounts) {
-        (result, amounts) = CcExchangeToSolanaRouterLib.swapV2(
+        (result, amounts) = CcExchangeRouterLibExtension.swapV2(
             swapArguments,
             ICcExchangeRouter.SwapV2Data(
                 teleBTC,

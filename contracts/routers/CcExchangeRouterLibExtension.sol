@@ -10,7 +10,7 @@ import "../erc20/WETH.sol";
 import "../lockersManager/interfaces/ILockersManager.sol";
 import "../routers/CcExchangeRouterLib.sol";
 
-library CcExchangeToSolanaRouterLib {
+library CcExchangeRouterLibExtension {
     using Address for address;
 
     // Constants

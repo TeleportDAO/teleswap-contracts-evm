@@ -32,7 +32,7 @@ import { LockersManagerLib__factory } from "../src/types/factories/LockersManage
 
 import { CcExchangeRouterLib } from "../src/types/CcExchangeRouterLib";
 import { CcExchangeRouterLib__factory } from "../src/types/factories/CcExchangeRouterLib__factory";
-import { CcExchangeToSolanaRouterLib } from "../src/types/CcExchangeToSolanaRouterLib";
+import { CcExchangeRouterLibExtension } from "../src/types/CcExchangeRouterLibExtension";
 import { CcExchangeToSolanaRouterLib__factory } from "../src/types/factories/CcExchangeToSolanaRouterLib__factory";
 
 import { TeleBTCLogic } from "../src/types/TeleBTCLogic";
@@ -298,13 +298,13 @@ describe("CcExchangeRouter", async function () {
         let linkLibraryAddresses: CcExchangeRouterLogicLibraryAddresses;
 
         let ccExchangeRouterLib = await deployCcExchangeRouterLib();
-        let ccExchangeToSolanaRouterLib =
+        let ccExchangeRouterLibExtension =
             await deployCcExchangeToSolanaRouterLib();
         linkLibraryAddresses = {
             "contracts/routers/CcExchangeRouterLib.sol:CcExchangeRouterLib":
                 ccExchangeRouterLib.address,
-            "contracts/routers/CcExchangeToSolanaRouterLib.sol:CcExchangeToSolanaRouterLib":
-                ccExchangeToSolanaRouterLib.address,
+            "contracts/routers/CcExchangeRouterLibExtension.sol:CcExchangeRouterLibExtension":
+                ccExchangeRouterLibExtension.address,
         };
 
         const ccExchangeRouterLogicFactory = new CcExchangeRouterLogic__factory(
@@ -438,7 +438,7 @@ describe("CcExchangeRouter", async function () {
 
     const deployCcExchangeToSolanaRouterLib = async (
         _signer?: Signer
-    ): Promise<CcExchangeToSolanaRouterLib> => {
+    ): Promise<CcExchangeRouterLibExtension> => {
         const CcExchangeToSolanaRouterFactory =
             new CcExchangeToSolanaRouterLib__factory(_signer || deployer);
 

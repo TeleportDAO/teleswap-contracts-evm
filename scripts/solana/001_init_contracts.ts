@@ -35,8 +35,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         "CcExchangeRouterProxy"
     );
     const ccExchangeRouterLib = await deployments.get("CcExchangeRouterLib");
-    const ccExchangeToSolanaRouterLib = await deployments.get(
-        "CcExchangeToSolanaRouterLib"
+    const ccExchangeRouterLibExtension = await deployments.get(
+        "CcExchangeRouterLibExtension"
     );
 
     const minTSTLockedAmount = 0;
@@ -249,8 +249,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         {
             libraries: {
                 CcExchangeRouterLib: ccExchangeRouterLib.address,
-                CcExchangeToSolanaRouterLib:
-                    ccExchangeToSolanaRouterLib.address,
+                CcExchangeRouterLibExtension:
+                    ccExchangeRouterLibExtension.address,
             },
         }
     );

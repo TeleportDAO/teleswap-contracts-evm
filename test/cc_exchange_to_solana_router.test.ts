@@ -48,7 +48,7 @@ import { BurnRouterLib__factory } from "../src/types/factories/BurnRouterLib__fa
 import { BurnRouterProxy__factory } from "../src/types/factories/BurnRouterProxy__factory";
 import { BurnRouterLogic__factory } from "../src/types/factories/BurnRouterLogic__factory";
 import { BurnRouterLogicLibraryAddresses } from "../src/types/factories/BurnRouterLogic__factory";
-import { CcExchangeToSolanaRouterLib } from "../src/types/CcExchangeToSolanaRouterLib";
+import { CcExchangeRouterLibExtension } from "../src/types/CcExchangeRouterLibExtension";
 import { CcExchangeToSolanaRouterLib__factory } from "../src/types/factories/CcExchangeToSolanaRouterLib__factory";
 
 import { takeSnapshot, revertProvider } from "./block_utils";
@@ -352,13 +352,13 @@ describe("CcExchangeRouter", async function () {
         let linkLibraryAddresses: CcExchangeRouterLogicLibraryAddresses;
 
         let ccExchangeRouterLib = await deployCcExchangeRouterLib();
-        let ccExchangeToSolanaRouterLib =
+        let ccExchangeRouterLibExtension =
             await deployCcExchangeToSolanaRouterLib();
         linkLibraryAddresses = {
             "contracts/routers/CcExchangeRouterLib.sol:CcExchangeRouterLib":
                 ccExchangeRouterLib.address,
-            "contracts/routers/CcExchangeToSolanaRouterLib.sol:CcExchangeToSolanaRouterLib":
-                ccExchangeToSolanaRouterLib.address,
+            "contracts/routers/CcExchangeRouterLibExtension.sol:CcExchangeRouterLibExtension":
+                ccExchangeRouterLibExtension.address,
         };
 
         const ccExchangeRouterLogicFactory = new CcExchangeRouterLogic__factory(
@@ -543,7 +543,7 @@ describe("CcExchangeRouter", async function () {
 
     const deployCcExchangeToSolanaRouterLib = async (
         _signer?: Signer
-    ): Promise<CcExchangeToSolanaRouterLib> => {
+    ): Promise<CcExchangeRouterLibExtension> => {
         const CcExchangeToSolanaRouterFactory =
             new CcExchangeToSolanaRouterLib__factory(_signer || deployer);
 
