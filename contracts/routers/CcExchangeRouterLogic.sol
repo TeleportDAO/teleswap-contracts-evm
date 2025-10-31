@@ -404,7 +404,8 @@ contract CcExchangeRouterLogic is
         );
 
         // Saving the output token on the destination chain for the request
-        ccExchangeRequestsV2[txId].outputToken = bridgeTokenIDMapping[ccExchangeRequestsV2[txId].tokenIDs[1]][destRealChainId];
+        ccExchangeRequestsV2[txId].outputToken = 
+            bridgeTokenIDMapping[ccExchangeRequestsV2[txId].tokenIDs[1]][destRealChainId];
 
         address _exchangeConnector = exchangeConnector[ccExchangeRequestsV2[txId].appId];
         require(
@@ -729,21 +730,41 @@ contract CcExchangeRouterLogic is
         uint256 _bridgePercentageFee
     ) private {
         IERC20(_token).approve(across, _amount);
-        bytes memory callData = abi.encodeWithSignature(
-            "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
-            bytes32(uint256(uint160(acrossAdmin))),
-            _user,
-            bytes32(uint256(uint160(_token))),
-            _outputToken,
-            _amount,
-            _amount * (1e18 - _bridgePercentageFee) / 1e18,
-            _destRealChainId,
-            bytes32(0),
-            uint32(block.timestamp),
-            uint32(block.timestamp + 4 hours),
-            0,
-            bytes("")
-        );
+        bytes memory callData;
+
+        if (_destRealChainId == 34268394551451) { // Solana
+            callData = abi.encodeWithSignature(
+                "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
+                bytes32(uint256(uint160(acrossAdmin))),
+                _user,
+                bytes32(uint256(uint160(_token))),
+                _outputToken,
+                _amount,
+                _amount * (1e18 - _bridgePercentageFee) / 1e18,
+                _destRealChainId,
+                bytes32(0),
+                uint32(block.timestamp),
+                uint32(block.timestamp + 4 hours),
+                0,
+                bytes("")
+            );
+        } else { // Other chains
+            callData = abi.encodeWithSignature(
+                "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
+                acrossAdmin, // depositor
+                address(uint160(uint256(_user))), // recipient (use only last 20 bytes)
+                _token, // inputToken
+                address(uint160(uint256(_outputToken))), // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
+                _amount, // inputAmount
+                _amount * (1e18 - _bridgePercentageFee) / 1e18, // outputAmount
+                _destRealChainId,
+                address(0), // exclusiveRelayer (none for now)
+                uint32(block.timestamp), // quoteTimestamp
+                uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+                0, // exclusivityDeadline
+                bytes("") // message (empty bytes)
+            );
+        }
 
         bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
         Address.functionCall(across, finalCallData);
@@ -819,13 +840,18 @@ contract CcExchangeRouterLogic is
         );
 
         if (result) {
+            /* 
+                Note: If the destination chain is the current chain, 
+                tokens have already been sent to the user
+            */
+
             // If swap was successful, user will get tokens on destination chain
             extendedCcExchangeRequests[_txId].isRequestCompleted = true;
 
             // Send fees to the teleporter, treasury, third party, and locker
             _sendFees(_txId, _lockerLockingScript);
             
-            if (_destRealChainId != chainId) { 
+            if (_destRealChainId != chainId) {
                 _sendTokenToOtherChainV2(
                     _destRealChainId,
                     _path[_path.length - 1],

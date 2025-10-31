@@ -23,8 +23,8 @@ library CcExchangeRouterLibExtension {
     event NewWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed user,
-        bytes32[2] inputAndOutputToken,
-        uint[2] inputAndOutputAmount,
+        bytes32[3] inputIntermediaryOutputToken,
+        uint[3] inputIntermediaryOutputAmount,
         uint indexed speed,
         address indexed teleporter,
         bytes32 bitcoinTxId,
@@ -37,8 +37,8 @@ library CcExchangeRouterLibExtension {
     event FailedWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed recipientAddress,
-        bytes32[2] inputAndOutputToken,
-        uint[2] inputAndOutputAmount,
+        bytes32[3] inputIntermediaryOutputToken,
+        uint[3] inputIntermediaryOutputAmount,
         uint indexed speed,
         address indexed teleporter,
         bytes32 bitcoinTxId,
@@ -62,10 +62,11 @@ library CcExchangeRouterLibExtension {
         /*
             We don't need to calculate the minimum output amount because 
             the minIntermediaryTokenAmount is already set in the request.
+            
+            uint256 outputAmount = swapArguments._ccExchangeRequestV2.outputAmount;
+            uint256 bridgePercentageFee = swapArguments._extendedCcExchangeRequest.bridgePercentageFee;
+            uint256 minAmountOut = (outputAmount * MAX_BRIDGE_FEE) / (MAX_BRIDGE_FEE - bridgePercentageFee);
         */
-        // uint256 outputAmount = swapArguments._ccExchangeRequestV2.outputAmount;
-        // uint256 bridgePercentageFee = swapArguments._extendedCcExchangeRequest.bridgePercentageFee;
-        // uint256 minAmountOut = (outputAmount * MAX_BRIDGE_FEE) / (MAX_BRIDGE_FEE - bridgePercentageFee);
         
         (result, amounts) = IDexConnector(swapArguments._exchangeConnector)
             .swap(
@@ -122,8 +123,16 @@ library CcExchangeRouterLibExtension {
         emit NewWrapAndSwapV2(
             ILockersManager(_swapV2Data.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
             swapArguments._ccExchangeRequestV2.recipientAddress,
-            [bytes32(uint256(uint160(swapArguments._path[0]))), swapArguments._ccExchangeRequestV2.outputToken],
-            [amounts[0], amounts[amounts.length - 1] - bridgeFee],
+            [
+                bytes32(uint256(uint160(swapArguments._path[0]))), // Input token
+                bytes32(uint256(uint160(swapArguments._path[swapArguments._path.length - 1]))), // Intermediary token
+                swapArguments._ccExchangeRequestV2.outputToken // Output token
+            ],
+            [
+                amounts[0], // Input amount
+                amounts[amounts.length - 1], // Intermediary amount
+                amounts[amounts.length - 1] - bridgeFee // Output amount
+            ],
             swapArguments._ccExchangeRequestV2.speed,
             _swapV2Data.teleporter,
             swapArguments._txId,
@@ -144,8 +153,16 @@ library CcExchangeRouterLibExtension {
         emit FailedWrapAndSwapV2(
             ILockersManager(_swapV2Data.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
             swapArguments._ccExchangeRequestV2.recipientAddress,
-            [bytes32(uint256(uint160(swapArguments._path[0]))), swapArguments._ccExchangeRequestV2.outputToken],
-            [swapArguments._extendedCcExchangeRequest.remainedInputAmount, 0],
+            [
+                bytes32(uint256(uint160(swapArguments._path[0]))), // Input token
+                bytes32(uint256(uint160(swapArguments._path[swapArguments._path.length - 1]))), // Intermediary token
+                swapArguments._ccExchangeRequestV2.outputToken // Output token
+            ],
+            [
+                swapArguments._extendedCcExchangeRequest.remainedInputAmount, // Input amount
+                0, // Intermediary amount
+                0 // Output amount
+            ],
             swapArguments._ccExchangeRequestV2.speed,
             _swapV2Data.teleporter,
             swapArguments._txId,
