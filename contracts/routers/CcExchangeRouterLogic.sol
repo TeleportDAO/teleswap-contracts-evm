@@ -303,7 +303,7 @@ contract CcExchangeRouterLogic is
         );
 
         // Find remained amount after reducing fees
-        _mintAndCalculateFees(_lockerLockingScript, txId);
+        _mintAndCalculateFees(_lockerLockingScript, txId, false);
 
         if (request.speed == 1) { // Handle fast request
             /* 
@@ -413,7 +413,7 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: invalid appId"
         );
 
-        _mintAndCalculateFees(_lockerLockingScript, txId);
+        _mintAndCalculateFees(_lockerLockingScript, txId, true);
 
         // todo: fast request is not supported for Solana requests
         // if (request.speed == 1) { // Handle fast request
@@ -1013,13 +1013,15 @@ contract CcExchangeRouterLogic is
     /// @notice Mints teleBTC by calling lockers contract
     /// @param _lockerLockingScript Locker's locking script
     /// @param _txId The transaction ID of the request
+    /// @param _isV2 Whether the request is a v2 request
     function _mintAndCalculateFees(
         bytes memory _lockerLockingScript,
-        bytes32 _txId
+        bytes32 _txId,
+        bool _isV2
     ) private {
         uint256 inputAmount = 0;
         uint256 networkFee = 0;
-        if (extendedCcExchangeRequests[_txId].destAssignedChainId == 101) {
+        if (_isV2) {
             inputAmount = ccExchangeRequestsV2[_txId].inputAmount;
             networkFee = ccExchangeRequestsV2[_txId].fee;
         } else {
