@@ -194,6 +194,19 @@ interface ICcExchangeRouter {
         uint bridgePercentageFee
     );
 
+    event RequestFilledV2(
+        address filler,
+        bytes32 user,
+        address lockerTargetAddress,
+        bytes32 bitcoinTxId,
+        address[2] inputAndOutputToken,
+        uint fillAmount,
+        uint finalAmount,
+        uint userRequestedAmount,
+        uint destinationChainId,
+        uint bridgePercentageFee
+    );
+
     event FillerRefunded(
         address filler,
         bytes32 bitcoinTxId,
@@ -229,8 +242,8 @@ interface ICcExchangeRouter {
     /// @notice Emits when a cc exchange request gets done
     /// @param lockerTargetAddress Address of Locker
     /// @param user Exchange recipient address
-    /// @param inputAndOutputToken [inputToken, outputToken]
-    /// @param inputAndOutputAmount [inputAmount, outputAmount]
+    /// @param inputIntermediaryOutputToken [inputToken, outputToken]
+    /// @param inputIntermediaryOutputAmount [inputAmount, outputAmount]
     /// @param speed Speed of the request (normal or instant)
     /// @param teleporter Address of teleporter who submitted the request
     /// @param bitcoinTxId The transaction ID of request on Bitcoin 
@@ -241,8 +254,8 @@ interface ICcExchangeRouter {
     event NewWrapAndSwapV2(
         address lockerTargetAddress,
         bytes32 indexed user,
-        bytes32[2] inputAndOutputToken,
-        uint[2] inputAndOutputAmount,
+        bytes32[3] inputIntermediaryOutputToken,
+        uint[3] inputIntermediaryOutputAmount,
         uint indexed speed,
         address indexed teleporter,
         bytes32 bitcoinTxId,

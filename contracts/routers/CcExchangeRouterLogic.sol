@@ -415,28 +415,31 @@ contract CcExchangeRouterLogic is
 
         _mintAndCalculateFees(_lockerLockingScript, txId, true);
 
-        // todo: fast request is not supported for Solana requests
+        // ccExchangeRequestV2 memory request = ccExchangeRequestsV2[txId];
         // if (request.speed == 1) { // Handle fast request
         //     /* 
         //         If there was a filler who filled the request with the same parameters,
         //         we will send the TeleBTC to the filler
         //     */
-        //     address filler = fillerAddress[txId][request.recipientAddress][
-        //         request.path[request.path.length - 1]
-        //     ][request.outputAmount][destinationChainId][extendedCcExchangeRequests[txId].bridgePercentageFee];
+        //     address filler =
+        //         fillerAddressV2[txId][request.recipientAddress]
+        //             [intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
+        //             [request.outputAmount]
+        //             [destRealChainId]
+        //             [extendedCcExchangeRequests[txId].bridgePercentageFee];
 
         //     if (filler != address(0)) { // Request has been filled
         //         // Send TeleBTC to filler who filled the request
-        //         _sendTeleBtcToFiller(
+        //         _sendTeleBtcToFillerV2(
         //             filler,
         //             txId,
         //             _lockerLockingScript,
-        //             destinationChainId
+        //             destRealChainId
         //         );
         //         return true;
         //     } else { // Request has not been filled
         //         // Treat it as a normal request
-        //         ccExchangeRequests[txId].speed = 0;
+        //         ccExchangeRequestsV2[txId].speed = 0;
         //     }
         // }
 
@@ -569,6 +572,133 @@ contract CcExchangeRouterLogic is
         );
     }
 
+    // /// @notice Filler fills an upcoming exchange request
+    // /// @param _txId Bitcoin request that filler wants to fill
+    // /// @param _intermediaryToken Address of exchange token in the request
+    // /// @param _fillAmount Amount that filler uses to fill the request (this is not necessarily the amount that user receives)
+    // /// @param _userRequestedAmount Amount that user requested
+    // /// @param _destRealChainId Destination chain id
+    // /// @param _bridgePercentageFee Bridge percentage fee
+    // function fillTxV2(
+    //     bytes32 _txId,
+    //     bytes32 _recipient,
+    //     address _intermediaryToken,
+    //     bytes32 _outputToken,
+    //     uint _fillAmount,
+    //     uint _userRequestedAmount,
+    //     uint _destRealChainId,
+    //     uint _bridgePercentageFee,
+    //     bytes memory _lockerLockingScript
+    // ) external payable nonReentrant {
+    //     // Checks that the request has not been processed before normally
+    //     require(
+    //         !ccExchangeRequestsV2[_txId].isUsed,
+    //         "ExchangeRouter: already processed"
+    //     );
+
+    //     require(
+    //         _intermediaryToken == intermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
+    //         "ExchangeRouter: invalid intermediary token"
+    //     );
+
+    //     // Calculate the final amount that user will receive
+    //     uint _finalAmount = _fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
+
+    //     // Check that the final amount is greater than or equal to the user requested amount
+    //     require(_finalAmount >= _userRequestedAmount, "ExchangeRouter: insufficient fill amount");
+
+    //     /* 
+    //         If another filler has filled the request with the same parameters,
+    //         the request will be rejected
+    //     */
+    //     require(
+    //         fillerAddressV2[_txId]
+    //             [_recipient]
+    //             [_intermediaryToken]
+    //             [_userRequestedAmount]
+    //             [_destRealChainId]
+    //             [_bridgePercentageFee] == address(0),
+    //         "ExchangeRouter: already filled"
+    //     );
+
+    //     // Record the filler address
+    //     fillerAddressV2[_txId]
+    //         [_recipient]
+    //         [_intermediaryToken]
+    //         [_userRequestedAmount]
+    //         [_destRealChainId]
+    //         [_bridgePercentageFee] = _msgSender();
+
+    //     // Record the final amount that user will receive
+    //     finalAmount[_txId] = _finalAmount;
+
+    //     if (_destRealChainId == chainId) { // Requests that belongs to the current chain
+    //         if (_intermediaryToken == wrappedNativeToken) {
+    //             // Transfer the token from the filler to the contract
+    //             require(
+    //                 IERC20(_intermediaryToken).transferFrom(
+    //                     _msgSender(),
+    //                     address(this),
+    //                     _fillAmount
+    //                 ),
+    //                 "ExchangeRouter: no allowance"
+    //             );
+                
+    //             // Unwrap the wrapped native token
+    //             WETH(wrappedNativeToken).withdraw(_fillAmount);
+
+    //             // Send native token to the user
+    //             Address.sendValue(
+    //                 payable(
+    //                     address(uint160(uint256(_recipient)))
+    //                 ),
+    //                 _fillAmount
+    //             );
+    //         } else {
+    //             // Transfer the token from the filler to the recipient
+    //             require(
+    //                 IERC20(_intermediaryToken).transferFrom(
+    //                     _msgSender(),
+    //                     address(uint160(uint256(_recipient))),
+    //                     _fillAmount
+    //                 ),
+    //                 "ExchangeRouter: no allowance"
+    //             );
+    //         }
+    //     } else { // Requests that belongs to the other chain
+    //         // Transfer the token from the filler to the contract
+    //         require(
+    //             IERC20(_intermediaryToken).transferFrom(
+    //                 _msgSender(),
+    //                 address(this),
+    //                 _fillAmount
+    //             ),
+    //             "ExchangeRouter: no allowance"
+    //         );
+    //         _sendTokenToOtherChainV2(
+    //             _destRealChainId,
+    //             _intermediaryToken,
+    //             _outputToken,
+    //             _fillAmount,
+    //             _recipient,
+    //             _bridgePercentageFee
+    //         );
+    //     }
+
+    //     emit RequestFilledV2(
+    //         _msgSender(),
+    //         _recipient,
+    //         ILockersManager(lockers).getLockerTargetAddress(_lockerLockingScript),
+    //         _txId,
+    //         [teleBTC, _intermediaryToken],
+    //         _fillAmount,
+    //         _finalAmount,
+    //         _userRequestedAmount,
+    //         _destRealChainId,
+    //         _bridgePercentageFee
+    //     );
+    // }
+
     function refundByOwnerOrAdmin(
         bytes32 _txId,
         uint8 _scriptType,
@@ -685,6 +815,67 @@ contract CcExchangeRouterLogic is
         );
     }
 
+    // function _sendTeleBtcToFillerV2(
+    //     address _filler,
+    //     bytes32 _txId,
+    //     bytes memory _lockerLockingScript,
+    //     uint256 _destinationChainId
+    // ) private {
+    //     // Send fees to the teleporter, treasury, third party, and locker
+    //     _sendFees(_txId, _lockerLockingScript);
+
+    //     ccExchangeRequestV2 memory request = ccExchangeRequestsV2[_txId];
+    //     extendedCcExchangeRequest
+    //         memory extendedRequest = extendedCcExchangeRequests[_txId];
+
+    //     // Mark the request as completed
+    //     extendedCcExchangeRequests[_txId].isRequestCompleted = true;
+
+    //     // Send TeleBTC to filler
+    //     ITeleBTC(teleBTC).transfer(
+    //         _filler,
+    //         extendedRequest.remainedInputAmount
+    //     );
+
+    //     uint256[5] memory fees = [
+    //         request.fee,
+    //         extendedRequest.lockerFee,
+    //         extendedRequest.protocolFee,
+    //         extendedRequest.thirdPartyFee,
+    //         extendedRequest.bridgePercentageFee
+    //     ];
+
+    //     emit NewWrapAndSwapV2(
+    //         ILockersManager(lockers).getLockerTargetAddress(
+    //             _lockerLockingScript
+    //         ),
+    //         request.recipientAddress,
+    //         [
+    //             bytes32(uint256(uint160(teleBTC))), // Input token
+    //             bytes32(uint256(uint160(intermediaryTokenMapping[request.tokenIDs[1]]))), // Intermediary token
+    //             request.outputToken // Output token
+    //         ],
+    //         [
+    //             extendedRequest.remainedInputAmount, // Input amount
+    //             request.minIntermediaryTokenAmount, // Intermediary amount
+    //             finalAmount[_txId] // Output amount
+    //         ],
+    //         1,
+    //         _msgSender(),
+    //         _txId,
+    //         request.appId,
+    //         extendedRequest.thirdParty,
+    //         fees,
+    //         _destinationChainId
+    //     );
+
+    //     emit FillerRefunded(
+    //         _filler,
+    //         _txId,
+    //         extendedRequest.remainedInputAmount
+    //     );
+    // }
+
     /// @notice Send tokens to the destination using Across
     function _sendTokenToOtherChain(
         uint256 _destAssignedChainId,
@@ -723,13 +914,13 @@ contract CcExchangeRouterLogic is
     /// @notice Send tokens to Solana using Across
     function _sendTokenToOtherChainV2(
         uint256 _destRealChainId,
-        address _token,
+        address _intermediaryToken,
         bytes32 _outputToken,
         uint256 _amount,
         bytes32 _user,
         uint256 _bridgePercentageFee
     ) private {
-        IERC20(_token).approve(across, _amount);
+        IERC20(_intermediaryToken).approve(across, _amount);
         bytes memory callData;
 
         if (_destRealChainId == 34268394551451) { // Solana
@@ -737,7 +928,7 @@ contract CcExchangeRouterLogic is
                 "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
                 bytes32(uint256(uint160(acrossAdmin))),
                 _user,
-                bytes32(uint256(uint160(_token))),
+                bytes32(uint256(uint160(_intermediaryToken))),
                 _outputToken,
                 _amount,
                 _amount * (1e18 - _bridgePercentageFee) / 1e18,
@@ -753,7 +944,7 @@ contract CcExchangeRouterLogic is
                 "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
                 acrossAdmin, // depositor
                 address(uint160(uint256(_user))), // recipient (use only last 20 bytes)
-                _token, // inputToken
+                _intermediaryToken, // inputToken
                 address(uint160(uint256(_outputToken))), // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
                 _amount, // inputAmount
                 _amount * (1e18 - _bridgePercentageFee) / 1e18, // outputAmount

@@ -40,8 +40,17 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     mapping(uint => address) public thirdPartyAddress;
 
     // New variables (filler)
-    mapping(bytes32 => mapping(address => mapping(address => mapping(uint => mapping(uint => mapping(uint => address))))))
-        public fillerAddress;
+    mapping(bytes32 => mapping(
+        address => mapping(
+            address => mapping(
+                uint => mapping(
+                    uint => mapping(
+                        uint => address
+                    )
+                )
+            )
+        )
+    )) public fillerAddress;
     // ^ [txId][recipient][token][amount][chainId][bridgePercentageFee] to filler address
     uint constant REGULAR_SLIPPAGE = 1500; // Not used
 
@@ -61,4 +70,17 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     mapping(bytes8 => mapping(uint => bytes32)) public bridgeTokenIDMapping; // Token ID => Chain ID => Token address
     mapping(bytes32 => ccExchangeRequestV2) internal ccExchangeRequestsV2; // txId => ccExchangeRequestV2
     mapping(bytes8 => address) public intermediaryTokenMapping; // Token ID of the destination token => Intermediary token on the current chain
+
+    mapping(bytes32 => mapping(
+        bytes32 => mapping(
+            address => mapping(
+                uint => mapping(
+                    uint => mapping(
+                        uint => address
+                    )
+                )
+            )
+        )
+    )) public fillerAddressV2;
+    // ^ [txId][recipient][token][amount][chainId][bridgePercentageFee] to filler address
 }
