@@ -113,7 +113,7 @@ library CcExchangeRouterLibExtension {
             swapArguments._extendedCcExchangeRequest.bridgePercentageFee
         ) / MAX_BRIDGE_FEE;
         uint256[5] memory fees = [
-            swapArguments._ccExchangeRequestV2.fee,
+            swapArguments._ccExchangeRequestV2.networkFee,
             swapArguments._extendedCcExchangeRequest.lockerFee,
             swapArguments._extendedCcExchangeRequest.protocolFee,
             swapArguments._extendedCcExchangeRequest.thirdPartyFee,
