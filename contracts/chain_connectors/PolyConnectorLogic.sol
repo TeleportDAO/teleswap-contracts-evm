@@ -112,15 +112,21 @@ contract PolyConnectorLogic is
         // Check the msg origin
         require(msg.sender == across, "PolygonConnectorLogic: not across");
 
-        // Determine the function call
-        (string memory purpose, uint256 uniqueCounter, uint256 chainId) = abi
-            .decode(_message, (string, uint256, uint256));
+        // Extract purpose, uniqueCounter and chainId
+        (
+            string memory purpose, 
+            uint256 uniqueCounter,
+            uint256 chainId
+        ) = _extractPurposeAndUniqueCounterAndChainId(_message);
+        
         emit MsgReceived(purpose, uniqueCounter, chainId, _message);
 
         if (_isEqualString(purpose, "swapAndUnwrap")) {
             _swapAndUnwrap(_amount, _message, _tokenSent);
         } else if (_isEqualString(purpose, "swapAndUnwrapRune")) {
             _swapAndUnwrapRune(_amount, _message, _tokenSent);
+        } else if (_isEqualString(purpose, "swapAndUnwrapSolana")) {
+            _swapAndUnwrapSolana(_amount, _message, _tokenSent);
         }
     }
 
@@ -168,145 +174,6 @@ contract PolyConnectorLogic is
             _amount,
             _relayerFeePercentage,
             user
-        );
-    }
-
-    /// @notice Retry to swap and unwrap tokens
-    /// @dev User signs a message for retrying its request
-    /// @param _message The signed message
-    /// @param _v Signature v
-    /// @param _r Signature r
-    /// @param _s Signature s
-    function retrySwapAndUnwrap(
-        bytes memory _message,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) external override nonReentrant {
-        // Find user address after verifying the signature
-        address user = _verifySig(_message, _r, _s, _v);
-
-        (
-            uint256 _chainId,
-            uint256 _uniqueCounter,
-            address _token,
-            address exchangeConnector,
-            uint256 outputAmount,
-            bytes memory userScript,
-            ScriptTypes scriptType,
-            bytes memory lockerLockingScript,
-            address[] memory path,
-            uint256 thirdPartyId
-        ) = abi.decode(
-                _message,
-                (
-                    uint256,
-                    uint256,
-                    address,
-                    address,
-                    uint256,
-                    bytes,
-                    ScriptTypes,
-                    bytes,
-                    address[],
-                    uint256
-                )
-            );
-
-        uint256 _amount = newFailedReqs[user][_chainId][_uniqueCounter][_token];
-        delete newFailedReqs[user][_chainId][_uniqueCounter][_token];
-        require(_amount > 0, "PolygonConnectorLogic: already retried");
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = _amount;
-        amounts[1] = outputAmount;
-
-        IERC20(path[0]).approve(burnRouterProxy, _amount);
-        IBurnRouter(burnRouterProxy).swapAndUnwrap(
-            exchangeConnector,
-            amounts,
-            true, // Input token amount is fixed
-            path,
-            block.timestamp,
-            userScript,
-            scriptType,
-            lockerLockingScript,
-            thirdPartyId
-        );
-
-        address lockerTargetAddress = ILockersManager(lockersProxy)
-            .getLockerTargetAddress(lockerLockingScript);
-
-        emit RetriedSwapAndUnwrap(
-            _uniqueCounter,
-            _chainId,
-            exchangeConnector,
-            _token,
-            _amount,
-            user,
-            userScript,
-            scriptType,
-            lockerTargetAddress,
-            BurnRouterStorage(burnRouterProxy).burnRequestCounter(
-                lockerTargetAddress
-            ) - 1,
-            path,
-            thirdPartyId
-        );
-    }
-
-    /// @notice Retry to swap and unwrap tokens
-    /// @dev User signs a message for retrying its request
-    /// @param _message The signed message
-    /// @param _v Signature v
-    /// @param _r Signature r
-    /// @param _s Signature s
-    function retrySwapAndUnwrapRune(
-        bytes memory _message,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) external override nonReentrant {
-        // TODO: No Deadline/Expiry Check
-        // Find user address after verifying the signature
-        address user = _verifySig(_message, _r, _s, _v);
-
-        exchangeForRuneArguments memory arguments = _decodeReqRune(_message);
-
-        uint256 _amount = newFailedReqs[user][arguments.chainId][
-            arguments.uniqueCounter
-        ][arguments.path[0]];
-        delete newFailedReqs[user][arguments.chainId][arguments.uniqueCounter][
-            arguments.path[0]
-        ];
-        require(_amount > 0, "PolygonConnectorLogic: already retried");
-
-        IERC20(arguments.path[0]).approve(runeRouterProxy, _amount);
-
-        IRuneRouter(runeRouterProxy).unwrapRune(
-            arguments.thirdPartyId,
-            arguments.internalId,
-            arguments.outputAmount,
-            arguments.userScript.userScript,
-            arguments.userScript.scriptType,
-            arguments.appId,
-            _amount,
-            arguments.path
-        );
-
-        emit RetriedSwapAndUnwrapRune(
-            arguments.uniqueCounter,
-            arguments.chainId,
-            arguments.user,
-            arguments.thirdPartyId,
-            arguments.internalId,
-            arguments.appId,
-            arguments.outputAmount,
-            _amount,
-            arguments.path,
-            arguments.userScript.userScript,
-            arguments.userScript.scriptType,
-            IRuneRouter(runeRouterProxy).totalRuneUnwrapRequests() - 1
         );
     }
 
@@ -359,6 +226,47 @@ contract PolyConnectorLogic is
             _amount,
             _relayerFeePercentage,
             _user
+        );
+    }
+
+    /// @notice Send back tokens to the source chain by owner
+    /// @dev Owner can only set the relayer fee percentage
+    function withdrawFundsToSourceChainByAdminV2(
+        bytes32 _refundAddress,
+        uint256 _chainId,
+        uint256 _uniqueCounter,
+        address _token,
+        int64 _bridgePercentageFee
+    ) external nonReentrant {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "PolygonConnectorLogic: not authorized"
+        );
+
+        uint256 _amount = newFailedReqsV2[_refundAddress][_chainId][_uniqueCounter][
+            _token
+        ];
+        // Update witholded amount
+        delete newFailedReqsV2[_refundAddress][_chainId][_uniqueCounter][_token];
+
+        require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
+
+        // Send token back to the user
+        _sendTokenUsingAcrossV2(
+            _refundAddress,
+            _chainId,
+            _token,
+            _amount,
+            _bridgePercentageFee
+        );
+
+        emit WithdrawnFundsToSourceChainV2(
+            _uniqueCounter,
+            _chainId,
+            _token,
+            _amount,
+            _bridgePercentageFee,
+            _refundAddress
         );
     }
 
@@ -430,6 +338,80 @@ contract PolyConnectorLogic is
                 _tokenSent,
                 _amount,
                 arguments.user,
+                arguments.scripts.userScript,
+                arguments.scripts.scriptType,
+                arguments.path,
+                arguments.thirdParty
+            );
+        }
+    }
+
+    /// @notice Helper for exchanging token for BTC
+    function _swapAndUnwrapSolana(
+        uint256 _amount,
+        bytes memory _message,
+        address _tokenSent
+    ) internal {
+        exchangeForBtcArgumentsV2 memory arguments = _decodeReqSolana(_message);
+        require(
+            arguments.path[0] == _tokenSent,
+            "PolygonConnectorLogic: invalid path"
+        );
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = _amount;
+        amounts[1] = arguments.outputAmount;
+
+        IERC20(_tokenSent).approve(burnRouterProxy, _amount);
+
+        try
+            IBurnRouter(burnRouterProxy).swapAndUnwrap(
+                arguments.exchangeConnector,
+                amounts,
+                arguments.isInputFixed,
+                arguments.path,
+                block.timestamp,
+                arguments.scripts.userScript,
+                arguments.scripts.scriptType,
+                arguments.scripts.lockerLockingScript,
+                arguments.thirdParty
+            )
+        {
+            address lockerTargetAddress = ILockersManager(lockersProxy)
+                .getLockerTargetAddress(arguments.scripts.lockerLockingScript);
+
+            emit NewSwapAndUnwrapV2(
+                arguments.uniqueCounter,
+                arguments.chainId,
+                arguments.exchangeConnector,
+                _tokenSent,
+                _amount,
+                arguments.refundAddress,
+                arguments.scripts.userScript,
+                arguments.scripts.scriptType,
+                lockerTargetAddress,
+                BurnRouterStorage(burnRouterProxy).burnRequestCounter(
+                    lockerTargetAddress
+                ) - 1,
+                arguments.path,
+                arguments.thirdParty
+            );
+        } catch {
+            // Remove spending allowance
+            IERC20(_tokenSent).approve(burnRouterProxy, 0);
+
+            // Save token amount so user can withdraw it in future
+            newFailedReqsV2[arguments.refundAddress][arguments.chainId][
+                arguments.uniqueCounter
+            ][_tokenSent] = _amount;
+
+            emit FailedSwapAndUnwrapV2(
+                arguments.uniqueCounter,
+                arguments.chainId,
+                arguments.exchangeConnector,
+                _tokenSent,
+                _amount,
+                arguments.refundAddress,
                 arguments.scripts.userScript,
                 arguments.scripts.scriptType,
                 arguments.path,
@@ -549,6 +531,84 @@ contract PolyConnectorLogic is
         );
     }
 
+    /// @notice Decodes a Solana-style raw byte message into its arguments struct
+    function _decodeReqSolana(
+        bytes memory _message
+    ) private pure returns (exchangeForBtcArgumentsV2 memory arguments) {
+        uint256 offset = 0;
+        
+        // Skip "swapAndUnwrapSolana" string (17 bytes raw UTF-8, not ABI-encoded)
+        offset += 17;
+        
+        // Read uint64 uniqueCounter (8 bytes, little-endian)
+        arguments.uniqueCounter = _readUint64LE(_message, offset);
+        offset += 8;
+        
+        // Read uint8 chainId (1 byte)
+        arguments.chainId = uint256(uint8(_message[offset]));
+        offset += 1;
+        
+        // Read bytes32 refundAddress (32 bytes)
+        arguments.refundAddress = _readBytes32(_message, offset);
+        offset += 32;
+        
+        // Read bytes32 exchangeConnector (32 bytes), convert last 20 bytes to address
+        bytes32 exchangeConnectorBytes = _readBytes32(_message, offset);
+        arguments.exchangeConnector = address(uint160(uint256(exchangeConnectorBytes)));
+        offset += 32;
+        
+        // Read bytes32 outputAmount (32 bytes, big-endian for uint256)
+        arguments.outputAmount = uint256(_readBytes32(_message, offset));
+        offset += 32;
+        
+        // Read uint8 isInputFixed (1 byte)
+        arguments.isInputFixed = _message[offset] != 0;
+        offset += 1;
+        
+        // Read uint32 pathLength (4 bytes, little-endian)
+        uint32 pathLength = _readUint32LE(_message, offset);
+        offset += 4;
+        
+        // Read path array (pathLength * 32 bytes, each zero-padded EVM address)
+        arguments.path = new address[](pathLength);
+        for (uint256 i = 0; i < pathLength; i++) {
+            bytes32 pathItemBytes = _readBytes32(_message, offset);
+            // Extract last 20 bytes for EVM address
+            arguments.path[i] = address(uint160(uint256(pathItemBytes)));
+            offset += 32;
+        }
+        
+        // Read UserAndLockerScript struct (serialized as length-prefixed bytes)
+        // Format: userScript length (4 bytes) + userScript bytes + scriptType (1 byte) + lockerLockingScript length (4 bytes) + lockerLockingScript bytes
+        uint32 userScriptLength = _readUint32LE(_message, offset);
+        offset += 4;
+        bytes memory userScript = new bytes(userScriptLength);
+        for (uint256 i = 0; i < userScriptLength; i++) {
+            userScript[i] = _message[offset + i];
+        }
+        offset += userScriptLength;
+        
+        // Read scriptType (1 byte enum)
+        ScriptTypes scriptType = ScriptTypes(uint8(_message[offset]));
+        offset += 1;
+        
+        // Read lockerLockingScript length (4 bytes)
+        uint32 lockerScriptLength = _readUint32LE(_message, offset);
+        offset += 4;
+        bytes memory lockerLockingScript = new bytes(lockerScriptLength);
+        for (uint256 i = 0; i < lockerScriptLength; i++) {
+            lockerLockingScript[i] = _message[offset + i];
+        }
+        offset += lockerScriptLength;
+        
+        arguments.scripts.userScript = userScript;
+        arguments.scripts.scriptType = scriptType;
+        arguments.scripts.lockerLockingScript = lockerLockingScript;
+        
+        // Read uint8 thirdParty (1 byte)
+        arguments.thirdParty = uint256(uint8(_message[offset]));
+    }
+
     function _decodeReqRune(
         bytes memory _message
     ) private pure returns (exchangeForRuneArguments memory arguments) {
@@ -647,6 +707,56 @@ contract PolyConnectorLogic is
         );
     }
 
+    /// @notice Sends tokens to Ethereum using Across
+    /// @dev This will be used for withdrawing funds
+    function _sendTokenUsingAcrossV2(
+        bytes32 _refundAddress,
+        uint256 _chainId,
+        address _token,
+        uint256 _amount,
+        int64 _bridgePercentageFee
+    ) internal {
+        IERC20(_token).approve(across, _amount);
+        bytes memory callData;
+
+        if (_chainId == 101) { // Solana
+            callData = abi.encodeWithSignature(
+                "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
+                bytes32(uint256(uint160(acrossAdmin))),
+                _refundAddress,
+                bytes32(uint256(uint160(_token))),
+                0x0000000000000000000000000000000000000000000000000000000000000000, // TODO: Replace with the output token
+                _amount,
+                _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18,
+                34268394551451, // Across Solana chainId
+                bytes32(0),
+                uint32(block.timestamp),
+                uint32(block.timestamp + 4 hours),
+                0,
+                bytes("")
+            );
+        } else { // Other chains
+            callData = abi.encodeWithSignature(
+                "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
+                acrossAdmin, // depositor
+                address(uint160(uint256(_refundAddress))), // recipient (use only last 20 bytes)
+                _token, // inputToken
+                bridgeTokenMapping[_token][_chainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
+                _amount, // inputAmount
+                _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18, // outputAmount
+                _chainId,
+                address(0), // exclusiveRelayer (none for now)
+                uint32(block.timestamp), // quoteTimestamp
+                uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+                0, // exclusivityDeadline
+                bytes("") // message (empty bytes)
+            );
+        }
+
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
+        Address.functionCall(across, finalCallData);
+    }
+
     function _verifySig(
         bytes memory message,
         bytes32 r,
@@ -675,5 +785,71 @@ contract PolyConnectorLogic is
     ) internal pure returns (bool) {
         return
             keccak256(abi.encodePacked(_a)) == keccak256(abi.encodePacked(_b));
+    }
+
+    /// @notice Extracts purpose string and checks if message is Solana format
+    /// @return _purpose The purpose string extracted from the message
+    function _extractPurposeAndUniqueCounterAndChainId(
+        bytes memory _message
+    ) private pure returns (
+        string memory _purpose, 
+        uint256 _uniqueCounter,
+        uint256 _chainId
+    ) {
+        // Check if it's a Solana raw byte message by looking for known purpose strings
+        if (_message.length >= 17) {
+            bytes17 first17Bytes;
+            bytes memory purposeBytes = abi.encodePacked("swapAndUnwrapSolana");
+            bytes17 expectedPurpose;
+            assembly {
+                first17Bytes := mload(add(_message, 32))
+                expectedPurpose := mload(add(purposeBytes, 32))
+            }
+            
+            // Check for "swapAndUnwrapSolana" (17 bytes)
+            if (first17Bytes == expectedPurpose) {
+                _uniqueCounter = _readUint64LE(_message, 17);
+                _chainId = uint256(uint8(_message[25]));
+                return (
+                    "swapAndUnwrapSolana", 
+                    _uniqueCounter, 
+                    _chainId
+                );
+            }
+        }
+        
+        // Otherwise, treat as ABI-encoded EVM message
+        (
+            _purpose, 
+            _uniqueCounter, 
+            _chainId
+        ) = abi.decode(_message, (string, uint256, uint256));
+    }
+
+    // Helper function to read uint64 little-endian
+    function _readUint64LE(bytes memory _data, uint256 _offset) private pure returns (uint256) {
+        uint256 result = 0;
+        for (uint256 i = 0; i < 8; i++) {
+            result |= uint256(uint8(_data[_offset + i])) << (i * 8);
+        }
+        return result;
+    }
+    
+    // Helper function to read uint32 little-endian
+    function _readUint32LE(bytes memory _data, uint256 _offset) private pure returns (uint32) {
+        uint32 result = 0;
+        for (uint256 i = 0; i < 4; i++) {
+            result |= uint32(uint8(_data[_offset + i])) << uint32(i * 8);
+        }
+        return result;
+    }
+    
+    // Helper function to read bytes32
+    function _readBytes32(bytes memory _data, uint256 _offset) private pure returns (bytes32) {
+        bytes32 result;
+        assembly {
+            result := mload(add(_data, add(32, _offset)))
+        }
+        return result;
     }
 }

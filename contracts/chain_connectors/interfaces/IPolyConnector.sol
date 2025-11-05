@@ -41,6 +41,18 @@ interface IPolyConnector {
         UserScript userScript;
     }
 
+    struct exchangeForBtcArgumentsV2 {
+        uint256 uniqueCounter;
+        uint256 chainId;
+        bytes32 refundAddress;
+        address exchangeConnector;
+        uint256 outputAmount;
+        bool isInputFixed;
+        address[] path;
+        UserAndLockerScript scripts;
+        uint256 thirdParty;
+    }
+
     // Events
 
     event MsgReceived(
@@ -65,6 +77,21 @@ interface IPolyConnector {
         uint256 thirdPartyId
     );
 
+    event NewSwapAndUnwrapV2(
+        uint256 uniqueCounter,
+        uint256 chainId,
+        address exchangeConnector,
+        address inputToken,
+        uint256 inputAmount,
+        bytes32 indexed userTargetAddress,
+        bytes userScript,
+        ScriptTypes scriptType,
+        address lockerTargetAddress,
+        uint256 requestIdOfLocker,
+        address[] path,
+        uint256 thirdPartyId
+    );
+
     event FailedSwapAndUnwrap(
         uint256 uniqueCounter,
         uint256 chainId,
@@ -78,17 +105,15 @@ interface IPolyConnector {
         uint256 thirdPartyId
     );
 
-    event RetriedSwapAndUnwrap(
+    event FailedSwapAndUnwrapV2(
         uint256 uniqueCounter,
         uint256 chainId,
         address exchangeConnector,
         address inputToken,
         uint256 inputAmount,
-        address indexed userTargetAddress,
+        bytes32 indexed userTargetAddress,
         bytes userScript,
         ScriptTypes scriptType,
-        address lockerTargetAddress,
-        uint256 requestIdOfLocker,
         address[] path,
         uint256 thirdPartyId
     );
@@ -100,6 +125,15 @@ interface IPolyConnector {
         uint256 amount,
         int64 relayerFeePercentage,
         address user
+    );
+
+    event WithdrawnFundsToSourceChainV2(
+        uint256 uniqueCounter,
+        uint256 chainId,
+        address token,
+        uint256 amount,
+        int64 relayerFeePercentage,
+        bytes32 refundAddress
     );
 
     event NewSwapAndUnwrapRune(
@@ -129,21 +163,6 @@ interface IPolyConnector {
         address[] path,
         bytes userScript,
         ScriptTypes scriptType
-    );
-
-    event RetriedSwapAndUnwrapRune(
-        uint256 uniqueCounter,
-        uint256 chainId,
-        address indexed userTargetAddress,
-        uint256 thirdPartyId,
-        uint256 internalId,
-        uint256 appId,
-        uint256 amount,
-        uint256 inputAmount,
-        address[] path,
-        bytes userScript,
-        ScriptTypes scriptType,
-        uint256 requestIdOfLocker
     );
 
     event AcrossUpdated(address oldAcross, address newAcross);
@@ -190,20 +209,6 @@ interface IPolyConnector {
     ) external;
 
     function withdrawFundsToSourceChain(
-        bytes memory _message,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) external;
-
-    function retrySwapAndUnwrap(
-        bytes memory _message,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) external;
-
-    function retrySwapAndUnwrapRune(
         bytes memory _message,
         uint8 _v,
         bytes32 _r,
