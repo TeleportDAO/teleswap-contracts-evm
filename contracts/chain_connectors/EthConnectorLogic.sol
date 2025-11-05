@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 // import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import "./EthConnectorStorage.sol";
 import "./interfaces/IEthConnector.sol";
+import "../dex_connectors/interfaces/IDexConnector.sol";
 
 contract EthConnectorLogic is
     IEthConnector,
@@ -121,7 +122,7 @@ contract EthConnectorLogic is
         int64 _relayerFeePercentage,
         uint256 _thirdParty
     ) external payable override nonReentrant {
-        _validateTransfer(_token, _amounts[0]);
+        _checkMessageValue(_token, _amounts[0]);
 
         bytes memory message = abi.encode(
             "swapAndUnwrap",
@@ -156,7 +157,7 @@ contract EthConnectorLogic is
         uint256 _thirdParty,
         address _refundAddress
     ) external payable override nonReentrant {
-        _validateTransfer(_token, _amounts[0]);
+        _checkMessageValue(_token, _amounts[0]);
 
         bytes memory message = abi.encode(
             "swapAndUnwrap",
@@ -192,6 +193,89 @@ contract EthConnectorLogic is
         // }
     }
 
+    function swapAndUnwrapV3(
+        address[] calldata _pathFromInputToIntermediaryOnSourceChain,
+        uint256[] calldata _amountsFromInputToIntermediaryOnSourceChain,
+        address[] calldata _pathFromIntermediaryToOutputOnIntermediaryChain,
+        uint256 _minOutputAmount,
+        address _exchangeConnector,
+        bool _isInputFixed,
+        UserAndLockerScript calldata _userAndLockerScript,
+        int64 _bridgePercentageFee,
+        uint256 _thirdParty,
+        address _refundAddress
+    ) external payable nonReentrant {
+
+        _checkMessageValue(
+            _pathFromInputToIntermediaryOnSourceChain[0], // Input token on source chain
+            _amountsFromInputToIntermediaryOnSourceChain[0] // Input token amount on source chain
+        );
+
+        address intermediaryToken = _pathFromInputToIntermediaryOnSourceChain[
+            _pathFromInputToIntermediaryOnSourceChain.length - 1
+        ];
+
+        // Swap input token to intermediary token on source chain
+        uint256 intermediaryTokenAmount = _swapInputTokenToIntermediaryTokenOnSourceChain(
+            _pathFromInputToIntermediaryOnSourceChain,
+            _amountsFromInputToIntermediaryOnSourceChain
+        );
+
+        // bytes memory message = abi.encode(
+        //     "swapAndUnwrap",
+        //     uniqueCounter,
+        //     currChainId,
+        //     _refundAddress,
+        //     _exchangeConnector,
+        //     _amounts[1],
+        //     _isInputFixed,
+        //     _path,
+        //     _userAndLockerScript,
+        //     _thirdParty
+        // );
+
+        // Send message to intermediary chain to swap intermediary token to TeleBTC
+        bytes memory message = abi.encode(
+            "swapAndUnwrapV3",
+            uniqueCounter,
+            currChainId,
+            _refundAddress,
+            _exchangeConnector,
+            _minOutputAmount,
+            _isInputFixed,
+            _pathFromIntermediaryToOutputOnIntermediaryChain,
+            _userAndLockerScript,
+            _thirdParty
+        );
+
+        emit MsgSent(
+            uniqueCounter, 
+            message, 
+            intermediaryToken, 
+            intermediaryTokenAmount, 
+            _bridgePercentageFee
+        );
+
+        // if (_relayerFeePercentage == 0) {
+        //     // Here we are using Stargate to send the message
+        //     _sendMsgUsingStargate(
+        //         _token,
+        //         _amounts[0],
+        //         message,
+        //         _refundAddress
+        //     );
+        // } else {
+
+        // Here we are using Across to send the message
+        _sendMsgUsingAcross(
+            intermediaryToken,
+            intermediaryTokenAmount,
+            message,
+            _bridgePercentageFee
+        );
+        // }
+    }
+
     /// @notice Request exchanging token for RUNE
     function swapAndUnwrapRune(
         address _token,
@@ -203,7 +287,7 @@ contract EthConnectorLogic is
         int64 _relayerFeePercentage,
         uint256 _thirdParty
     ) external payable override nonReentrant {
-        _validateTransfer(_token, _amounts[0]);
+        _checkMessageValue(_token, _amounts[0]);
 
         bytes memory message = abi.encode(
             "swapAndUnwrapRune",
@@ -227,8 +311,8 @@ contract EthConnectorLogic is
         );
     }
 
-    /// @notice Internal function to validate ETH/token transfer
-    function _validateTransfer(address _token, uint256 _amount) private view {
+    /// @notice Internal function to check ETH value is correct
+    function _checkMessageValue(address _token, uint256 _amount) private view {
         if (msg.value == _amount) {
             require(_token == ETH_ADDR || _token == wrappedNativeToken, "EthConnectorLogic: wrong value");
         } else {
@@ -282,6 +366,26 @@ contract EthConnectorLogic is
             finalCallData,
             msg.value
         );
+    }
+
+    function _swapInputTokenToIntermediaryTokenOnSourceChain(
+        address[] calldata _pathFromInputToIntermediaryOnSourceChain,
+        uint256[] calldata _amountsFromInputToIntermediaryOnSourceChain
+    ) internal returns (uint256 _intermediaryTokenAmount) {
+        (bool success, uint256[] memory amounts) = IDexConnector(exchangeConnector).swap(
+            _amountsFromInputToIntermediaryOnSourceChain[0], // Input token amount on source chain
+            _amountsFromInputToIntermediaryOnSourceChain[1], // Intermediary token amount on source chain
+            _pathFromInputToIntermediaryOnSourceChain,
+            address(this),
+            block.timestamp,
+            true
+        );
+
+        if (success) {
+            _intermediaryTokenAmount = amounts[amounts.length - 1];
+        } else {
+            revert("EthConnectorLogic: swap failed");
+        }
     }
 
     // function _sendMsgUsingStargate(

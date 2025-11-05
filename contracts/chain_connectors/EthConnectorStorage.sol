@@ -11,7 +11,7 @@ abstract contract EthConnectorStorage is IEthConnector {
 
     address public across; // Across bridge
     address public targetChainConnectorProxy;
-    address public emptyAddress;
+    address public exchangeConnector;
     uint public targetChainId;
     address public wrappedNativeToken;
     uint public uniqueCounter;
