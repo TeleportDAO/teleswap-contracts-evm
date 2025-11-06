@@ -538,15 +538,15 @@ contract PolyConnectorLogic is
         uint256 offset = 0;
         
         // Skip "swapAndUnwrapSolana" string (17 bytes raw UTF-8, not ABI-encoded)
-        offset += 17;
+        offset += 19;
         
         // Read uint64 uniqueCounter (8 bytes, little-endian)
         arguments.uniqueCounter = _readUint64LE(_message, offset);
         offset += 8;
         
-        // Read uint8 chainId (1 byte)
-        arguments.chainId = uint256(uint8(_message[offset]));
-        offset += 1;
+        // Read uint8 chainId (8 bytes, little-endian)
+        arguments.chainId = _readUint64LE(_message, offset);
+        offset += 8;
         
         // Read bytes32 refundAddress (32 bytes)
         arguments.refundAddress = _readBytes32(_message, offset);
