@@ -36,4 +36,15 @@ abstract contract PolyConnectorStorage is IPolyConnector {
 
     uint256 public gasLimit;
     mapping(address => mapping(uint => address)) public bridgeTokenMapping;
+
+    mapping(
+        bytes32 => mapping(
+            uint256 => mapping(
+                uint256 => mapping(
+                    address => uint256
+                )
+            )
+        )
+    ) public newFailedReqsV2;
+    // ^ Mapping from [refundAddress][chainId][reqId][token] to amount
 }
