@@ -17,6 +17,11 @@ interface IEthConnector {
         bytes lockerLockingScript;
     }
 
+    struct BridgeConnectorData {
+        address targetChainConnectorProxy;
+        address exchangeConnector;
+    }
+
     // Events
 
     event MsgSent(
@@ -49,10 +54,6 @@ interface IEthConnector {
 
     function setAcross(address _across) external;
 
-    function setTargetChainConnectorProxy(
-        address _targetChainConnector
-    ) external;
-
     function setWrappedNativeToken(address _wrappedNativeToken) external;
 
     function setBridgeTokenMapping(
@@ -61,9 +62,15 @@ interface IEthConnector {
         address _destinationToken
     ) external;
 
+    function setBridgeConnectorMapping(
+        uint256 _targetChainId,
+        address _targetChainConnectorProxy,
+        address _exchangeConnector
+    ) external;
+
     function swapAndUnwrap(
         address _token,
-        address _exchangeConnector,
+        uint256 _targetChainId,
         uint256[] calldata _amounts,
         bool _isInputFixed,
         address[] calldata _path,
@@ -74,7 +81,7 @@ interface IEthConnector {
 
     function swapAndUnwrapV2(
         address _token,
-        address _exchangeConnector,
+        uint256 _targetChainId,
         uint256[] calldata _amounts,
         bool _isInputFixed,
         address[] calldata _path,
@@ -87,6 +94,7 @@ interface IEthConnector {
     function swapAndUnwrapRune(
         address _token,
         uint256 _appId,      
+        uint256 _targetChainId,
         uint256[] calldata _amounts,
         uint256 _tokenId,
         address[] calldata _path,
