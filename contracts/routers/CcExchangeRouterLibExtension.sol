@@ -94,7 +94,7 @@ library CcExchangeRouterLibExtension {
         ICcExchangeRouter.SwapV2Data memory _swapV2Data
     ) private {
         // Send tokens to user if on current chain
-        if (swapArguments.destRealChainId == block.chainid) {
+        if (swapArguments.destRealChainId == _swapV2Data.currentChainId) {
             address outputToken = swapArguments._path[swapArguments._path.length - 1];
             uint256 outputAmount = amounts[amounts.length - 1];
             address recipient = address(uint160(uint256(swapArguments._ccExchangeRequestV2.recipientAddress)));

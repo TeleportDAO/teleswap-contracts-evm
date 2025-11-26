@@ -718,7 +718,7 @@ contract CcExchangeRouterLogic is
             ICcExchangeRouter.SwapV2Data(
                 teleBTC,
                 wrappedNativeToken,
-                swapArguments.destRealChainId,
+                chainId,
                 lockers,
                 _msgSender()
             )
