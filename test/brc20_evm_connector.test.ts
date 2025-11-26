@@ -27,6 +27,7 @@ const abiUtils = new Web3().eth.abi;
 // const web3 = new Web3();
 const provider = ethers.provider;
 const targetChainId = 137;
+const exchangeConnectorAddress = "0x0000000000000000000000000000000000000011";
 
 describe("EthConnector", async () => {
     let snapshotId: any;
@@ -167,9 +168,9 @@ describe("EthConnector", async () => {
         );
         // Set up bridge connector mapping for target chain ID 137
         await EthConnector.setBridgeConnectorMapping(
+            exchangeConnectorAddress, // exchangeConnector
             targetChainId,
-            ONE_ADDRESS, // targetChainConnectorProxy
-            ONE_ADDRESS // exchangeConnector
+            ONE_ADDRESS // targetChainConnectorProxy
         );
 
         // Set up bridge token mapping for ETH
@@ -426,7 +427,7 @@ describe("EthConnector", async () => {
             await expect(
                 EthConnector.swapAndUnwrap(
                     ETH_ADDRESS,
-                    targetChainId,
+                    exchangeConnectorAddress,
                     [requestAmount, telebtcAmount],
                     true,
                     [polygonToken.address, teleBTC.address],
@@ -486,7 +487,7 @@ describe("EthConnector", async () => {
             await expect(
                 EthConnector.swapAndUnwrap(
                     inputToken.address,
-                    targetChainId,
+                    exchangeConnectorAddress,
                     [requestAmount, telebtcAmount],
                     true,
                     [polygonToken.address, teleBTC.address],
@@ -550,7 +551,7 @@ describe("EthConnector", async () => {
             await expect(
                 EthConnector.swapAndUnwrap(
                     ETH_ADDRESS,
-                    targetChainId,
+                    exchangeConnectorAddress,
                     [requestAmount, telebtcAmount],
                     true,
                     [polygonToken.address, teleBTC.address],

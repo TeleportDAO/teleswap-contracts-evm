@@ -18,8 +18,8 @@ interface IEthConnector {
     }
 
     struct BridgeConnectorData {
+        uint256 targetChainId;
         address targetChainConnectorProxy;
-        address exchangeConnector;
     }
 
     // Events
@@ -63,14 +63,14 @@ interface IEthConnector {
     ) external;
 
     function setBridgeConnectorMapping(
+        address _exchangeConnector,
         uint256 _targetChainId,
-        address _targetChainConnectorProxy,
-        address _exchangeConnector
+        address _targetChainConnectorProxy
     ) external;
 
     function swapAndUnwrap(
         address _token,
-        uint256 _targetChainId,
+        address _exchangeConnector,
         uint256[] calldata _amounts,
         bool _isInputFixed,
         address[] calldata _path,
@@ -81,7 +81,7 @@ interface IEthConnector {
 
     function swapAndUnwrapV2(
         address _token,
-        uint256 _targetChainId,
+        address _exchangeConnector,
         uint256[] calldata _amounts,
         bool _isInputFixed,
         address[] calldata _path,
@@ -94,7 +94,7 @@ interface IEthConnector {
     function swapAndUnwrapRune(
         address _token,
         uint256 _appId,      
-        uint256 _targetChainId,
+        address _exchangeConnector,
         uint256[] calldata _amounts,
         uint256 _tokenId,
         address[] calldata _path,

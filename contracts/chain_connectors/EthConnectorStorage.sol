@@ -20,5 +20,5 @@ abstract contract EthConnectorStorage is IEthConnector {
     address public acrossAdmin;
     mapping(address => mapping(uint => address)) public bridgeTokenMapping;
     address public stargate;
-    mapping(uint => BridgeConnectorData) public bridgeConnectorMapping; // targetChainId => BridgeConnectorData
+    mapping(address => BridgeConnectorData) public bridgeConnectorMapping; // exchangeConnector => BridgeConnectorData
 }

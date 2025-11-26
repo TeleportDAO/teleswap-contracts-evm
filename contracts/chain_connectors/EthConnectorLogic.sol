@@ -88,17 +88,17 @@ contract EthConnectorLogic is
     }
 
     /// @notice Setter for bridge connector mapping
+    /// @param _exchangeConnector Address of the exchange connector
     /// @param _targetChainId Target chain ID
     /// @param _targetChainConnectorProxy Address of the target chain connector proxy
-    /// @param _exchangeConnector Address of the exchange connector
     function setBridgeConnectorMapping(
+        address _exchangeConnector,
         uint256 _targetChainId,   
-        address _targetChainConnectorProxy,
-        address _exchangeConnector
+        address _targetChainConnectorProxy
     ) external override onlyOwner {
-        bridgeConnectorMapping[_targetChainId] = BridgeConnectorData({
-            targetChainConnectorProxy: _targetChainConnectorProxy,
-            exchangeConnector: _exchangeConnector
+        bridgeConnectorMapping[_exchangeConnector] = BridgeConnectorData({
+            targetChainId: _targetChainId,
+            targetChainConnectorProxy: _targetChainConnectorProxy
         });
     }
 
@@ -114,14 +114,14 @@ contract EthConnectorLogic is
     /// @notice Request exchanging token for BTC
     /// @dev To find teleBTCAmount, _relayerFeePercentage should be reduced from the inputTokenAmount
     /// @param _token Address of input token (on the current chain)
-    /// @param _targetChainId Target chain ID to find the connector data
+    /// @param _exchangeConnector Address of exchange connector to be used
     /// @param _amounts [inputTokenAmount, teleBTCAmount]
     /// @param _path of exchanging inputToken to teleBTC (these are Polygon token addresses, so _path[0] != _token)
     /// @param _relayerFeePercentage Fee percentage for relayer
     /// @param _thirdParty Id of third party
     function swapAndUnwrap(
         address _token,
-        uint256 _targetChainId,
+        address _exchangeConnector,
         uint256[] calldata _amounts,
         bool _isInputFixed,
         address[] calldata _path,
@@ -136,7 +136,7 @@ contract EthConnectorLogic is
             uniqueCounter,
             currChainId,
             tx.origin, // note: We changed from _msgSender() to tx.origin so that we can refund to the original sender in case of failure
-            bridgeConnectorMapping[_targetChainId].exchangeConnector,
+            _exchangeConnector,
             _amounts[1],
             _isInputFixed,
             _path,
@@ -146,7 +146,7 @@ contract EthConnectorLogic is
 
         emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
         _sendMsgUsingAcross(
-            _targetChainId,
+            _exchangeConnector,
             _token,
             _amounts[0],
             message,
@@ -156,7 +156,7 @@ contract EthConnectorLogic is
 
     function swapAndUnwrapV2(
         address _token,
-        uint256 _targetChainId,
+        address _exchangeConnector,
         uint256[] calldata _amounts,
         bool _isInputFixed,
         address[] calldata _path,
@@ -172,7 +172,7 @@ contract EthConnectorLogic is
             uniqueCounter,
             currChainId,
             _refundAddress,
-            bridgeConnectorMapping[_targetChainId].exchangeConnector,
+            _exchangeConnector,
             _amounts[1],
             _isInputFixed,
             _path,
@@ -193,7 +193,7 @@ contract EthConnectorLogic is
         // } else {
             // Here we are using Across to send the message
             _sendMsgUsingAcross(
-                _targetChainId,
+                _exchangeConnector,
                 _token,
                 _amounts[0],
                 message,
@@ -206,7 +206,7 @@ contract EthConnectorLogic is
     function swapAndUnwrapRune(
         address _token,
         uint256 _appId,
-        uint256 _targetChainId,
+        address _exchangeConnector,
         uint256[] calldata _amounts,
         uint256 _internalId,
         address[] calldata _path,
@@ -231,7 +231,7 @@ contract EthConnectorLogic is
 
         emit MsgSentRune(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
         _sendMsgUsingAcross(
-            _targetChainId,
+            _exchangeConnector,
             _token,
             _amounts[0],
             message,
@@ -250,7 +250,7 @@ contract EthConnectorLogic is
 
     /// @notice Send tokens and message using Across bridge
     function _sendMsgUsingAcross(
-        uint256 _targetChainId,
+        address _exchangeConnector,
         address _token,
         uint256 _amount,
         bytes memory _message,
@@ -274,12 +274,12 @@ contract EthConnectorLogic is
         bytes memory callData = abi.encodeWithSignature(
             "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
             acrossAdmin, // depositor
-            bridgeConnectorMapping[_targetChainId].targetChainConnectorProxy, // recipient
+            bridgeConnectorMapping[_exchangeConnector].targetChainConnectorProxy, // recipient
             _token, // inputToken
-            bridgeTokenMapping[_token][_targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
+            bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
             _amount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18, // outputAmount
-            _targetChainId, // destinationChainId
+            bridgeConnectorMapping[_exchangeConnector].targetChainId, // destinationChainId
             address(0), // exclusiveRelayer (none for now)
             uint32(block.timestamp), // quoteTimestamp
             uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
