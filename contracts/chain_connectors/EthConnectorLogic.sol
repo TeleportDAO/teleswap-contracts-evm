@@ -59,13 +59,6 @@ contract EthConnectorLogic is
         acrossAdmin = _acrossAdmin;
     }
 
-    /// @notice Setter for TargetChainConnectorProxy
-    function setTargetChainConnectorProxy(
-        address _targetChainConnectorProxy
-    ) external override onlyOwner {
-        _setTargetChainConnectorProxy(_targetChainConnectorProxy);
-    }
-
     /// @notice Setter for WrappedNativeToken
     function setWrappedNativeToken(
         address _wrappedNativeToken
@@ -93,6 +86,21 @@ contract EthConnectorLogic is
         address _destinationToken
     ) external override onlyOwner {
         bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
+    }
+
+    /// @notice Setter for bridge connector mapping
+    /// @param _exchangeConnector Address of the exchange connector
+    /// @param _targetChainId Target chain ID
+    /// @param _targetChainConnectorProxy Address of the target chain connector proxy
+    function setBridgeConnectorMapping(
+        address _exchangeConnector,
+        uint256 _targetChainId,   
+        address _targetChainConnectorProxy
+    ) external override onlyOwner {
+        bridgeConnectorMapping[_exchangeConnector] = BridgeConnectorData({
+            targetChainId: _targetChainId,
+            targetChainConnectorProxy: _targetChainConnectorProxy
+        });
     }
 
     /// @notice Approve token for spender
@@ -139,6 +147,7 @@ contract EthConnectorLogic is
 
         emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
         _sendMsgUsingAcross(
+            _exchangeConnector,
             _token,
             _amounts[0],
             message,
@@ -185,6 +194,7 @@ contract EthConnectorLogic is
         // } else {
             // Here we are using Across to send the message
             _sendMsgUsingAcross(
+                _exchangeConnector,
                 _token,
                 _amounts[0],
                 message,
@@ -280,6 +290,7 @@ contract EthConnectorLogic is
     function swapAndUnwrapRune(
         address _token,
         uint256 _appId,
+        address _exchangeConnector,
         uint256[] calldata _amounts,
         uint256 _internalId,
         address[] calldata _path,
@@ -304,6 +315,7 @@ contract EthConnectorLogic is
 
         emit MsgSentRune(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
         _sendMsgUsingAcross(
+            _exchangeConnector,
             _token,
             _amounts[0],
             message,
@@ -322,6 +334,7 @@ contract EthConnectorLogic is
 
     /// @notice Send tokens and message using Across bridge
     function _sendMsgUsingAcross(
+        address _exchangeConnector,
         address _token,
         uint256 _amount,
         bytes memory _message,
@@ -345,12 +358,12 @@ contract EthConnectorLogic is
         bytes memory callData = abi.encodeWithSignature(
             "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
             acrossAdmin, // depositor
-            targetChainConnectorProxy, // recipient
+            bridgeConnectorMapping[_exchangeConnector].targetChainConnectorProxy, // recipient
             _token, // inputToken
-            bridgeTokenMapping[_token][targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
+            bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
             _amount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18, // outputAmount
-            targetChainId, // destinationChainId
+            bridgeConnectorMapping[_exchangeConnector].targetChainId, // destinationChainId
             address(0), // exclusiveRelayer (none for now)
             uint32(block.timestamp), // quoteTimestamp
             uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
@@ -432,17 +445,6 @@ contract EthConnectorLogic is
     function _setAcross(address _across) private nonZeroAddress(_across) {
         emit AcrossUpdated(across, _across);
         across = _across;
-    }
-
-    function _setTargetChainConnectorProxy(
-        address _targetChainConnectorProxy
-    ) private nonZeroAddress(_targetChainConnectorProxy) {
-        emit TargetChainConnectorUpdated(
-            targetChainConnectorProxy,
-            _targetChainConnectorProxy
-        );
-
-        targetChainConnectorProxy = _targetChainConnectorProxy;
     }
 
     function _setWrappedNativeToken(

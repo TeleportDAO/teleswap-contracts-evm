@@ -537,7 +537,7 @@ contract PolyConnectorLogic is
     ) private pure returns (exchangeForBtcArgumentsV2 memory arguments) {
         uint256 offset = 0;
         
-        // Skip "swapAndUnwrapSolana" string (17 bytes raw UTF-8, not ABI-encoded)
+        // Skip "swapAndUnwrapSolana" string (19 bytes raw UTF-8, not ABI-encoded)
         offset += 19;
         
         // Read uint64 uniqueCounter (8 bytes, little-endian)
@@ -797,19 +797,21 @@ contract PolyConnectorLogic is
         uint256 _chainId
     ) {
         // Check if it's a Solana raw byte message by looking for known purpose strings
-        if (_message.length >= 17) {
-            bytes17 first17Bytes;
+        // Need at least 35 bytes: 19 (purpose) + 8 (uniqueCounter) + 8 (chainId)
+        if (_message.length >= 35) {
+            bytes19 first19Bytes;
             bytes memory purposeBytes = abi.encodePacked("swapAndUnwrapSolana");
-            bytes17 expectedPurpose;
+            bytes19 expectedPurpose;
             assembly {
-                first17Bytes := mload(add(_message, 32))
+                first19Bytes := mload(add(_message, 32))
                 expectedPurpose := mload(add(purposeBytes, 32))
             }
             
-            // Check for "swapAndUnwrapSolana" (17 bytes)
-            if (first17Bytes == expectedPurpose) {
-                _uniqueCounter = _readUint64LE(_message, 17);
-                _chainId = uint256(uint8(_message[25]));
+            // Check for "swapAndUnwrapSolana" (19 bytes)
+            if (first19Bytes == expectedPurpose) { // Request is for Solana
+                _uniqueCounter = _readUint64LE(_message, 19); // 8 bytes for uniqueCounter
+                _chainId = _readUint64LE(_message, 27); // 8 bytes for chainId
+
                 return (
                     "swapAndUnwrapSolana", 
                     _uniqueCounter, 

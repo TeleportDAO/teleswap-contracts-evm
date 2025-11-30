@@ -49,7 +49,10 @@ import { BurnRouterProxy__factory } from "../src/types/factories/BurnRouterProxy
 import { BurnRouterLogic__factory } from "../src/types/factories/BurnRouterLogic__factory";
 import { BurnRouterLogicLibraryAddresses } from "../src/types/factories/BurnRouterLogic__factory";
 import { CcExchangeRouterLibExtension } from "../src/types/CcExchangeRouterLibExtension";
-import { CcExchangeToSolanaRouterLib__factory } from "../src/types/factories/CcExchangeToSolanaRouterLib__factory";
+import {
+    CcExchangeRouterLibExtension__factory,
+    CcExchangeToSolanaRouterLib__factory,
+} from "../src/types/factories/CcExchangeRouterLibExtension__factory";
 
 import { takeSnapshot, revertProvider } from "./block_utils";
 
@@ -544,13 +547,13 @@ describe("CcExchangeRouter", async function () {
     const deployCcExchangeToSolanaRouterLib = async (
         _signer?: Signer
     ): Promise<CcExchangeRouterLibExtension> => {
-        const CcExchangeToSolanaRouterFactory =
-            new CcExchangeToSolanaRouterLib__factory(_signer || deployer);
+        const CcExchangeRouterLibExtensionFactory =
+            new CcExchangeRouterLibExtension__factory(_signer || deployer);
 
-        const CcExchangeToSolanaRouter =
-            await CcExchangeToSolanaRouterFactory.deploy();
+        const ccExchangeRouterLibExtension =
+            await CcExchangeRouterLibExtensionFactory.deploy();
 
-        return CcExchangeToSolanaRouter;
+        return ccExchangeRouterLibExtension;
     };
 
     const deployLockers = async (_signer?: Signer): Promise<Contract> => {
@@ -963,6 +966,9 @@ describe("CcExchangeRouter", async function () {
                             .hexZeroPad(teleBTC.address, 32)
                             .toLowerCase(),
                         ethers.utils
+                            .hexZeroPad(exchangeToken.address, 32)
+                            .toLowerCase(),
+                        ethers.utils
                             .hexZeroPad(exchangeTokenOnSolanaAddress, 32)
                             .toLowerCase(),
                     ], // input and output tokens
@@ -972,6 +978,7 @@ describe("CcExchangeRouter", async function () {
                             teleporterFee -
                             lockerFee -
                             protocolFee,
+                        expectedOutputAmount,
                         expectedOutputAmount.sub(bridgeFee),
                     ],
                     0, // speed
@@ -1090,6 +1097,9 @@ describe("CcExchangeRouter", async function () {
                             .hexZeroPad(teleBTC.address, 32)
                             .toLowerCase(),
                         ethers.utils
+                            .hexZeroPad(exchangeToken.address, 32)
+                            .toLowerCase(),
+                        ethers.utils
                             .hexZeroPad(solanaAddressToBytes32(wrappedSOL), 32)
                             .toLowerCase(),
                     ], // input and output tokens
@@ -1099,6 +1109,7 @@ describe("CcExchangeRouter", async function () {
                             teleporterFee -
                             lockerFee -
                             protocolFee,
+                        expectedOutputAmount,
                         expectedOutputAmount.sub(bridgeFee),
                     ],
                     0, // speed
