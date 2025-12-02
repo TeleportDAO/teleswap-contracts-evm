@@ -74,7 +74,7 @@ const config: HardhatUserConfig = {
 			accounts: [process.env.PRIVATE_KEY ?? ""],
 		},
 		base: {
-			url: "https://base.llamarpc.com",
+			url: "https://developer-access-mainnet.base.org",
 			chainId: 8453,
 			accounts: [process.env.PRIVATE_KEY ?? ""]
 		},
@@ -156,7 +156,7 @@ const config: HardhatUserConfig = {
 				network: "ethereum",
 				chainId: 1,
 				urls: {
-					apiURL: "https://api.etherscan.io/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=1",
 					browserURL: "https://etherscan.io/"
 				}
 			},
@@ -172,7 +172,7 @@ const config: HardhatUserConfig = {
 				network: "base",
 				chainId: 8453,
 				urls: {
-					apiURL: "https://api.basescan.org/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=8453",
 					browserURL: "https://basescan.org/"
 				}
 			},
@@ -188,7 +188,7 @@ const config: HardhatUserConfig = {
 				network: "arbitrum",
 				chainId: 42161,
 				urls: {
-					apiURL: "https://api.arbiscan.io/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=42161",
 					browserURL: "https://arbiscan.com/"
 				}
 			},
@@ -196,7 +196,7 @@ const config: HardhatUserConfig = {
 				network: "optimism",
 				chainId: 10,
 				urls: {
-					apiURL: "https://api-optimistic.etherscan.io/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=10",
 					browserURL: "https://optimism.etherscan.io/"
 				}
 			},
@@ -204,7 +204,7 @@ const config: HardhatUserConfig = {
 				network: "unichain",
 				chainId: 130,
 				urls: {
-					apiURL: "https://api.uniscan.xyz/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=130",
 					browserURL: "https://uniscan.xyz/"
 				}
 			},
