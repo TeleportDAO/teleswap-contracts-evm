@@ -396,12 +396,12 @@ contract CcTransferRouterLogic is
             transfer requests structure:
             1) chainId, 2 byte: max 65535 chains
             2) appId, 1 byte: max 256 apps
-            3) recipientAddress, 20 byte: EVM account
+            3) recipientAddress, 20 or 32 byte: EVM account or Solana account
             4) networkFee, 3 byte
             5) SPEED, 1 byte: {0,1}
             6) thirdParty, 1 byte: max 256 third parties, default is 0 for no third party
             
-            TOTAL = 28 BYTE
+            TOTAL = 28 BYTE or 40 BYTE
         */
 
         require(
@@ -419,7 +419,11 @@ contract CcTransferRouterLogic is
                 _lockerLockingScript
             );
 
-        require(arbitraryData.length == 28, "CCTransferRouter: invalid len");
+        require(
+            arbitraryData.length == 28 || 
+            arbitraryData.length == 40, 
+            "CCTransferRouter: invalid len"
+        );
 
         // Checks that input amount is not zero
         require(
@@ -427,7 +431,7 @@ contract CcTransferRouterLogic is
             "CCTransferRouter: input amount is zero"
         );
 
-        // Checks chain id and app id
+        // Checks chain id and app id (extracted in order: 1) chainId, 2) appId)
         require(
             RequestParser.parseChainId(arbitraryData) == chainId,
             "CCTransferRouter: chain id is not correct"
@@ -437,23 +441,31 @@ contract CcTransferRouterLogic is
             "CCTransferRouter: app id is not correct"
         );
 
-        // Calculates fee
-        uint256 networkFee = RequestParser.parseNetworkFee(arbitraryData);
+        if (arbitraryData.length == 28) {
+            // Extract in order: 3) recipientAddress, 4) networkFee, 5) speed, 6) thirdParty
+            request.recipientAddress = RequestParser.parseRecipientAddress(
+                arbitraryData
+            );
+            request.fee = RequestParser.parseNetworkFee(arbitraryData);
+            request.speed = RequestParser.parseSpeed(arbitraryData);
+            thirdParty[_txId] = RequestParser.parseThirdPartyId(arbitraryData);
+        } else if (arbitraryData.length == 40) {
+            // Extract in order: 3) recipientAddress, 4) networkFee, 5) speed, 6) thirdParty
+            // Convert bytes32 to address (extracts lower 20 bytes from left-padded 32-byte field)
+            request.recipientAddress = address(
+                uint160(uint256(RequestParser.parseRecipientDestAddress(arbitraryData)))
+            );
+            request.fee = RequestParser.parseNetworkFeeNew(arbitraryData);
+            request.speed = RequestParser.parseSpeedNew(arbitraryData);
+            thirdParty[_txId] = RequestParser.parseThirdPartyID(arbitraryData);
+        }
 
         require(
-            networkFee <= request.inputAmount,
+            request.fee <= request.inputAmount,
             "CCTransferRouter: wrong fee"
         );
-        request.fee = networkFee;
 
-        // Parses recipient address and request speed
-        request.recipientAddress = RequestParser.parseRecipientAddress(
-            arbitraryData
-        );
-        request.speed = RequestParser.parseSpeed(arbitraryData);
         require(request.speed == 0, "CCTransferRouter: speed is out of range");
-
-        thirdParty[_txId] = RequestParser.parseThirdPartyId(arbitraryData);
 
         // Marks the request as used
         request.isUsed = true;
@@ -461,6 +473,7 @@ contract CcTransferRouterLogic is
         // Saves the request data
         ccTransferRequests[_txId] = request;
     }
+
 
     /// @notice Checks if tx has been finalized on source chain
     /// @dev Pays relay fee using included ETH in the transaction
