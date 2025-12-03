@@ -10,7 +10,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
     if (
         network.name == "hardhat" ||
-        (network.name != "amoy" && network.name != "polygon")
+        (
+            network.name != "amoy" && 
+            network.name != "polygon" && 
+            network.name != "bsc"
+        )
     ) {
         const proxyAdmin = config.get("proxy_admin");
         const ethConnectorLogic = await deployments.get("EthConnectorLogic");
