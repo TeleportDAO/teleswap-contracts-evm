@@ -45,6 +45,6 @@ abstract contract PolyConnectorStorage is IPolyConnector {
                 )
             )
         )
-    ) public newFailedReqsV2;
+    ) public newFailedReqsUniversal;
     // ^ Mapping from [refundAddress][chainId][reqId][token] to amount
 }

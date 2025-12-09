@@ -22,6 +22,23 @@ interface IEthConnector {
         address targetChainConnectorProxy;
     }
 
+    struct SwapAndUnwrapV3Arguments {
+        address[] _pathFromInputToIntermediaryOnSourceChain;
+        uint256[] _amountsFromInputToIntermediaryOnSourceChain;
+        address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
+        uint256 _minOutputAmount;
+        int64 _bridgePercentageFee;
+    }
+
+    struct exchangeForSourceTokenArguments {
+        uint256 uniqueCounter;
+        uint256 chainId;
+        address refundAddress;
+        address exchangeConnector;
+        address[] pathFromIntermediaryToInputOnSourceChain;
+        uint256[] amountsFromIntermediaryToInputOnSourceChain;
+    }
+
     // Events
 
     event MsgSent(
@@ -52,6 +69,21 @@ interface IEthConnector {
         address newWrappedNativeToken
     );
 
+    event MsgReceived(
+        string functionName,
+        uint256 uniqueCounter,
+        uint256 chainId,
+        bytes data
+    );
+
+    event swappedBackAndRefundedToSourceChain(
+        uint256 uniqueCounter,
+        uint256 chainId,
+        address refundAddress,
+        address[] pathFromIntermediaryToInputOnSourceChain,
+        uint256[] amountsFromIntermediaryToInputOnSourceChain
+    );
+
     function setAcross(address _across) external;
 
     function setWrappedNativeToken(address _wrappedNativeToken) external;
@@ -67,6 +99,8 @@ interface IEthConnector {
         uint256 _targetChainId,
         address _targetChainConnectorProxy
     ) external;
+
+    function setExchangeConnector(address _exchangeConnector) external;
 
     function swapAndUnwrap(
         address _token,
@@ -107,5 +141,16 @@ interface IEthConnector {
         address _token,
         address _to,
         uint256 _amount
+    ) external;
+
+    function handleV3AcrossMessage(
+        address _tokenSent,
+        uint256 _amount,
+        address,
+        bytes memory _message
+    ) external;
+
+    function setGasLimit(
+        uint256 _gasLimit
     ) external;
 }

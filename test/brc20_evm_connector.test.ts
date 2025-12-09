@@ -1,7 +1,9 @@
-// const CC_BURN_REQUESTS = require("./test_fixtures/ccBurnRequests.json");
+/* eslint-disable camelcase */
+/* eslint-disable node/no-missing-import */
+/* eslint-disable node/no-extraneous-import */
 import "@nomicfoundation/hardhat-chai-matchers";
 import { expect } from "chai";
-import { deployments, ethers } from "hardhat";
+import { deployments, ethers, network } from "hardhat";
 import { Signer, BigNumber } from "ethers";
 import {
     deployMockContract,
@@ -12,22 +14,26 @@ import { Contract } from "@ethersproject/contracts";
 import { TeleBTCLogic } from "../src/types/TeleBTCLogic";
 import { TeleBTCLogic__factory } from "../src/types/factories/TeleBTCLogic__factory";
 import { TeleBTCProxy__factory } from "../src/types/factories/TeleBTCProxy__factory";
-import { ERC20 } from "../src/types/ERC20";
 import { Erc20__factory } from "../src/types/factories/Erc20__factory";
+import { Erc20 as ERC20 } from "../src/types/Erc20";
 import { EthConnectorProxy__factory } from "../src/types/factories/EthConnectorProxy__factory";
 import { EthConnectorLogic__factory } from "../src/types/factories/EthConnectorLogic__factory";
-import { BurnRouterLib } from "../src/types/BurnRouterLib";
 import { takeSnapshot, revertProvider } from "./block_utils";
-import { network } from "hardhat";
 import Web3 from "web3";
+
+interface SwapAndUnwrapV3Arguments {
+    _pathFromInputToIntermediaryOnSourceChain: string[];
+    _amountsFromInputToIntermediaryOnSourceChain: BigNumber[];
+    _pathFromIntermediaryToOutputOnIntermediaryChain: string[];
+    _minOutputAmount: BigNumber;
+    _bridgePercentageFee: BigNumber;
+}
 
 require("dotenv").config({ path: "../../.env" });
 
 const abiUtils = new Web3().eth.abi;
-// const web3 = new Web3();
 const provider = ethers.provider;
 const targetChainId = 137;
-const exchangeConnectorAddress = "0x0000000000000000000000000000000000000011";
 
 describe("EthConnector", async () => {
     let snapshotId: any;
@@ -36,78 +42,54 @@ describe("EthConnector", async () => {
     let proxyAdmin: Signer;
     let deployer: Signer;
     let signer1: Signer;
-    let signer2: Signer;
     let acrossSinger: Signer;
     let signer1Address: Address;
     let deployerAddress: Address;
     let proxyAdminAddress: Address;
     let acrossAddress: Address;
+    let exchangeConnectorAddress: string;
 
     // Contracts
     let teleBTC: TeleBTCLogic;
     let inputToken: ERC20;
-    let inputTokenSigner1: ERC20;
+    let intermediaryToken: ERC20;
     let wrappedNativeToken: ERC20;
     let polygonToken: ERC20;
-    let TeleBTCSigner1: TeleBTCLogic;
     let EthConnector: Contract;
-    let EthConnectorWithMockedAccross: Contract;
-    let burnRouterLib: BurnRouterLib;
-    let burnRouter: Contract;
-
-    let exchangeToken: ERC20;
 
     // Mock contracts
-    let mockAddress: MockContract;
-    let mockLockers: MockContract;
     let mockExchangeConnector: MockContract;
     let mockAcross: MockContract;
 
     // Constants
-    let ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-    let ONE_ADDRESS = "0x0000000000000000000000000000000000000011";
-    let ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
-    let oneHundred = BigNumber.from(10).pow(8).mul(100);
+    const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+    const ONE_ADDRESS = "0x0000000000000000000000000000000000000011";
+    const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+    const oneHundred = BigNumber.from(10).pow(8).mul(100);
     /*
         This one is set so that:
         userRequestedAmount * (1 - lockerFee / 10000 - PROTOCOL_PERCENTAGE_FEE / 10000) - BITCOIN_FEE = 100000000
     */
-    let userRequestedAmount = BigNumber.from(100060030);
-    let requestAmount = 100;
-    let telebtcAmount = 100000000000;
-    let TRANSFER_DEADLINE = 20;
-    let PROTOCOL_PERCENTAGE_FEE = 5; // means 0.05%
-    let SLASHER_PERCENTAGE_REWARD = 5; // means 0.05%
-    let RELAYER_FEE = 10000; // estimation of Bitcoin transaction fee in Satoshi
-    let TREASURY = "0x0000000000000000000000000000000000000002";
+    const requestAmount = 100;
+    const telebtcAmount = 100000000000;
+    const RELAYER_FEE = 10000; // estimation of Bitcoin transaction fee in Satoshi
+    const LOCKER_TARGET_ADDRESS = ONE_ADDRESS;
+    const USER_SCRIPT_P2PKH = "0x12ab8dc588ca9d5787dde7eb29569da63c3a238c";
+    const USER_SCRIPT_P2PKH_TYPE = 1; // P2PKH
+    // const USER_SCRIPT_P2WPKH = "0x751e76e8199196d454941c45d1b3a323f1433bd6";
+    // const USER_SCRIPT_P2WPKH_TYPE = 3; // P2WPKH
+    // For swapAndUnwrapV3 (universal route)
+    const requestAmountOfInputToken = ethers.utils.parseUnits("10", 18); // 10 tokens of input token (e.g., AAVE)
+    const intermediaryTokenAmount = ethers.utils.parseUnits("0.1", 18); // 0.1 tokens of intermediary token
+    const bridgePercentageFee = BigNumber.from(10).pow(15); // 0.1% = 1e15
 
-    let LOCKER_TARGET_ADDRESS = ONE_ADDRESS;
-    let LOCKER1_LOCKING_SCRIPT =
-        "0x76a914748284390f9e263a4b766a75d0633c50426eb87587ac";
-
-    let USER_SCRIPT_P2PKH = "0x12ab8dc588ca9d5787dde7eb29569da63c3a238c";
-    let USER_SCRIPT_P2PKH_TYPE = 1; // P2PKH
-
-    let USER_SCRIPT_P2WPKH = "0x751e76e8199196d454941c45d1b3a323f1433bd6";
-    let USER_SCRIPT_P2WPKH_TYPE = 3; // P2WPKH
-
-    before(async () => {
-        [proxyAdmin, deployer, signer1, signer2, acrossSinger] =
+    beforeEach(async () => {
+        [proxyAdmin, deployer, signer1, acrossSinger] =
             await ethers.getSigners();
         proxyAdminAddress = await proxyAdmin.getAddress();
         signer1Address = await signer1.getAddress();
         deployerAddress = await deployer.getAddress();
         acrossAddress = await acrossSinger.getAddress();
-
-        // Mocks contracts
-        // const AddressContract = await deployments.getArtifact(
-        //     "AddressTest"
-        // );
-
-        // mockAddress = await deployMockContract(
-        //     deployer,
-        //     AddressContract.abi
-        // )
 
         const across = await deployments.getArtifact("SpokePoolInterface");
         // Add depositV3 to the ABI if it doesn't exist (needed for the mock)
@@ -136,6 +118,16 @@ describe("EthConnector", async () => {
         }
         mockAcross = await deployMockContract(deployer, extendedAbi);
 
+        // Deploy mock exchange connector
+        const exchangeConnector = await deployments.getArtifact(
+            "UniswapV3Connector"
+        );
+        mockExchangeConnector = await deployMockContract(
+            deployer,
+            exchangeConnector.abi
+        );
+        exchangeConnectorAddress = mockExchangeConnector.address;
+
         // Deploys contracts
         teleBTC = await deployTeleBTC();
 
@@ -143,12 +135,27 @@ describe("EthConnector", async () => {
 
         // Deploys input token
         const erc20Factory = new Erc20__factory(deployer);
-        inputToken = await erc20Factory.deploy("TestToken", "TT", 100000);
+        const initialSupplyOfInputToken = ethers.utils.parseUnits("10", 18);
+        inputToken = await erc20Factory.deploy(
+            "TestToken",
+            "TT",
+            initialSupplyOfInputToken
+        );
+
+        const initialSupplyOfIntermediaryToken = ethers.utils.parseUnits(
+            "0.1",
+            18
+        );
+        intermediaryToken = await erc20Factory.deploy(
+            "IntermediaryToken",
+            "INT",
+            initialSupplyOfIntermediaryToken
+        );
 
         polygonToken = await erc20Factory.deploy(
             "PolygonTestToken",
             "PTT",
-            100000
+            initialSupplyOfIntermediaryToken
         );
 
         // Deploys wrapped native token
@@ -180,9 +187,11 @@ describe("EthConnector", async () => {
             wrappedNativeToken.address
         );
 
+        // Set exchangeConnector using the setter function
+        await EthConnector.setExchangeConnector(exchangeConnectorAddress);
+
         // Mints TeleBTC for user
         await teleBTC.addMinter(signer1Address);
-        TeleBTCSigner1 = await teleBTC.connect(signer1);
 
         await teleBTC.setMaxMintLimit(oneHundred.mul(2));
         await moveBlocks(2020);
@@ -236,11 +245,6 @@ describe("EthConnector", async () => {
 
         return await ethConnectorLogic.attach(ethConnectorProxy.address);
     };
-
-    // async function mintTeleBTCForTest(): Promise<void> {
-    //     let TeleBTCSigner1 = await teleBTC.connect(signer1);
-    //     await TeleBTCSigner1.mint(signer1Address, oneHundred);
-    // }
 
     describe("#setters", async () => {
         beforeEach(async () => {
@@ -471,7 +475,7 @@ describe("EthConnector", async () => {
                     0,
                     10,
                     deployerAddress,
-                    ONE_ADDRESS,
+                    exchangeConnectorAddress,
                     telebtcAmount,
                     true,
                     [polygonToken.address, teleBTC.address],
@@ -535,7 +539,7 @@ describe("EthConnector", async () => {
                     0,
                     10,
                     deployerAddress,
-                    ONE_ADDRESS,
+                    exchangeConnectorAddress,
                     telebtcAmount,
                     true,
                     [polygonToken.address, teleBTC.address],
@@ -654,6 +658,193 @@ describe("EthConnector", async () => {
                     requestAmount
                 )
             ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+    });
+
+    describe("#swapAndUnwrapV3", async () => {
+        it("should swap and bridge to the intermediary chain", async () => {
+            // transfer input tokens to signer1
+            await inputToken.transfer(
+                signer1Address,
+                requestAmountOfInputToken
+            );
+            await inputToken
+                .connect(signer1)
+                .approve(EthConnector.address, requestAmountOfInputToken);
+
+            // set up mock exchange connector to return successful swap
+            await mockExchangeConnector.mock.swap.returns(
+                true, // success
+                [requestAmountOfInputToken, intermediaryTokenAmount]
+            );
+            await intermediaryToken.transfer(
+                EthConnector.address,
+                intermediaryTokenAmount
+            );
+
+            const oneE18 = BigNumber.from(10).pow(18);
+            const minOutputAmount = intermediaryTokenAmount
+                .mul(oneE18.sub(bridgePercentageFee))
+                .div(oneE18);
+
+            const message = await abiUtils.encodeParameters(
+                [
+                    "string",
+                    "uint",
+                    "uint",
+                    "address",
+                    "address",
+                    "uint",
+                    "bool",
+                    "address[]",
+                    {
+                        UserAndLockerScript: {
+                            userScript: "bytes",
+                            scriptType: "uint",
+                            lockerLockingScript: "bytes",
+                        },
+                    },
+                    "uint",
+                ],
+                [
+                    "swapAndUnwrapV3",
+                    0, // uniqueCounter (starts at 0)
+                    10, // currChainId
+                    EthConnector.address, // _refundAddress
+                    exchangeConnectorAddress, // _exchangeConnector
+                    minOutputAmount.toString(), // _minOutputAmount
+                    true, // _isInputFixed
+                    [polygonToken.address, teleBTC.address], // _pathFromIntermediaryToOutputOnIntermediaryChain
+                    {
+                        userScript: USER_SCRIPT_P2PKH,
+                        scriptType: USER_SCRIPT_P2PKH_TYPE,
+                        lockerLockingScript: LOCKER_TARGET_ADDRESS,
+                    },
+                    0, // _thirdParty
+                ]
+            );
+            const swapAndUnwrapV3Arguments: SwapAndUnwrapV3Arguments = {
+                _pathFromInputToIntermediaryOnSourceChain: [
+                    inputToken.address, // Aave.eth
+                    intermediaryToken.address, // WBTC.eth
+                ],
+                _amountsFromInputToIntermediaryOnSourceChain: [
+                    requestAmountOfInputToken, // 10 tokens (10e18 wei)
+                    intermediaryTokenAmount, // 0.1 tokens (0.1e18 wei)
+                ],
+                _pathFromIntermediaryToOutputOnIntermediaryChain: [
+                    polygonToken.address, // WBTC.poly
+                    teleBTC.address, // TeleBTC.poly
+                ],
+                _minOutputAmount: minOutputAmount,
+                _bridgePercentageFee: bridgePercentageFee,
+            };
+
+            await expect(
+                EthConnector.connect(signer1).swapAndUnwrapV3(
+                    swapAndUnwrapV3Arguments,
+                    exchangeConnectorAddress,
+                    true,
+                    {
+                        userScript: USER_SCRIPT_P2PKH,
+                        scriptType: USER_SCRIPT_P2PKH_TYPE,
+                        lockerLockingScript: LOCKER_TARGET_ADDRESS,
+                    },
+                    0, // third party id
+                    EthConnector.address // refund address todo change to??
+                )
+            )
+                .to.emit(EthConnector, "MsgSent")
+                .withArgs(
+                    "0",
+                    message,
+                    inputToken.address, // to be used by admin for refunding
+                    requestAmountOfInputToken, // to be used by admin for refunding
+                    bridgePercentageFee
+                );
+        });
+
+        it("should fail and revert if swap on the source chain fails", async () => {
+            // todo
+        });
+    });
+
+    describe("#handleV3AcrossMessage", async () => {
+        it("should handle swapBackAndRefund message", async () => {
+            // set up mock exchange connector to swap intermediary token back to input token
+            await mockExchangeConnector.mock.swap.returns(
+                true, // success
+                [intermediaryTokenAmount, requestAmountOfInputToken]
+            );
+
+            // to mock the received tokens from the swap
+            await inputToken.transfer(
+                EthConnector.address,
+                requestAmountOfInputToken
+            );
+
+            await intermediaryToken.transfer(
+                acrossAddress,
+                intermediaryTokenAmount
+            );
+
+            await intermediaryToken
+                .connect(acrossSinger)
+                .approve(EthConnector.address, ethers.constants.MaxUint256);
+
+            const refundMessage = ethers.utils.defaultAbiCoder.encode(
+                [
+                    "string",
+                    "uint256",
+                    "uint256",
+                    "address",
+                    "address[]",
+                    "uint256[]",
+                ],
+                [
+                    "swapBackAndRefund",
+                    0, // uniqueCounter
+                    10, // chainId (current chain)
+                    signer1Address, // refundAddress
+                    [intermediaryToken.address, inputToken.address], // pathFromIntermediaryToInputOnSourceChain
+                    [intermediaryTokenAmount, requestAmountOfInputToken], // amountsFromIntermediaryToInputOnSourceChain
+                ]
+            );
+
+            const initialInputTokenBalance = await inputToken.balanceOf(
+                signer1Address
+            );
+
+            // Set across to a real signer (not mock across) for testing
+            await EthConnector.setAcross(acrossAddress);
+            await expect(
+                EthConnector.connect(acrossSinger).handleV3AcrossMessage(
+                    intermediaryToken.address,
+                    intermediaryTokenAmount,
+                    signer1Address,
+                    refundMessage
+                )
+            )
+                .to.emit(EthConnector, "MsgReceived")
+                .withArgs("swapBackAndRefund", 0, 10, refundMessage)
+                .and.to.emit(
+                    EthConnector,
+                    "swappedBackAndRefundedToSourceChain"
+                )
+                .withArgs(
+                    0, // uniqueCounter
+                    10, // chainId
+                    signer1Address, // refundAddress
+                    [intermediaryToken.address, inputToken.address], // path
+                    [intermediaryTokenAmount, requestAmountOfInputToken] // amounts
+                );
+
+            const finalInputTokenBalance = await inputToken.balanceOf(
+                signer1Address
+            );
+            expect(
+                finalInputTokenBalance.sub(initialInputTokenBalance)
+            ).to.equal(requestAmountOfInputToken);
         });
     });
 });

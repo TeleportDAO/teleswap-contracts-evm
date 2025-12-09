@@ -126,7 +126,9 @@ contract PolyConnectorLogic is
         } else if (_isEqualString(purpose, "swapAndUnwrapRune")) {
             _swapAndUnwrapRune(_amount, _message, _tokenSent);
         } else if (_isEqualString(purpose, "swapAndUnwrapSolana")) {
-            _swapAndUnwrapSolana(_amount, _message, _tokenSent);
+            _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
+        } else if (_isEqualString(purpose, "swapAndUnwrapV3")) {
+            _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
         }
     }
 
@@ -229,6 +231,7 @@ contract PolyConnectorLogic is
         );
     }
 
+    // todo: can be removed
     /// @notice Send back tokens to the source chain by owner
     /// @dev Owner can only set the relayer fee percentage
     function withdrawFundsToSourceChainByAdminV2(
@@ -243,11 +246,11 @@ contract PolyConnectorLogic is
             "PolygonConnectorLogic: not authorized"
         );
 
-        uint256 _amount = newFailedReqsV2[_refundAddress][_chainId][_uniqueCounter][
+        uint256 _amount = newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][
             _token
         ];
         // Update witholded amount
-        delete newFailedReqsV2[_refundAddress][_chainId][_uniqueCounter][_token];
+        delete newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][_token];
 
         require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
 
@@ -261,6 +264,79 @@ contract PolyConnectorLogic is
         );
 
         emit WithdrawnFundsToSourceChainV2(
+            _uniqueCounter,
+            _chainId,
+            _token,
+            _amount,
+            _bridgePercentageFee,
+            _refundAddress
+        );
+    }
+
+    /// @notice Send back tokens to the source chain by owner
+    /// @dev Owner can set the bridge percentage fee, path and amounts of the source chain swap
+    function withdrawFundsToSourceChainByAdminUniversal(
+        bytes32 _refundAddress,
+        uint256 _chainId,
+        uint256 _uniqueCounter,
+        address _token,
+        int64 _bridgePercentageFee,
+        address[] calldata _pathFromIntermediaryToInputOnSourceChain,
+        uint256[] calldata _amountsFromIntermediaryToInputOnSourceChain
+    ) external nonReentrant {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "PolygonConnectorLogic: not authorized"
+        );
+
+        uint256 _amount = newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][
+            _token
+        ];
+        // Update withheld amount
+        delete newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][_token];
+
+        require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
+
+        if (_pathFromIntermediaryToInputOnSourceChain.length == 0) {
+            // Send token back to the user
+            _sendTokenUsingAcrossV2(
+                _refundAddress,
+                _chainId,
+                _token,
+                _amount,
+                _bridgePercentageFee
+            );
+        } else {
+            // Send message to source chain to swap intermediary token to the input token
+            bytes memory message = abi.encode(
+                "swapBackAndRefund",
+                _uniqueCounter,
+                _chainId,
+                _refundAddress,
+                _pathFromIntermediaryToInputOnSourceChain,
+                _amountsFromIntermediaryToInputOnSourceChain
+            );
+
+            emit MsgSent(
+                _uniqueCounter,
+                message,
+                _token,
+                _amount,
+                _bridgePercentageFee
+            );
+
+            // Send tokens back to the user
+            _sendMessageUsingAcrossV3(
+                _refundAddress,
+                _chainId,
+                _token,
+                _amount,
+                _bridgePercentageFee,
+                message
+            );
+        }
+
+        emit WithdrewFundsToSourceChainUniversal(
             _uniqueCounter,
             _chainId,
             _token,
@@ -347,12 +423,18 @@ contract PolyConnectorLogic is
     }
 
     /// @notice Helper for exchanging token for BTC
-    function _swapAndUnwrapSolana(
+    function _swapAndUnwrapUniversal(
+        string memory purpose,
         uint256 _amount,
         bytes memory _message,
         address _tokenSent
     ) internal {
-        exchangeForBtcArgumentsV2 memory arguments = _decodeReqSolana(_message);
+        exchangeForBtcArgumentsUniversal memory arguments;
+        if (_isEqualString(purpose, "swapAndUnwrapV3")) {
+            arguments = _decodeReqV3(_message);
+        } else if (_isEqualString(purpose, "swapAndUnwrapSolana")) {
+            arguments = _decodeReqSolana(_message);
+        }
         require(
             arguments.path[0] == _tokenSent,
             "PolygonConnectorLogic: invalid path"
@@ -380,7 +462,7 @@ contract PolyConnectorLogic is
             address lockerTargetAddress = ILockersManager(lockersProxy)
                 .getLockerTargetAddress(arguments.scripts.lockerLockingScript);
 
-            emit NewSwapAndUnwrapV2(
+            emit NewSwapAndUnwrapUniversal(
                 arguments.uniqueCounter,
                 arguments.chainId,
                 arguments.exchangeConnector,
@@ -401,11 +483,11 @@ contract PolyConnectorLogic is
             IERC20(_tokenSent).approve(burnRouterProxy, 0);
 
             // Save token amount so user can withdraw it in future
-            newFailedReqsV2[arguments.refundAddress][arguments.chainId][
+            newFailedReqsUniversal[arguments.refundAddress][arguments.chainId][
                 arguments.uniqueCounter
             ][_tokenSent] = _amount;
 
-            emit FailedSwapAndUnwrapV2(
+            emit FailedSwapAndUnwrapUniversal(
                 arguments.uniqueCounter,
                 arguments.chainId,
                 arguments.exchangeConnector,
@@ -534,7 +616,7 @@ contract PolyConnectorLogic is
     /// @notice Decodes a Solana-style raw byte message into its arguments struct
     function _decodeReqSolana(
         bytes memory _message
-    ) private pure returns (exchangeForBtcArgumentsV2 memory arguments) {
+    ) private pure returns (exchangeForBtcArgumentsUniversal memory arguments) {
         uint256 offset = 0;
         
         // Skip "swapAndUnwrapSolana" string (19 bytes raw UTF-8, not ABI-encoded)
@@ -607,6 +689,66 @@ contract PolyConnectorLogic is
         
         // Read uint8 thirdParty (1 byte)
         arguments.thirdParty = uint256(uint8(_message[offset]));
+    }
+
+    function _decodeReqV3(
+        bytes memory _message
+    ) private pure returns (exchangeForBtcArgumentsUniversal memory arguments) {
+        (
+            , // string "swapAndUnwrapV3"
+            arguments.uniqueCounter,
+            arguments.chainId,
+            arguments.refundAddress,
+            arguments.exchangeConnector,
+            arguments.outputAmount,
+            arguments.isInputFixed,
+            arguments.path,
+            ,
+            // arguments.scripts,
+            // arguments.thirdParty
+        ) = abi.decode(
+            _message,
+            (
+                string,
+                uint256,
+                uint256,
+                bytes32,
+                address,
+                uint256,
+                bool,
+                address[],
+                UserAndLockerScript,
+                uint256
+            )
+        );
+
+        // to handle stack too deep
+        (
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            ,
+            arguments.scripts,
+            arguments.thirdParty
+        ) = abi.decode(
+            _message,
+            (
+                string,
+                uint256,
+                uint256,
+                bytes32,
+                address,
+                uint256,
+                bool,
+                address[],
+                UserAndLockerScript,
+                uint256
+            )
+        );
     }
 
     function _decodeReqRune(
@@ -752,6 +894,37 @@ contract PolyConnectorLogic is
                 bytes("") // message (empty bytes)
             );
         }
+
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
+        Address.functionCall(across, finalCallData);
+    }
+
+    /// @notice Sends tokens to Ethereum using Across
+    /// @dev This will be used for swapping and withdrawing funds
+    function _sendMessageUsingAcrossV3(
+        bytes32 _refundAddress,
+        uint256 _chainId,
+        address _token,
+        uint256 _amount,
+        int64 _bridgePercentageFee,
+        bytes memory _message
+    ) internal {
+        IERC20(_token).approve(across, _amount);
+        bytes memory callData = abi.encodeWithSignature(
+                "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
+                address(this), // depositor todo changed from acrossAdmin
+                address(uint160(uint256(_refundAddress))), // recipient (use only last 20 bytes)
+                _token, // inputToken
+                bridgeTokenMapping[_token][_chainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
+                _amount, // inputAmount
+                _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18, // outputAmount
+                _chainId,
+                address(0), // exclusiveRelayer (none for now)
+                uint32(block.timestamp), // quoteTimestamp
+                uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+                0, // exclusivityDeadline
+                _message // message
+            );
 
         bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
         Address.functionCall(across, finalCallData);

@@ -621,7 +621,7 @@ contract CcExchangeRouterLogic is
             callData = abi.encodeWithSignature(
                 "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
                 bytes32(uint256(uint160(acrossAdmin))),
-                _user,
+                _user, // todo: this should be the eth connector
                 bytes32(uint256(uint160(_intermediaryToken))),
                 _outputToken,
                 _amount,
@@ -631,7 +631,7 @@ contract CcExchangeRouterLogic is
                 uint32(block.timestamp),
                 uint32(block.timestamp + 4 hours),
                 0,
-                bytes("")
+                bytes("") // todo: this should be the message
             );
         } else { // Other chains
             callData = abi.encodeWithSignature(
@@ -647,7 +647,7 @@ contract CcExchangeRouterLogic is
                 uint32(block.timestamp), // quoteTimestamp
                 uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
                 0, // exclusivityDeadline
-                bytes("") // message (empty bytes)
+                bytes("") // message (empty bytes) todo: this should be the message
             );
         }
 

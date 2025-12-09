@@ -21,4 +21,5 @@ abstract contract EthConnectorStorage is IEthConnector {
     mapping(address => mapping(uint => address)) public bridgeTokenMapping;
     address public stargate;
     mapping(address => BridgeConnectorData) public bridgeConnectorMapping; // exchangeConnector => BridgeConnectorData
+    uint256 public gasLimit;
 }

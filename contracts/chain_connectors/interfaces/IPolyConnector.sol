@@ -41,7 +41,7 @@ interface IPolyConnector {
         UserScript userScript;
     }
 
-    struct exchangeForBtcArgumentsV2 {
+    struct exchangeForBtcArgumentsUniversal {
         uint256 uniqueCounter;
         uint256 chainId;
         bytes32 refundAddress;
@@ -77,7 +77,7 @@ interface IPolyConnector {
         uint256 thirdPartyId
     );
 
-    event NewSwapAndUnwrapV2(
+    event NewSwapAndUnwrapUniversal(
         uint256 uniqueCounter,
         uint256 chainId,
         address exchangeConnector,
@@ -105,7 +105,7 @@ interface IPolyConnector {
         uint256 thirdPartyId
     );
 
-    event FailedSwapAndUnwrapV2(
+    event FailedSwapAndUnwrapUniversal(
         uint256 uniqueCounter,
         uint256 chainId,
         address exchangeConnector,
@@ -128,6 +128,15 @@ interface IPolyConnector {
     );
 
     event WithdrawnFundsToSourceChainV2(
+        uint256 uniqueCounter,
+        uint256 chainId,
+        address token,
+        uint256 amount,
+        int64 relayerFeePercentage,
+        bytes32 refundAddress
+    );
+
+    event WithdrewFundsToSourceChainUniversal(
         uint256 uniqueCounter,
         uint256 chainId,
         address token,
@@ -172,6 +181,14 @@ interface IPolyConnector {
     event BurnRouterUpdated(address oldBurnRouter, address newBurnRouter);
 
     event LockersProxyUpdated(address oldLockersProxy, address newLockersProxy);
+
+    event MsgSent(
+        uint256 uniqueCounter,
+        bytes data,
+        address sourceChainInputToken,
+        uint256 amount,
+        int64 bridgePercentageFee
+    );
 
     // Read-only functions
 
