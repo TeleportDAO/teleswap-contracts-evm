@@ -1,5 +1,7 @@
 import * as dotenv from "dotenv";
 import { HardhatUserConfig } from "hardhat/config";
+import "@nomiclabs/hardhat-ethers";
+import "@nomicfoundation/hardhat-verify";
 import '@openzeppelin/hardhat-upgrades';
 import "@typechain/hardhat";
 import "hardhat-gas-reporter";
@@ -135,21 +137,8 @@ const config: HardhatUserConfig = {
 		currency: "USD",
   	},
   	etherscan: {
-		apiKey: {
-			ethereum: process.env.ETHEREUM_API_KEY??"",
-    		polygon: process.env.POLYGON_API_KEY??"",
-			base: process.env.BASE_API_KEY??"",
-			bsc: process.env.BSC_API_KEY??"",
-			arbitrum: process.env.ARBITRUM_API_KEY??"",
-			optimism: process.env.OPTIMISM_API_KEY??"",
-			bsquared: process.env.BSQUARED_API_KEY??"",
-			amoy: process.env.AMOY_API_KEY??"",
-			sepolia: process.env.SEPOLIA_API_KEY??"",
-			bob: process.env.BOB_API_KEY??"",
-			unichain: process.env.UNICHAIN_API_KEY??"",
-			worldchain: process.env.WORLDCHAIN_API_KEY??"",
-			plasma: process.env.PLASMA_API_KEY??""
-  		},
+		enabled: true,
+		apiKey: process.env.ETHERSCAN_API_KEY ?? "",
 		customChains: [
 			{
 				network: "ethereum",
@@ -257,6 +246,9 @@ const config: HardhatUserConfig = {
 			}
 		]
   	},
+  	sourcify: {
+		enabled: false
+  	}
 };
 
 export default config;
