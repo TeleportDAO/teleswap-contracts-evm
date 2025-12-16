@@ -99,6 +99,12 @@ contract PolyConnectorLogic is
         bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
     }
 
+    /// @notice Setter for currChainId
+    /// @param _currChainId The new current chain ID to set.
+    function setCurrChainId(uint256 _currChainId) external override onlyOwner {
+        currChainId = _currChainId;
+    }
+
     /// @notice Process requests coming from Ethereum (using Across V3)
     function handleV3AcrossMessage(
         address _tokenSent,
@@ -127,7 +133,10 @@ contract PolyConnectorLogic is
             _swapAndUnwrapRune(_amount, _message, _tokenSent);
         } else if (_isEqualString(purpose, "swapAndUnwrapSolana")) {
             _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
-        } else if (_isEqualString(purpose, "swapAndUnwrapV3")) {
+        } else if (_isEqualString(purpose, "swapAndUnwrapUniversal")) {
+            _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
+        } else if (_isEqualString(purpose, "swapBackAndRefundBTC")) {
+            // When a wrap request fails, admin will send a cross chain message to swap back and refund the user with BTC
             _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
         }
     }
@@ -231,49 +240,8 @@ contract PolyConnectorLogic is
         );
     }
 
-    // todo: can be removed
-    /// @notice Send back tokens to the source chain by owner
-    /// @dev Owner can only set the relayer fee percentage
-    function withdrawFundsToSourceChainByAdminV2(
-        bytes32 _refundAddress,
-        uint256 _chainId,
-        uint256 _uniqueCounter,
-        address _token,
-        int64 _bridgePercentageFee
-    ) external nonReentrant {
-        require(
-            msg.sender == acrossAdmin || msg.sender == owner(),
-            "PolygonConnectorLogic: not authorized"
-        );
-
-        uint256 _amount = newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][
-            _token
-        ];
-        // Update witholded amount
-        delete newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][_token];
-
-        require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
-
-        // Send token back to the user
-        _sendTokenUsingAcrossV2(
-            _refundAddress,
-            _chainId,
-            _token,
-            _amount,
-            _bridgePercentageFee
-        );
-
-        emit WithdrawnFundsToSourceChainV2(
-            _uniqueCounter,
-            _chainId,
-            _token,
-            _amount,
-            _bridgePercentageFee,
-            _refundAddress
-        );
-    }
-
-    /// @notice Send back tokens to the source chain by owner
+    /// @notice Send back tokens to the source chain by owner (after a failed swap and unwrap)
+    /// @param _chainId The original request's chainId
     /// @dev Owner can set the bridge percentage fee, path and amounts of the source chain swap
     function withdrawFundsToSourceChainByAdminUniversal(
         bytes32 _refundAddress,
@@ -281,7 +249,7 @@ contract PolyConnectorLogic is
         uint256 _uniqueCounter,
         address _token,
         int64 _bridgePercentageFee,
-        address[] calldata _pathFromIntermediaryToInputOnSourceChain,
+        bytes32[] calldata _pathFromIntermediaryToInputOnSourceChain,
         uint256[] calldata _amountsFromIntermediaryToInputOnSourceChain
     ) external nonReentrant {
         require(
@@ -307,15 +275,33 @@ contract PolyConnectorLogic is
                 _bridgePercentageFee
             );
         } else {
-            // Send message to source chain to swap intermediary token to the input token
-            bytes memory message = abi.encode(
-                "swapBackAndRefund",
-                _uniqueCounter,
-                _chainId,
-                _refundAddress,
-                _pathFromIntermediaryToInputOnSourceChain,
-                _amountsFromIntermediaryToInputOnSourceChain
-            );
+            bytes memory message;
+            if (_chainId == 34268394551451) { // Solana
+                // Send message to source chain to swap intermediary token to the input token
+                message = abi.encode(
+                    "swapBackAndRefund",
+                    _uniqueCounter,
+                    _chainId,
+                    _refundAddress,
+                    _pathFromIntermediaryToInputOnSourceChain,
+                    _amountsFromIntermediaryToInputOnSourceChain
+                );
+            } else {
+                // For other chains, we convert the bytes32 values to addresses to reduce message size
+                address[] memory pathFromIntermediaryToInputOnSourceChain = new address[](_pathFromIntermediaryToInputOnSourceChain.length);
+                for (uint256 i = 0; i < _pathFromIntermediaryToInputOnSourceChain.length; i++) {
+                    pathFromIntermediaryToInputOnSourceChain[i] = address(uint160(uint256(_pathFromIntermediaryToInputOnSourceChain[i])));
+                }
+                message = abi.encode(
+                    "swapBackAndRefund",
+                    _uniqueCounter,
+                    _chainId,
+                    address(uint160(uint256(_refundAddress))),
+                    pathFromIntermediaryToInputOnSourceChain,
+                    _amountsFromIntermediaryToInputOnSourceChain
+                );
+            }
+            
 
             emit MsgSent(
                 _uniqueCounter,
@@ -326,7 +312,7 @@ contract PolyConnectorLogic is
             );
 
             // Send tokens back to the user
-            _sendMessageUsingAcrossV3(
+            _sendMessageUsingAcrossUniversal(
                 _refundAddress,
                 _chainId,
                 _token,
@@ -342,8 +328,51 @@ contract PolyConnectorLogic is
             _token,
             _amount,
             _bridgePercentageFee,
-            _refundAddress
+            _refundAddress,
+            _pathFromIntermediaryToInputOnSourceChain,
+            _amountsFromIntermediaryToInputOnSourceChain
         );
+    }
+
+    /// @notice Called by admin to swap failed refund request to teleBTC and refund BTC to user
+    function swapBackAndRefundBTCByAdmin(
+        bytes32 _bitcoinTxId,
+        address _token, // intermediary token on this chain (polygon)
+        bytes32 _refundAddress, // the user address in which swapped tokens were supposed to be sent to
+        address _exchangeConnector,
+        uint256 _minOutputAmount,
+        UserAndLockerScript calldata _userAndLockerScript,
+        address[] calldata _path,
+        uint256[] calldata _amounts
+    ) external override nonReentrant {
+        require(msg.sender == acrossAdmin || msg.sender == owner(), "PolygonConnectorLogic: not authorized");
+
+        uint256 _amount = newFailedRefundBTCReqs[_refundAddress][currChainId][_bitcoinTxId][
+            _token
+        ];
+        require(_amount == _amounts[0], "PolygonConnectorLogic: invalid amount");
+        require(IERC20(_token).balanceOf(address(this)) >= _amount, "PolygonConnectorLogic: insufficient balance");
+
+        // Update withheld amount
+        delete newFailedRefundBTCReqs[_refundAddress][currChainId][_bitcoinTxId][_token];
+
+        require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
+        
+        // Swap intermediary token to TeleBTC
+        bytes memory message = abi.encode(
+            "swapBackAndRefundBTC",
+            uint256(_bitcoinTxId),
+            currChainId,
+            _refundAddress,
+            _exchangeConnector,
+            _minOutputAmount,
+            true, // isInputFixed
+            _path,
+            _userAndLockerScript,
+            0 // _thirdParty
+        );   
+        _swapAndUnwrapUniversal("swapBackAndRefundBTC", _amount, message, _token);
+
     }
 
     receive() external payable {}
@@ -430,8 +459,8 @@ contract PolyConnectorLogic is
         address _tokenSent
     ) internal {
         exchangeForBtcArgumentsUniversal memory arguments;
-        if (_isEqualString(purpose, "swapAndUnwrapV3")) {
-            arguments = _decodeReqV3(_message);
+        if (_isEqualString(purpose, "swapAndUnwrapUniversal") || _isEqualString(purpose, "swapBackAndRefundBTC")) {
+            arguments = _decodeReqUniversal(_message);
         } else if (_isEqualString(purpose, "swapAndUnwrapSolana")) {
             arguments = _decodeReqSolana(_message);
         }
@@ -483,9 +512,15 @@ contract PolyConnectorLogic is
             IERC20(_tokenSent).approve(burnRouterProxy, 0);
 
             // Save token amount so user can withdraw it in future
-            newFailedReqsUniversal[arguments.refundAddress][arguments.chainId][
-                arguments.uniqueCounter
-            ][_tokenSent] = _amount;
+            if (_isEqualString(purpose, "swapBackAndRefundBTC")) {
+                newFailedRefundBTCReqs[arguments.refundAddress][arguments.chainId][
+                    bytes32(arguments.uniqueCounter)
+                ][_tokenSent] = _amount;
+            } else {
+                newFailedReqsUniversal[arguments.refundAddress][arguments.chainId][
+                    arguments.uniqueCounter
+                ][_tokenSent] = _amount;
+            }
 
             emit FailedSwapAndUnwrapUniversal(
                 arguments.uniqueCounter,
@@ -691,11 +726,11 @@ contract PolyConnectorLogic is
         arguments.thirdParty = uint256(uint8(_message[offset]));
     }
 
-    function _decodeReqV3(
+    function _decodeReqUniversal(
         bytes memory _message
     ) private pure returns (exchangeForBtcArgumentsUniversal memory arguments) {
         (
-            , // string "swapAndUnwrapV3"
+            , // string "swapAndUnwrapUniversal"
             arguments.uniqueCounter,
             arguments.chainId,
             arguments.refundAddress,
@@ -901,7 +936,7 @@ contract PolyConnectorLogic is
 
     /// @notice Sends tokens to Ethereum using Across
     /// @dev This will be used for swapping and withdrawing funds
-    function _sendMessageUsingAcrossV3(
+    function _sendMessageUsingAcrossUniversal(
         bytes32 _refundAddress,
         uint256 _chainId,
         address _token,
@@ -912,7 +947,7 @@ contract PolyConnectorLogic is
         IERC20(_token).approve(across, _amount);
         bytes memory callData = abi.encodeWithSignature(
                 "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
-                address(this), // depositor todo changed from acrossAdmin
+                address(this), // depositor (can be refunded by admin)
                 address(uint160(uint256(_refundAddress))), // recipient (use only last 20 bytes)
                 _token, // inputToken
                 bridgeTokenMapping[_token][_chainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)

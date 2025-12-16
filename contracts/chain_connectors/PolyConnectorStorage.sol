@@ -47,4 +47,16 @@ abstract contract PolyConnectorStorage is IPolyConnector {
         )
     ) public newFailedReqsUniversal;
     // ^ Mapping from [refundAddress][chainId][reqId][token] to amount
+
+    mapping(
+        bytes32 => mapping(
+            uint256 => mapping(
+                bytes32 => mapping(
+                    address => uint256
+                )
+            )
+        )
+    ) public newFailedRefundBTCReqs;
+    // ^ Mapping from [refundAddress][chainId][bitcoinTxId][token] to amount
+    uint256 public currChainId;
 }

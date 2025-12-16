@@ -120,6 +120,22 @@ interface ICcExchangeRouter {
         uint amount;
     }
 
+    /// @notice Structure for passing arguments to _processFillUniversal function (called from fillTxUniversal function)
+    struct FillUniversalArgs {
+        bytes32 txId;
+        bytes32 recipient;
+        address intermediaryToken;
+        bytes32 outputToken;
+        uint256 fillAmount;
+        uint256 finalAmount;
+        uint256 userRequestedAmount;
+        uint256 destRealChainId;
+        uint256 bridgePercentageFee;
+        bytes lockerLockingScript;
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain;
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain;
+    }
+
     /// @notice Structure for storing fillings
     /// @param prefixSum Cumulative sum of fillings
     /// @param currentIndex Next filler index
@@ -140,7 +156,7 @@ interface ICcExchangeRouter {
     }
 
     /// @notice Structure for passing arguments to swap function
-    struct swapArgumentsV2 {
+    struct swapArgumentsUniversal {
         uint destRealChainId;
         bytes _lockerLockingScript;
         ccExchangeRequestV2 _ccExchangeRequestV2;
@@ -148,15 +164,38 @@ interface ICcExchangeRouter {
         bytes32 _txId;
         address[] _path;
         address _exchangeConnector;
+        bytes32[] _pathFromIntermediaryToDestTokenOnDestChain;
+        uint256[] _amountsFromIntermediaryToDestTokenOnDestChain;
     }
 
-    /// @notice Structure for passing data to swapV2 function
-    struct SwapV2Data {
+    /// @notice Structure for passing data to _swapUniversal function (called from _wrapAndSwapUniversal function)
+    struct SwapUniversalData {
         address teleBTC;
         address wrappedNativeToken;
         uint256 currentChainId;
         address lockers;
         address teleporter;
+    }
+
+    /// @notice Structure for passing arguments to _sendTokenToOtherChainUniversal function
+    struct SendTokenToOtherChainArguments {
+        bytes32 _txId;
+        uint256 _destRealChainId;
+        address _intermediaryToken;
+        bytes32 _outputToken;
+        uint256 _amount;
+        bytes32 _user;
+        uint256 _bridgePercentageFee;
+    }
+
+    /// @notice Structure for passing arguments to _sendTeleBtcToFillerUniversal function
+    struct SendTeleBtcToFillerUniversalArgs {
+        address filler;
+        bytes32 txId;
+        bytes lockerLockingScript;
+        uint256 destinationChainId;
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain;
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain;
     }
 
     // Events
@@ -177,21 +216,25 @@ interface ICcExchangeRouter {
     /// @param lockerTargetAddress Address of Locker
     /// @param bitcoinTxId The transaction ID of request on Bitcoin 
     /// @param inputAndOutputToken [inputToken, outputToken]
-    /// @param userRequestedAmount that user requested
-    /// @param finalAmount that user received
-    /// @param destinationChainId chain id of destination 
-    /// @param bridgePercentageFee percentage of fee we have to give to across relayers to fill our request
-    event RequestFilledV2(
+    /// @param amountArgs [fillAmount, finalAmount, userRequestedAmount, destinationChainId, bridgePercentageFee]
+    ///        [
+    ///                fillAmount,
+    ///                finalAmount, //  that user received
+    ///                userRequestedAmount, // that user requested
+    ///                destinationChainId, // chain id of destination  
+    ///                bridgePercentageFee // percentage of fee we have to give to across relayers to fill our request
+    ///        ]
+    /// @param pathFromIntermediaryToDestTokenOnDestChain Path from intermediary token to destination token on destination chain
+    /// @param amountsFromIntermediaryToDestTokenOnDestChain Amounts from intermediary token to destination token on destination chain
+    event RequestFilledUniversal(
         address filler,
         bytes32 user,
         address lockerTargetAddress,
         bytes32 bitcoinTxId,
         address[2] inputAndOutputToken,
-        uint fillAmount,
-        uint finalAmount,
-        uint userRequestedAmount,
-        uint destinationChainId,
-        uint bridgePercentageFee
+        uint256[5] amountArgs, // [fillAmount, finalAmount, userRequestedAmount, destinationChainId, bridgePercentageFee]
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
     );
 
     event FillerRefunded(
@@ -208,11 +251,11 @@ interface ICcExchangeRouter {
     /// @param speed Speed of the request (normal or instant)
     /// @param teleporter Address of teleporter who submitted the request
     /// @param bitcoinTxId The transaction ID of request on Bitcoin 
-    /// @param appId Assigned application id to exchange
-    /// @param thirdPartyId Id of third party
-    /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]
-    /// @param destinationChainId chain id of destination 
-    event NewWrapAndSwapV2(
+    /// @param protocolIds [destinationChainId (chain id of destination), appId (assigned application id to exchange), thirdPartyId (id of third party)]
+    /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee] 
+    /// @param pathFromIntermediaryToDestTokenOnDestChain Path from intermediary token to destination token on destination chain
+    /// @param amountsFromIntermediaryToDestTokenOnDestChain Amounts from intermediary token to destination token on destination chain
+    event NewWrapAndSwapUniversal(
         address lockerTargetAddress,
         bytes32 indexed user,
         bytes32[3] inputIntermediaryOutputToken,
@@ -220,10 +263,10 @@ interface ICcExchangeRouter {
         uint indexed speed,
         address indexed teleporter,
         bytes32 bitcoinTxId,
-        uint appId,
-        uint thirdPartyId,
+        uint256[3] protocolIds,
         uint[5] fees,
-        uint destinationChainId
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
     );
 
     /// @notice Emits when a cc exchange request fails
@@ -235,11 +278,11 @@ interface ICcExchangeRouter {
     /// @param speed Speed of the request (normal or instant)
     /// @param teleporter Address of teleporter who submitted the request
     /// @param bitcoinTxId The transaction ID of request on Bitcoin 
-    /// @param appId Assigned application id to exchange
-    /// @param thirdPartyId Id of third party
+    /// @param protocolIds [destinationChainId (chain id of destination), appId (assigned application id to exchange), thirdPartyId (id of third party)]
     /// @param fees [network fee, locker fee, protocol fee, third party fee, bridge fee]   
-    /// @param destinationChainId chain id of destination 
-    event FailedWrapAndSwapV2(
+    /// @param pathFromIntermediaryToDestTokenOnDestChain Path from intermediary token to destination token on destination chain
+    /// @param amountsFromIntermediaryToDestTokenOnDestChain Amounts from intermediary token to destination token on destination chain
+    event FailedWrapAndSwapUniversal(
         address lockerTargetAddress,
         bytes32 indexed recipientAddress,
         bytes32[3] inputIntermediaryOutputToken,
@@ -247,10 +290,10 @@ interface ICcExchangeRouter {
         uint indexed speed,
         address indexed teleporter,
         bytes32 bitcoinTxId,
-        uint appId,
-        uint thirdPartyId,
+        uint256[3] protocolIds,
         uint[5] fees,
-        uint destinationChainId
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
     );
 
     /// @notice Emits when a failed request is refunded
@@ -399,7 +442,9 @@ interface ICcExchangeRouter {
         address _destinationToken
     ) external;
 
-    function fillTxV2(
+    function setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) external;
+
+    function fillTxUniversal(
         bytes32 _txId,
         bytes32 _recipient,
         address _intermediaryToken,
@@ -408,7 +453,9 @@ interface ICcExchangeRouter {
         uint _userRequestedAmount,
         uint _destRealChainId,
         uint _bridgePercentageFee,
-        bytes memory _lockerLockingScript
+        bytes memory _lockerLockingScript,
+        bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
     ) external payable;
 
     function refundByOwnerOrAdmin(
@@ -429,9 +476,11 @@ interface ICcExchangeRouter {
         address _intermediaryToken
     ) external;
 
-    function wrapAndSwapV2(
+    function wrapAndSwapUniversal(
         TxAndProof memory _txAndProof,
         bytes calldata _lockerLockingScript,
-        address[] memory _path
+        address[] memory _pathFromTeleBtcToIntermediary,
+        bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
     ) external payable returns(bool);
 }

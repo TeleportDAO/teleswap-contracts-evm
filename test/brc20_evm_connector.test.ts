@@ -20,8 +20,10 @@ import { EthConnectorProxy__factory } from "../src/types/factories/EthConnectorP
 import { EthConnectorLogic__factory } from "../src/types/factories/EthConnectorLogic__factory";
 import { takeSnapshot, revertProvider } from "./block_utils";
 import Web3 from "web3";
+const { calculateTxId } = require("./utils/calculateTxId");
+const CC_EXCHANGE_REQUESTS = require("./test_fixtures/ccExchangeRequests.json");
 
-interface SwapAndUnwrapV3Arguments {
+interface SwapAndUnwrapUniversalArguments {
     _pathFromInputToIntermediaryOnSourceChain: string[];
     _amountsFromInputToIntermediaryOnSourceChain: BigNumber[];
     _pathFromIntermediaryToOutputOnIntermediaryChain: string[];
@@ -78,10 +80,12 @@ describe("EthConnector", async () => {
     const USER_SCRIPT_P2PKH_TYPE = 1; // P2PKH
     // const USER_SCRIPT_P2WPKH = "0x751e76e8199196d454941c45d1b3a323f1433bd6";
     // const USER_SCRIPT_P2WPKH_TYPE = 3; // P2WPKH
-    // For swapAndUnwrapV3 (universal route)
+    // For swapAndUnwrapUniversal
     const requestAmountOfInputToken = ethers.utils.parseUnits("10", 18); // 10 tokens of input token (e.g., AAVE)
     const intermediaryTokenAmount = ethers.utils.parseUnits("0.1", 18); // 0.1 tokens of intermediary token
     const bridgePercentageFee = BigNumber.from(10).pow(15); // 0.1% = 1e15
+    const intermediaryChainId = 137;
+    const currentChainId = 10;
 
     beforeEach(async () => {
         [proxyAdmin, deployer, signer1, acrossSinger] =
@@ -170,8 +174,8 @@ describe("EthConnector", async () => {
         await EthConnector.initialize(
             mockAcross.address,
             wrappedNativeToken.address,
-            137,
-            10
+            intermediaryChainId,
+            currentChainId
         );
         // Set up bridge connector mapping for target chain ID 137
         await EthConnector.setBridgeConnectorMapping(
@@ -661,7 +665,7 @@ describe("EthConnector", async () => {
         });
     });
 
-    describe("#swapAndUnwrapV3", async () => {
+    describe("#swapAndUnwrapUniversal", async () => {
         it("should swap and bridge to the intermediary chain", async () => {
             // transfer input tokens to signer1
             await inputToken.transfer(
@@ -707,7 +711,7 @@ describe("EthConnector", async () => {
                     "uint",
                 ],
                 [
-                    "swapAndUnwrapV3",
+                    "swapAndUnwrapUniversal",
                     0, // uniqueCounter (starts at 0)
                     10, // currChainId
                     EthConnector.address, // _refundAddress
@@ -723,26 +727,27 @@ describe("EthConnector", async () => {
                     0, // _thirdParty
                 ]
             );
-            const swapAndUnwrapV3Arguments: SwapAndUnwrapV3Arguments = {
-                _pathFromInputToIntermediaryOnSourceChain: [
-                    inputToken.address, // Aave.eth
-                    intermediaryToken.address, // WBTC.eth
-                ],
-                _amountsFromInputToIntermediaryOnSourceChain: [
-                    requestAmountOfInputToken, // 10 tokens (10e18 wei)
-                    intermediaryTokenAmount, // 0.1 tokens (0.1e18 wei)
-                ],
-                _pathFromIntermediaryToOutputOnIntermediaryChain: [
-                    polygonToken.address, // WBTC.poly
-                    teleBTC.address, // TeleBTC.poly
-                ],
-                _minOutputAmount: minOutputAmount,
-                _bridgePercentageFee: bridgePercentageFee,
-            };
+            const swapAndUnwrapUniversalArguments: SwapAndUnwrapUniversalArguments =
+                {
+                    _pathFromInputToIntermediaryOnSourceChain: [
+                        inputToken.address, // Aave.eth
+                        intermediaryToken.address, // WBTC.eth
+                    ],
+                    _amountsFromInputToIntermediaryOnSourceChain: [
+                        requestAmountOfInputToken, // 10 tokens (10e18 wei)
+                        intermediaryTokenAmount, // 0.1 tokens (0.1e18 wei)
+                    ],
+                    _pathFromIntermediaryToOutputOnIntermediaryChain: [
+                        polygonToken.address, // WBTC.poly
+                        teleBTC.address, // TeleBTC.poly
+                    ],
+                    _minOutputAmount: minOutputAmount,
+                    _bridgePercentageFee: bridgePercentageFee,
+                };
 
             await expect(
-                EthConnector.connect(signer1).swapAndUnwrapV3(
-                    swapAndUnwrapV3Arguments,
+                EthConnector.connect(signer1).swapAndUnwrapUniversal(
+                    swapAndUnwrapUniversalArguments,
                     exchangeConnectorAddress,
                     true,
                     {
@@ -835,6 +840,7 @@ describe("EthConnector", async () => {
                     0, // uniqueCounter
                     10, // chainId
                     signer1Address, // refundAddress
+                    requestAmountOfInputToken,
                     [intermediaryToken.address, inputToken.address], // path
                     [intermediaryTokenAmount, requestAmountOfInputToken] // amounts
                 );
@@ -845,6 +851,483 @@ describe("EthConnector", async () => {
             expect(
                 finalInputTokenBalance.sub(initialInputTokenBalance)
             ).to.equal(requestAmountOfInputToken);
+        });
+
+        it("should handle wrapAndSwapUniversal message and send user the destination token", async () => {
+            // set up mock exchange connector to swap intermediary token back to input token
+            await mockExchangeConnector.mock.swap.returns(
+                true, // success
+                [intermediaryTokenAmount, requestAmountOfInputToken]
+            );
+
+            // to mock the received tokens from the swap
+            await inputToken.transfer(
+                EthConnector.address,
+                requestAmountOfInputToken
+            );
+
+            await intermediaryToken.transfer(
+                acrossAddress,
+                intermediaryTokenAmount
+            );
+
+            await intermediaryToken
+                .connect(acrossSinger)
+                .approve(EthConnector.address, ethers.constants.MaxUint256);
+
+            // Setting up the input arguments for the wrapAndSwapUniversal message
+            const txId = await calculateTxId(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.version,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vin,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.locktime
+            );
+
+            const destinationToken = inputToken;
+            const destinationTokenAmount = requestAmountOfInputToken;
+            const wrapAndSwapUniversalMessage =
+                ethers.utils.defaultAbiCoder.encode(
+                    [
+                        "string",
+                        "bytes32",
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address[]",
+                        "uint256[]",
+                    ],
+                    [
+                        "wrapAndSwapUniversal",
+                        txId,
+                        currentChainId, // destRealChainId
+                        intermediaryChainId, // intermediaryChainId
+                        signer1Address, // targetAddress
+                        [intermediaryToken.address, destinationToken.address], // pathFromIntermediaryToDestTokenOnDestChain
+                        [intermediaryTokenAmount, destinationTokenAmount], // amountsFromIntermediaryToDestTokenOnDestChain
+                    ]
+                );
+
+            const initialDestinationTokenBalance =
+                await destinationToken.balanceOf(signer1Address);
+
+            // Set across to a real signer (not mock across) for testing
+            await EthConnector.setAcross(acrossAddress);
+
+            await expect(
+                EthConnector.connect(acrossSinger).handleV3AcrossMessage(
+                    intermediaryToken.address,
+                    intermediaryTokenAmount,
+                    signer1Address,
+                    wrapAndSwapUniversalMessage
+                )
+            )
+                .to.emit(EthConnector, "MsgReceived")
+                .withArgs(
+                    "wrapAndSwapUniversal",
+                    BigNumber.from(txId), // uniqueCounter (bitcoinTxId for wrapAndSwapUniversal)
+                    currentChainId, // destinationChainId
+                    wrapAndSwapUniversalMessage
+                )
+                .and.to.emit(EthConnector, "WrappedAndSwappedToDestChain")
+                .withArgs(
+                    txId, // bitcoinTxId
+                    currentChainId, // destinationChainId
+                    intermediaryChainId, // intermediaryChainId
+                    signer1Address, // targetAddress
+                    destinationTokenAmount, // actual amount of destination token sent to user
+                    [intermediaryToken.address, destinationToken.address], // path from intermediary token to destination token
+                    [intermediaryTokenAmount, destinationTokenAmount] // amounts from intermediary token to destination token
+                );
+
+            const finalDestinationTokenBalance =
+                await destinationToken.balanceOf(signer1Address);
+            expect(
+                finalDestinationTokenBalance.sub(initialDestinationTokenBalance)
+            ).to.equal(destinationTokenAmount);
+        });
+
+        it("fails because swap after handling wrapAndSwapUniversal message fails", async () => {
+            // set up mock exchange connector to swap intermediary token back to input token
+            await mockExchangeConnector.mock.swap.returns(
+                false, // failure
+                [intermediaryTokenAmount, requestAmountOfInputToken]
+            );
+
+            await intermediaryToken.transfer(
+                acrossAddress,
+                intermediaryTokenAmount
+            );
+
+            await intermediaryToken
+                .connect(acrossSinger)
+                .approve(EthConnector.address, ethers.constants.MaxUint256);
+
+            // Setting up the input arguments for the wrapAndSwapUniversal message
+            const txId = await calculateTxId(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.version,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vin,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.locktime
+            );
+
+            const destinationToken = inputToken;
+            const destinationTokenAmount = requestAmountOfInputToken;
+            const wrapAndSwapUniversalMessage =
+                ethers.utils.defaultAbiCoder.encode(
+                    [
+                        "string",
+                        "bytes32",
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address[]",
+                        "uint256[]",
+                    ],
+                    [
+                        "wrapAndSwapUniversal",
+                        txId,
+                        currentChainId, // destRealChainId
+                        intermediaryChainId, // intermediaryChainId
+                        signer1Address, // targetAddress
+                        [intermediaryToken.address, destinationToken.address], // pathFromIntermediaryToDestTokenOnDestChain
+                        [intermediaryTokenAmount, destinationTokenAmount], // amountsFromIntermediaryToDestTokenOnDestChain
+                    ]
+                );
+
+            const initialDestinationTokenBalance =
+                await destinationToken.balanceOf(signer1Address);
+
+            // Set across to a real signer (not mock across) for testing
+            await EthConnector.setAcross(acrossAddress);
+
+            await expect(
+                EthConnector.connect(acrossSinger).handleV3AcrossMessage(
+                    intermediaryToken.address,
+                    intermediaryTokenAmount,
+                    signer1Address,
+                    wrapAndSwapUniversalMessage
+                )
+            )
+                .to.emit(EthConnector, "MsgReceived")
+                .withArgs(
+                    "wrapAndSwapUniversal",
+                    BigNumber.from(txId), // uniqueCounter (bitcoinTxId for wrapAndSwapUniversal)
+                    currentChainId, // destinationChainId
+                    wrapAndSwapUniversalMessage
+                )
+                .and.to.emit(EthConnector, "FailedWrapAndSwapToDestChain")
+                .withArgs(
+                    txId, // bitcoinTxId
+                    currentChainId, // destinationChainId
+                    intermediaryChainId, // intermediaryChainId
+                    signer1Address, // targetAddress
+                    0, // actual amount of destination token sent to user
+                    [intermediaryToken.address, destinationToken.address], // path from intermediary token to destination token
+                    [intermediaryTokenAmount, destinationTokenAmount] // amounts from intermediary token to destination token
+                );
+
+            const finalDestinationTokenBalance =
+                await destinationToken.balanceOf(signer1Address);
+            expect(
+                finalDestinationTokenBalance.sub(initialDestinationTokenBalance)
+            ).to.equal(0);
+        });
+
+        it("should bridge back and refund user (with BTC)", async () => {
+            // set up mock exchange connector to swap intermediary token back to input token
+            await mockExchangeConnector.mock.swap.returns(
+                false, // failure
+                [intermediaryTokenAmount, requestAmountOfInputToken]
+            );
+
+            await intermediaryToken.transfer(
+                acrossAddress,
+                intermediaryTokenAmount
+            );
+
+            await intermediaryToken
+                .connect(acrossSinger)
+                .approve(EthConnector.address, ethers.constants.MaxUint256);
+
+            // Setting up the input arguments for the wrapAndSwapUniversal message
+            const txId = await calculateTxId(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.version,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vin,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.locktime
+            );
+
+            const destinationToken = inputToken;
+            const destinationTokenAmount = requestAmountOfInputToken;
+            const wrapAndSwapUniversalMessage =
+                ethers.utils.defaultAbiCoder.encode(
+                    [
+                        "string",
+                        "bytes32",
+                        "uint256",
+                        "uint256",
+                        "address",
+                        "address[]",
+                        "uint256[]",
+                    ],
+                    [
+                        "wrapAndSwapUniversal",
+                        txId,
+                        currentChainId, // destRealChainId
+                        intermediaryChainId, // intermediaryChainId
+                        signer1Address, // targetAddress
+                        [intermediaryToken.address, destinationToken.address], // pathFromIntermediaryToDestTokenOnDestChain
+                        [intermediaryTokenAmount, destinationTokenAmount], // amountsFromIntermediaryToDestTokenOnDestChain
+                    ]
+                );
+
+            const initialDestinationTokenBalance =
+                await destinationToken.balanceOf(signer1Address);
+
+            // Set across to a real signer (not mock across) for testing
+            await EthConnector.setAcross(acrossAddress);
+
+            await expect(
+                EthConnector.connect(acrossSinger).handleV3AcrossMessage(
+                    intermediaryToken.address,
+                    intermediaryTokenAmount,
+                    signer1Address,
+                    wrapAndSwapUniversalMessage
+                )
+            )
+                .to.emit(EthConnector, "MsgReceived")
+                .withArgs(
+                    "wrapAndSwapUniversal",
+                    BigNumber.from(txId), // uniqueCounter (bitcoinTxId for wrapAndSwapUniversal)
+                    currentChainId, // destinationChainId
+                    wrapAndSwapUniversalMessage
+                )
+                .and.to.emit(EthConnector, "FailedWrapAndSwapToDestChain")
+                .withArgs(
+                    txId, // bitcoinTxId
+                    currentChainId, // destinationChainId
+                    intermediaryChainId, // intermediaryChainId
+                    signer1Address, // targetAddress
+                    0, // actual amount of destination token sent to user
+                    [intermediaryToken.address, destinationToken.address], // path from intermediary token to destination token
+                    [intermediaryTokenAmount, destinationTokenAmount] // amounts from intermediary token to destination token
+                );
+
+            const finalDestinationTokenBalance =
+                await destinationToken.balanceOf(signer1Address);
+            expect(
+                finalDestinationTokenBalance.sub(initialDestinationTokenBalance)
+            ).to.equal(0);
+
+            // Reset across to mockAcross for swapBackAndRefundBTCByAdmin to work
+            // (swapBackAndRefundBTCByAdmin calls _sendMsgUsingAcross which needs the mock contract)
+            await EthConnector.setAcross(mockAcross.address);
+
+            // Transfer tokens to EthConnector.address to simulate tokens being in the contract
+            // after the failed swap (in reality, Across would have transferred them)
+            await intermediaryToken
+                .connect(acrossSinger)
+                .transfer(EthConnector.address, intermediaryTokenAmount);
+
+            const initialIntermediaryTokenBalance =
+                await intermediaryToken.balanceOf(EthConnector.address);
+            expect(
+                await EthConnector.swapBackAndRefundBTCByAdmin({
+                    targetAddress: signer1Address,
+                    destToken: destinationToken.address,
+                    tokenSent: intermediaryToken.address,
+                    bitcoinTxId: txId,
+                    exchangeConnector: mockExchangeConnector.address,
+                    minOutputAmount: requestAmountOfInputToken,
+                    userAndLockerScript: {
+                        userScript: USER_SCRIPT_P2PKH,
+                        scriptType: USER_SCRIPT_P2PKH_TYPE,
+                        lockerLockingScript: LOCKER_TARGET_ADDRESS,
+                    },
+                    path: [intermediaryToken.address, destinationToken.address],
+                    amounts: [intermediaryTokenAmount, destinationTokenAmount],
+                    bridgePercentageFee: bridgePercentageFee,
+                    intermediaryChainId: intermediaryChainId,
+                })
+            )
+                .to.emit(EthConnector, "MsgSent")
+                .withArgs(
+                    "swapBackAndRefundBTC",
+                    txId,
+                    currentChainId,
+                    signer1Address,
+                    mockExchangeConnector.address,
+                    requestAmountOfInputToken
+                );
+
+            const finalIntermediaryTokenBalance =
+                await intermediaryToken.balanceOf(EthConnector.address);
+            expect(
+                finalIntermediaryTokenBalance.sub(
+                    initialIntermediaryTokenBalance
+                )
+            ).to.equal(0);
+        });
+
+        it("should handle swapBackAndRefund message failure and allow admin to refund", async () => {
+            // set up mock exchange connector to fail the swap
+            await mockExchangeConnector.mock.swap.returns(
+                false, // failure
+                [intermediaryTokenAmount, requestAmountOfInputToken]
+            );
+
+            // Transfer intermediary tokens to acrossAddress (simulating tokens received from bridge)
+            await intermediaryToken.transfer(
+                acrossAddress,
+                intermediaryTokenAmount
+            );
+
+            await intermediaryToken
+                .connect(acrossSinger)
+                .approve(EthConnector.address, ethers.constants.MaxUint256);
+
+            const uniqueCounter = 0;
+            const chainId = 10; // current chain
+            const refundMessage = ethers.utils.defaultAbiCoder.encode(
+                [
+                    "string",
+                    "uint256",
+                    "uint256",
+                    "address",
+                    "address[]",
+                    "uint256[]",
+                ],
+                [
+                    "swapBackAndRefund",
+                    uniqueCounter,
+                    chainId,
+                    signer1Address, // refundAddress
+                    [intermediaryToken.address, inputToken.address], // pathFromIntermediaryToInputOnSourceChain
+                    [intermediaryTokenAmount, requestAmountOfInputToken], // amountsFromIntermediaryToInputOnSourceChain
+                ]
+            );
+
+            const initialInputTokenBalance = await inputToken.balanceOf(
+                signer1Address
+            );
+
+            // Set across to a real signer (not mock across) for testing
+            await EthConnector.setAcross(acrossAddress);
+
+            // Handle the swapBackAndRefund message - swap will fail
+            await expect(
+                EthConnector.connect(acrossSinger).handleV3AcrossMessage(
+                    intermediaryToken.address,
+                    intermediaryTokenAmount,
+                    signer1Address,
+                    refundMessage
+                )
+            )
+                .to.emit(EthConnector, "MsgReceived")
+                .withArgs(
+                    "swapBackAndRefund",
+                    uniqueCounter,
+                    chainId,
+                    refundMessage
+                )
+                .and.to.emit(
+                    EthConnector,
+                    "FailedSwapBackAndRefundToSourceChain"
+                )
+                .withArgs(
+                    uniqueCounter,
+                    chainId,
+                    signer1Address, // refundAddress
+                    inputToken.address, // inputToken
+                    intermediaryToken.address, // tokenSent
+                    intermediaryTokenAmount // tokenSentAmount
+                );
+
+            // Verify the failed request is saved in the mapping
+            const storedAmount =
+                await EthConnector.newFailedSwapBackAndRefundReqs(
+                    signer1Address,
+                    inputToken.address,
+                    uniqueCounter,
+                    intermediaryToken.address
+                );
+            expect(storedAmount).to.equal(intermediaryTokenAmount);
+
+            // Verify user didn't receive tokens yet
+            const intermediateInputTokenBalance = await inputToken.balanceOf(
+                signer1Address
+            );
+            expect(
+                intermediateInputTokenBalance.sub(initialInputTokenBalance)
+            ).to.equal(0);
+
+            // Transfer intermediary tokens to contract (simulating they're in the contract after failed swap)
+            await intermediaryToken
+                .connect(acrossSinger)
+                .transfer(EthConnector.address, intermediaryTokenAmount);
+
+            // Now set up mock to succeed for the admin refund call
+            await mockExchangeConnector.mock.swap.returns(
+                true, // success
+                [intermediaryTokenAmount, requestAmountOfInputToken]
+            );
+
+            // Transfer input tokens to contract (simulating swap result)
+            await inputToken.transfer(
+                EthConnector.address,
+                requestAmountOfInputToken
+            );
+
+            // Set acrossAdmin (needed for authorization) - deployer is owner
+            await EthConnector.connect(deployer).setAcrossAdmin(acrossAddress);
+
+            // Reset allowance to 0 first (safeApprove requires allowance to be 0 before setting new value)
+            // The contract needs to reset its own allowance, so we use approveToken
+            await EthConnector.connect(deployer).approveToken(
+                intermediaryToken.address,
+                exchangeConnectorAddress,
+                0
+            );
+
+            // Admin calls refundFailedSwapAndUnwrapUniversal
+            await expect(
+                EthConnector.connect(
+                    acrossSinger
+                ).refundFailedSwapAndUnwrapUniversal(
+                    uniqueCounter,
+                    signer1Address, // refundAddress
+                    inputToken.address, // inputToken
+                    [intermediaryToken.address, inputToken.address], // pathFromIntermediaryToInputOnSourceChain
+                    [intermediaryTokenAmount, requestAmountOfInputToken] // amountsFromIntermediaryToInputOnSourceChain
+                )
+            )
+                .to.emit(EthConnector, "RefundedFailedSwapAndUnwrapUniversal")
+                .withArgs(
+                    uniqueCounter,
+                    signer1Address, // refundAddress
+                    inputToken.address, // inputToken
+                    requestAmountOfInputToken, // inputTokenAmount
+                    [intermediaryToken.address, inputToken.address], // pathFromIntermediaryToInputOnSourceChain
+                    [intermediaryTokenAmount, requestAmountOfInputToken] // amountsFromIntermediaryToInputOnSourceChain
+                );
+
+            // Verify user received the input tokens
+            const finalInputTokenBalance = await inputToken.balanceOf(
+                signer1Address
+            );
+            expect(
+                finalInputTokenBalance.sub(initialInputTokenBalance)
+            ).to.equal(requestAmountOfInputToken);
+
+            // Verify the mapping entry was deleted
+            const deletedAmount =
+                await EthConnector.newFailedSwapBackAndRefundReqs(
+                    signer1Address,
+                    inputToken.address,
+                    uniqueCounter,
+                    intermediaryToken.address
+                );
+            expect(deletedAmount).to.equal(0);
         });
     });
 });

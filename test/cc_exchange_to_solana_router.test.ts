@@ -1,3 +1,16 @@
+// @ts-nocheck
+/* eslint-disable camelcase */
+/* eslint-disable node/no-missing-import */
+/* eslint-disable node/no-extraneous-import */
+/* eslint-disable import/no-unresolved */
+/* eslint-disable import/no-extraneous-dependencies */
+/* eslint-disable import/first */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable no-unused-vars */
+/* eslint-disable prefer-const */
+/* eslint-disable eqeqeq */
+/* eslint-disable node/no-unsupported-features/es-builtins */
+
 const CC_EXCHANGE_REQUESTS = require("./test_fixtures/ccExchangeRequests.json");
 require("dotenv").config({ path: "../../.env" });
 
@@ -20,12 +33,16 @@ import { UniswapV2Connector } from "../src/types/UniswapV2Connector";
 import { UniswapV2Connector__factory } from "../src/types/factories/UniswapV2Connector__factory";
 
 import { CcExchangeRouterProxy__factory } from "../src/types/factories/CcExchangeRouterProxy__factory";
-import { CcExchangeRouterLogic__factory } from "../src/types/factories/CcExchangeRouterLogic__factory";
-import { CcExchangeRouterLogicLibraryAddresses } from "../src/types/factories/CcExchangeRouter__factory";
+import {
+    CcExchangeRouterLogic__factory,
+    CcExchangeRouterLogicLibraryAddresses,
+} from "../src/types/factories/CcExchangeRouterLogic__factory";
 
 import { LockersManagerProxy__factory } from "../src/types/factories/LockersManagerProxy__factory";
-import { LockersManagerLogic__factory } from "../src/types/factories/LockersManagerLogic__factory";
-import { LockersManagerLogicLibraryAddresses } from "../src/types/factories/LockersManagerLogic__factory";
+import {
+    LockersManagerLogic__factory,
+    LockersManagerLogicLibraryAddresses,
+} from "../src/types/factories/LockersManagerLogic__factory";
 
 import { LockersManagerLib } from "../src/types/LockersManagerLib";
 import { LockersManagerLib__factory } from "../src/types/factories/LockersManagerLib__factory";
@@ -33,11 +50,10 @@ import { LockersManagerLib__factory } from "../src/types/factories/LockersManage
 import { CcExchangeRouterLib } from "../src/types/CcExchangeRouterLib";
 import { CcExchangeRouterLib__factory } from "../src/types/factories/CcExchangeRouterLib__factory";
 
-import { TeleBTCLogic } from "../src/types/TeleBTCLogic";
 import { TeleBTCLogic__factory } from "../src/types/factories/TeleBTCLogic__factory";
-import { TeleBTCProxy } from "../src/types/TeleBTCProxy";
 import { TeleBTCProxy__factory } from "../src/types/factories/TeleBTCProxy__factory";
-import { ERC20 } from "../src/types/ERC20";
+import { TeleBTC } from "../src/types/TeleBTC";
+import { Erc20 } from "../src/types/ERC20";
 import { Erc20__factory } from "../src/types/factories/Erc20__factory";
 import { WETH } from "../src/types/WETH";
 import { WETH__factory } from "../src/types/factories/WETH__factory";
@@ -46,8 +62,10 @@ import { BurnRouterLib } from "../src/types/BurnRouterLib";
 import { BurnRouterLib__factory } from "../src/types/factories/BurnRouterLib__factory";
 
 import { BurnRouterProxy__factory } from "../src/types/factories/BurnRouterProxy__factory";
-import { BurnRouterLogic__factory } from "../src/types/factories/BurnRouterLogic__factory";
-import { BurnRouterLogicLibraryAddresses } from "../src/types/factories/BurnRouterLogic__factory";
+import {
+    BurnRouterLogic__factory,
+    BurnRouterLogicLibraryAddresses,
+} from "../src/types/factories/BurnRouterLogic__factory";
 import { CcExchangeRouterLibExtension } from "../src/types/CcExchangeRouterLibExtension";
 import {
     CcExchangeRouterLibExtension__factory,
@@ -153,9 +171,9 @@ describe("CcExchangeRouter", async function () {
     let lockersLib: LockersManagerLib;
     let lockers: Contract;
     let teleBTC: TeleBTC;
-    let teleportDAOToken: ERC20;
-    let exchangeToken: ERC20;
-    let anotherExchangeToken: ERC20;
+    let teleportDAOToken: Erc20;
+    let exchangeToken: Erc20;
+    let anotherExchangeToken: Erc20;
     let weth: WETH;
     let burnRouterLib: BurnRouterLib;
     let burnRouter: Contract;
@@ -508,7 +526,7 @@ describe("CcExchangeRouter", async function () {
         return await burnRouterLogic.attach(burnRouterProxy.address);
     };
 
-    const deployTeleportDAOToken = async (_signer?: Signer): Promise<ERC20> => {
+    const deployTeleportDAOToken = async (_signer?: Signer): Promise<Erc20> => {
         const erc20Factory = new Erc20__factory(_signer || deployer);
 
         const teleportDAOToken = await erc20Factory.deploy(
@@ -927,7 +945,7 @@ describe("CcExchangeRouter", async function () {
 
             // Exchanges teleBTC for TT
             await expect(
-                ccExchangeRouter.wrapAndSwapV2(
+                ccExchangeRouter.wrapAndSwapUniversal(
                     {
                         version:
                             CC_EXCHANGE_REQUESTS
@@ -950,10 +968,12 @@ describe("CcExchangeRouter", async function () {
                             .normalCCExchangeToSolana_fixedInput.index,
                     },
                     LOCKER1_LOCKING_SCRIPT,
-                    [teleBTC.address, exchangeToken.address]
+                    [teleBTC.address, exchangeToken.address],
+                    [],
+                    []
                 )
             )
-                .to.emit(ccExchangeRouter, "NewWrapAndSwapV2")
+                .to.emit(ccExchangeRouter, "NewWrapAndSwapUniversal")
                 .withArgs(
                     LOCKER_TARGET_ADDRESS, // locker target address
                     ethers.utils.hexZeroPad(
@@ -984,12 +1004,17 @@ describe("CcExchangeRouter", async function () {
                     0, // speed
                     deployerAddress, // teleporter
                     cc_exchange_request_txId, // bitcoin tx id
-                    CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
-                        .appId, // app id
-                    0, // third party id
+                    [
+                        CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                            .destChainId, // destinationChainId
+
+                        CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                            .appId, // appId
+                        0, // thirdPartyId
+                    ],
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
-                    CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
-                        .destChainId
+                    [],
+                    []
                 );
 
             await checksWhenExchangeSucceed(
@@ -1058,7 +1083,7 @@ describe("CcExchangeRouter", async function () {
 
             // Exchanges teleBTC for TT
             await expect(
-                ccExchangeRouter.wrapAndSwapV2(
+                ccExchangeRouter.wrapAndSwapUniversal(
                     {
                         version:
                             CC_EXCHANGE_REQUESTS
@@ -1081,10 +1106,12 @@ describe("CcExchangeRouter", async function () {
                             .normalCCExchangeToSolana_fixedInput.index,
                     },
                     LOCKER1_LOCKING_SCRIPT,
-                    [teleBTC.address, exchangeToken.address]
+                    [teleBTC.address, exchangeToken.address],
+                    [],
+                    []
                 )
             )
-                .to.emit(ccExchangeRouter, "NewWrapAndSwapV2")
+                .to.emit(ccExchangeRouter, "NewWrapAndSwapUniversal")
                 .withArgs(
                     LOCKER_TARGET_ADDRESS, // locker target address
                     ethers.utils.hexZeroPad(
@@ -1115,12 +1142,17 @@ describe("CcExchangeRouter", async function () {
                     0, // speed
                     deployerAddress, // teleporter
                     cc_exchange_request_txId, // bitcoin tx id
-                    CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
-                        .appId, // app id
-                    0, // third party id
+                    [
+                        CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                            .destChainId, // destinationChainId
+
+                        CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
+                            .appId, // appId
+                        0, // thirdPartyId
+                    ],
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
-                    CC_EXCHANGE_REQUESTS.normalCCExchangeToSolana_fixedInput
-                        .destChainId
+                    [],
+                    []
                 );
 
             await checksWhenExchangeSucceed(

@@ -20,7 +20,7 @@ library CcExchangeRouterLibExtension {
         Events need to be re-defined here because we use them 
         in the CcExchangeRouterLogic contract and libraries can not use interface events.
     */
-    event NewWrapAndSwapV2(
+    event NewWrapAndSwapUniversal(
         address lockerTargetAddress,
         bytes32 indexed user,
         bytes32[3] inputIntermediaryOutputToken,
@@ -28,13 +28,13 @@ library CcExchangeRouterLibExtension {
         uint indexed speed,
         address indexed teleporter,
         bytes32 bitcoinTxId,
-        uint appId,
-        uint thirdPartyId,
+        uint256[3] protocolIds, // [destinationChainId, appId, thirdPartyId]
         uint[5] fees,
-        uint destinationChainId
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
     );
 
-    event FailedWrapAndSwapV2(
+    event FailedWrapAndSwapUniversal(
         address lockerTargetAddress,
         bytes32 indexed recipientAddress,
         bytes32[3] inputIntermediaryOutputToken,
@@ -42,19 +42,19 @@ library CcExchangeRouterLibExtension {
         uint indexed speed,
         address indexed teleporter,
         bytes32 bitcoinTxId,
-        uint appId,
-        uint thirdPartyId,
+        uint256[3] protocolIds, // [destinationChainId, appId, thirdPartyId]
         uint[5] fees,
-        uint destinationChainId
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
     );
 
     /// @notice Swap TeleBTC for the output token
-    function swapV2(
-        ICcExchangeRouter.swapArgumentsV2 memory swapArguments,
-        ICcExchangeRouter.SwapV2Data memory _swapV2Data
+    function swapUniversal(
+        ICcExchangeRouter.swapArgumentsUniversal memory swapArguments,
+        ICcExchangeRouter.SwapUniversalData memory _swapUniversalData
     ) external returns (bool result, uint256[] memory amounts) {
         // Give allowance to exchange connector for swapping
-        ITeleBTC(_swapV2Data.teleBTC).approve(
+        ITeleBTC(_swapUniversalData.teleBTC).approve(
             swapArguments._exchangeConnector,
             swapArguments._extendedCcExchangeRequest.remainedInputAmount
         );
@@ -79,9 +79,9 @@ library CcExchangeRouterLibExtension {
             );
 
         if (result) {
-            _handleSuccessfulSwap(swapArguments, amounts, _swapV2Data);
+            _handleSuccessfulSwap(swapArguments, amounts, _swapUniversalData);
         } else {
-            _handleFailedSwap(swapArguments, _swapV2Data);
+            _handleFailedSwap(swapArguments, _swapUniversalData);
         }
 
         return (result, amounts);
@@ -89,20 +89,20 @@ library CcExchangeRouterLibExtension {
 
     /// @notice Handle successful swap logic
     function _handleSuccessfulSwap(
-        ICcExchangeRouter.swapArgumentsV2 memory swapArguments,
+        ICcExchangeRouter.swapArgumentsUniversal memory swapArguments,
         uint256[] memory amounts,
-        ICcExchangeRouter.SwapV2Data memory _swapV2Data
+        ICcExchangeRouter.SwapUniversalData memory _swapUniversalData
     ) private {
         // Send tokens to user if on current chain
-        if (swapArguments.destRealChainId == _swapV2Data.currentChainId) {
+        if (swapArguments.destRealChainId == _swapUniversalData.currentChainId) {
             address outputToken = swapArguments._path[swapArguments._path.length - 1];
             uint256 outputAmount = amounts[amounts.length - 1];
             address recipient = address(uint160(uint256(swapArguments._ccExchangeRequestV2.recipientAddress)));
             
-            if (outputToken != _swapV2Data.wrappedNativeToken) {
+            if (outputToken != _swapUniversalData.wrappedNativeToken) {
                 ITeleBTC(outputToken).transfer(recipient, outputAmount);
             } else {
-                WETH(_swapV2Data.wrappedNativeToken).withdraw(outputAmount);
+                WETH(_swapUniversalData.wrappedNativeToken).withdraw(outputAmount);
                 Address.sendValue(payable(recipient), outputAmount);
             }
         }
@@ -120,8 +120,8 @@ library CcExchangeRouterLibExtension {
             bridgeFee
         ];
 
-        emit NewWrapAndSwapV2(
-            ILockersManager(_swapV2Data.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
+        emit NewWrapAndSwapUniversal(
+            ILockersManager(_swapUniversalData.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
             swapArguments._ccExchangeRequestV2.recipientAddress,
             [
                 bytes32(uint256(uint160(swapArguments._path[0]))), // Input token
@@ -134,24 +134,28 @@ library CcExchangeRouterLibExtension {
                 amounts[amounts.length - 1] - bridgeFee // Output amount
             ],
             swapArguments._ccExchangeRequestV2.speed,
-            _swapV2Data.teleporter,
+            _swapUniversalData.teleporter,
             swapArguments._txId,
-            swapArguments._ccExchangeRequestV2.appId,
-            swapArguments._extendedCcExchangeRequest.thirdParty,
+            [
+                swapArguments.destRealChainId,
+                swapArguments._ccExchangeRequestV2.appId,
+                swapArguments._extendedCcExchangeRequest.thirdParty
+            ],
             fees,
-            swapArguments.destRealChainId
+            swapArguments._pathFromIntermediaryToDestTokenOnDestChain,
+            swapArguments._amountsFromIntermediaryToDestTokenOnDestChain
         );
     }
 
     /// @notice Handle failed swap logic
     function _handleFailedSwap(
-        ICcExchangeRouter.swapArgumentsV2 memory swapArguments,
-        ICcExchangeRouter.SwapV2Data memory _swapV2Data
+        ICcExchangeRouter.swapArgumentsUniversal memory swapArguments,
+        ICcExchangeRouter.SwapUniversalData memory _swapUniversalData
     ) private {
         uint256[5] memory fees = [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)];
         
-        emit FailedWrapAndSwapV2(
-            ILockersManager(_swapV2Data.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
+        emit FailedWrapAndSwapUniversal(
+            ILockersManager(_swapUniversalData.lockers).getLockerTargetAddress(swapArguments._lockerLockingScript),
             swapArguments._ccExchangeRequestV2.recipientAddress,
             [
                 bytes32(uint256(uint160(swapArguments._path[0]))), // Input token
@@ -164,12 +168,16 @@ library CcExchangeRouterLibExtension {
                 0 // Output amount
             ],
             swapArguments._ccExchangeRequestV2.speed,
-            _swapV2Data.teleporter,
+            _swapUniversalData.teleporter,
             swapArguments._txId,
-            swapArguments._ccExchangeRequestV2.appId,
-            swapArguments._extendedCcExchangeRequest.thirdParty,
+            [
+                swapArguments.destRealChainId,
+                swapArguments._ccExchangeRequestV2.appId,
+                swapArguments._extendedCcExchangeRequest.thirdParty
+            ],
             fees,
-            swapArguments.destRealChainId
+            swapArguments._pathFromIntermediaryToDestTokenOnDestChain,
+            swapArguments._amountsFromIntermediaryToDestTokenOnDestChain
         );
     }
 }

@@ -142,7 +142,9 @@ interface IPolyConnector {
         address token,
         uint256 amount,
         int64 relayerFeePercentage,
-        bytes32 refundAddress
+        bytes32 refundAddress,
+        bytes32[] pathFromIntermediaryToInputOnSourceChain,
+        uint256[] amountsFromIntermediaryToInputOnSourceChain
     );
 
     event NewSwapAndUnwrapRune(
@@ -225,6 +227,8 @@ interface IPolyConnector {
         address _destinationToken
     ) external;
 
+    function setCurrChainId(uint256 _currChainId) external;
+
     function withdrawFundsToSourceChain(
         bytes memory _message,
         uint8 _v,
@@ -244,5 +248,16 @@ interface IPolyConnector {
         uint256 _uniqueCounter,
         address _token,
         int64 _relayerFeePercentage
+    ) external;
+
+    function swapBackAndRefundBTCByAdmin(
+        bytes32 _bitcoinTxId,
+        address _token, // intermediary token on this chain (polygon)
+        bytes32 _refundAddress,
+        address _exchangeConnector,
+        uint256 _minOutputAmount,
+        UserAndLockerScript calldata _userAndLockerScript,
+        address[] calldata _path,
+        uint256[] calldata _amounts
     ) external;
 }

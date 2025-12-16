@@ -22,4 +22,6 @@ abstract contract EthConnectorStorage is IEthConnector {
     address public stargate;
     mapping(address => BridgeConnectorData) public bridgeConnectorMapping; // exchangeConnector => BridgeConnectorData
     uint256 public gasLimit;
+    mapping(address => mapping(address => mapping(uint256 => mapping(address => uint256)))) public newFailedSwapBackAndRefundReqs; // [refundAddress][inputToken][uniqueCounter][intermediaryToken] => intermediaryTokenAmount
+    mapping(address => mapping(uint256 => mapping(bytes32 => mapping(address => uint256)))) public newFailedWrapAndSwapReqs; // [targetAddress][intermediaryChainId][bitcoinTxId][intermediaryToken] => intermediaryTokenAmount
 }

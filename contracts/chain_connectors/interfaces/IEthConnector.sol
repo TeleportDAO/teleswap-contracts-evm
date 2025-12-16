@@ -22,7 +22,7 @@ interface IEthConnector {
         address targetChainConnectorProxy;
     }
 
-    struct SwapAndUnwrapV3Arguments {
+    struct SwapAndUnwrapUniversalArguments {
         address[] _pathFromInputToIntermediaryOnSourceChain;
         uint256[] _amountsFromInputToIntermediaryOnSourceChain;
         address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
@@ -37,6 +37,31 @@ interface IEthConnector {
         address exchangeConnector;
         address[] pathFromIntermediaryToInputOnSourceChain;
         uint256[] amountsFromIntermediaryToInputOnSourceChain;
+    }
+
+    struct wrapAndSwapForDestTokenArguments {
+        bytes32 bitcoinTxId;
+        bytes32 scriptHash; // hash of userAndLockerScript
+        uint256 intermediaryChainId;
+        uint256 destinationChainId;
+        address targetAddress;
+        uint256 destTokenAmount;
+        address[] pathFromIntermediaryToDestTokenOnDestChain;
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain;
+    }
+
+    struct SwapBackAndRefundBTCArguments {
+        address targetAddress;
+        address destToken;
+        address tokenSent;
+        bytes32 bitcoinTxId;
+        address exchangeConnector;
+        uint256 minOutputAmount;
+        UserAndLockerScript userAndLockerScript;
+        address[] path;
+        uint256[] amounts;
+        int64 bridgePercentageFee;
+        uint256 intermediaryChainId;
     }
 
     // Events
@@ -80,6 +105,45 @@ interface IEthConnector {
         uint256 uniqueCounter,
         uint256 chainId,
         address refundAddress,
+        uint256 inputTokenAmount,
+        address[] pathFromIntermediaryToInputOnSourceChain,
+        uint256[] amountsFromIntermediaryToInputOnSourceChain
+    );
+
+    event FailedSwapBackAndRefundToSourceChain(
+        uint256 uniqueCounter,
+        uint256 chainId,
+        address refundAddress,
+        address inputToken,
+        address tokenSent,
+        uint256 tokenSentAmount
+    );
+
+    event WrappedAndSwappedToDestChain(
+        bytes32 bitcoinTxId,
+        uint256 destinationChainId, // current chain id
+        uint256 intermediaryChainId,
+        address targetAddress,
+        uint256 destTokenAmount,
+        address[] pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
+    );
+
+    event FailedWrapAndSwapToDestChain(
+        bytes32 bitcoinTxId,
+        uint256 destinationChainId, // current chain id
+        uint256 intermediaryChainId,
+        address targetAddress,
+        uint256 destTokenAmount,
+        address[] pathFromIntermediaryToDestTokenOnDestChain,
+        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
+    );
+
+    event RefundedFailedSwapAndUnwrapUniversal(
+        uint256 uniqueCounter,
+        address refundAddress,
+        address inputToken,
+        uint256 inputTokenAmount,
         address[] pathFromIntermediaryToInputOnSourceChain,
         uint256[] amountsFromIntermediaryToInputOnSourceChain
     );
@@ -125,6 +189,15 @@ interface IEthConnector {
         address _refundAddress
     ) external payable;
 
+    function swapAndUnwrapUniversal(
+        SwapAndUnwrapUniversalArguments calldata _arguments,
+        address _exchangeConnector,
+        bool _isInputFixed,
+        UserAndLockerScript calldata _userAndLockerScript,
+        uint256 _thirdParty,
+        address _refundAddress
+    ) external payable;
+
     function swapAndUnwrapRune(
         address _token,
         uint256 _appId,      
@@ -148,6 +221,18 @@ interface IEthConnector {
         uint256 _amount,
         address,
         bytes memory _message
+    ) external;
+
+    function swapBackAndRefundBTCByAdmin(
+        SwapBackAndRefundBTCArguments calldata _args
+    ) external;
+
+    function refundFailedSwapAndUnwrapUniversal(
+        uint256 _uniqueCounter,
+        address _refundAddress,
+        address _inputToken,
+        address[] calldata _pathFromIntermediaryToInputOnSourceChain,
+        uint256[] calldata _amountsFromIntermediaryToInputOnSourceChain
     ) external;
 
     function setGasLimit(

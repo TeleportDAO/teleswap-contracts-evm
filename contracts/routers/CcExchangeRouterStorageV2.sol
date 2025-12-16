@@ -83,4 +83,5 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
         )
     )) public fillerAddressV2;
     // ^ [txId][recipient][token][amount][chainId][bridgePercentageFee] to filler address
+    mapping(uint256 => bytes32) public destConnectorProxyMapping; // destination real chain id => destination chain connector proxy address
 }

@@ -1249,7 +1249,7 @@ describe("PolyConnector", async () => {
                     "uint",
                 ],
                 [
-                    "swapAndUnwrapV3",
+                    "swapAndUnwrapUniversal",
                     "0",
                     1,
                     ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32),
@@ -1321,7 +1321,7 @@ describe("PolyConnector", async () => {
                     "uint",
                 ],
                 [
-                    "swapAndUnwrapV3",
+                    "swapAndUnwrapUniversal",
                     "0",
                     1,
                     ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32),
@@ -1375,7 +1375,7 @@ describe("PolyConnector", async () => {
             );
 
             const bridgePercentageFee = BigNumber.from(10).pow(15); // 0.1% = 1e15
-            // For swapAndUnwrapV3 (universal route)
+            // For swapAndUnwrapUniversal
             const requestAmountOfInputToken = ethers.utils.parseUnits("10", 18); // 10 tokens of input token (e.g., AAVE)
             const intermediaryTokenAmount = ethers.utils.parseUnits("0.1", 18); // 0.1 tokens of intermediary token
 
@@ -1406,7 +1406,16 @@ describe("PolyConnector", async () => {
                     0, // uniqueCounter
                     inputToken.address,
                     bridgePercentageFee,
-                    [inputToken.address, inputToken.address], // path from intermediary to input on source chain
+                    [
+                        ethers.utils.hexZeroPad(
+                            inputToken.address.toLowerCase(),
+                            32
+                        ),
+                        ethers.utils.hexZeroPad(
+                            inputToken.address.toLowerCase(),
+                            32
+                        ),
+                    ], // path from intermediary to input on source chain
                     [intermediaryTokenAmount, requestAmountOfInputToken]
                 )
             )
@@ -1428,7 +1437,18 @@ describe("PolyConnector", async () => {
                     inputToken.address,
                     requestAmount,
                     bridgePercentageFee,
-                    ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32)
+                    ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32),
+                    [
+                        ethers.utils.hexZeroPad(
+                            inputToken.address.toLowerCase(),
+                            32
+                        ),
+                        ethers.utils.hexZeroPad(
+                            inputToken.address.toLowerCase(),
+                            32
+                        ),
+                    ], // path from intermediary to input on source chain
+                    [intermediaryTokenAmount, requestAmountOfInputToken] // amounts from intermediary to input on source chain
                 );
         });
     });
