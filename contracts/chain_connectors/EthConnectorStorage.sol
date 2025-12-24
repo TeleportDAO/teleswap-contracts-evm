@@ -21,4 +21,5 @@ abstract contract EthConnectorStorage is IEthConnector {
     mapping(address => mapping(uint => address)) public bridgeTokenMapping;
     address public stargate;
     mapping(address => BridgeConnectorData) public bridgeConnectorMapping; // exchangeConnector => BridgeConnectorData
+    mapping(address => mapping(uint256 => uint256)) public outputTokenDecimalsOnDestinationChain; // output token's address on the destination chain => destination chain ID => decimals on the destination chain (added for USDT and USDC which have different decimals on the BNB chain)
 }

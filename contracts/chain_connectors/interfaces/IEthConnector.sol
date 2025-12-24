@@ -68,6 +68,12 @@ interface IEthConnector {
         address _targetChainConnectorProxy
     ) external;
 
+    function setOutputTokenDecimalsOnDestinationChain(
+        address _outputToken,
+        uint256 _destinationChainId,
+        uint256 _decimalsOnDestinationChain
+    ) external;
+
     function swapAndUnwrap(
         address _token,
         address _exchangeConnector,

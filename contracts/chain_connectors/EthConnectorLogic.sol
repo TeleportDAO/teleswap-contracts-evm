@@ -87,6 +87,15 @@ contract EthConnectorLogic is
         bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
     }
 
+    /// @notice Setter for input token decimals on destination chain
+    function setOutputTokenDecimalsOnDestinationChain(
+        address _outputToken,
+        uint256 _destinationChainId,
+        uint256 _decimalsOnDestinationChain
+    ) external override onlyOwner {
+        outputTokenDecimalsOnDestinationChain[_outputToken][_destinationChainId] = _decimalsOnDestinationChain;
+    }
+
     /// @notice Setter for bridge connector mapping
     /// @param _exchangeConnector Address of the exchange connector
     /// @param _targetChainId Target chain ID
@@ -270,6 +279,12 @@ contract EthConnectorLogic is
             IERC20(_token).safeApprove(across, _amount);
         }
 
+        uint256 inputAmount = _amount;
+        if (outputTokenDecimalsOnDestinationChain[bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId]][bridgeConnectorMapping[_exchangeConnector].targetChainId] != 0) {
+            inputAmount = _amount * 10 ** (18 - outputTokenDecimalsOnDestinationChain[bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId]][bridgeConnectorMapping[_exchangeConnector].targetChainId]);
+        }
+        uint256 outputAmount = inputAmount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18;
+
         // Call across for transferring token and msg
         bytes memory callData = abi.encodeWithSignature(
             "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
@@ -278,7 +293,7 @@ contract EthConnectorLogic is
             _token, // inputToken
             bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
-            _amount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18, // outputAmount
+            outputAmount, // outputAmount
             bridgeConnectorMapping[_exchangeConnector].targetChainId, // destinationChainId
             address(0), // exclusiveRelayer (none for now)
             uint32(block.timestamp), // quoteTimestamp

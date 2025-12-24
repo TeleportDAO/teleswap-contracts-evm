@@ -225,6 +225,14 @@ contract CcExchangeRouterLogic is
         _setIntermediaryTokenMapping(_destinationTokenID, _intermediaryToken);
     }
 
+    /// @notice Setter for output token decimals
+    function setInputTokenDecimalsOnDestinationChain(
+        address _inputToken,
+        uint256 _decimalsOnDestinationChain
+    ) external override onlyOwner {
+        _setInputTokenDecimalsOnDestinationChain(_inputToken, _decimalsOnDestinationChain);
+    }
+
     /// @notice Check if a request has been processed
     /// @dev It prevents re-submitting a processed request
     /// @param _txId The transaction ID of request on Bitcoin
@@ -617,6 +625,16 @@ contract CcExchangeRouterLogic is
         IERC20(_intermediaryToken).approve(across, _amount);
         bytes memory callData;
 
+        uint256 inputAmount = _amount;
+        if (inputTokenDecimalsOnDestinationChain[_intermediaryToken] != 0) {
+            inputAmount =
+                _amount /
+                10 ** (18 - inputTokenDecimalsOnDestinationChain[_intermediaryToken]);
+        }
+
+        uint256 outputAmount = inputAmount * (1e18 - _bridgePercentageFee) / 1e18;
+        
+
         if (_destRealChainId == 34268394551451) { // Solana
             callData = abi.encodeWithSignature(
                 "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
@@ -625,7 +643,7 @@ contract CcExchangeRouterLogic is
                 bytes32(uint256(uint160(_intermediaryToken))),
                 _outputToken,
                 _amount,
-                _amount * (1e18 - _bridgePercentageFee) / 1e18,
+                outputAmount,
                 _destRealChainId,
                 bytes32(0),
                 uint32(block.timestamp),
@@ -641,7 +659,7 @@ contract CcExchangeRouterLogic is
                 _intermediaryToken, // inputToken
                 address(uint160(uint256(_outputToken))), // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
                 _amount, // inputAmount
-                _amount * (1e18 - _bridgePercentageFee) / 1e18, // outputAmount
+                outputAmount, // outputAmount
                 _destRealChainId,
                 address(0), // exclusiveRelayer (none for now)
                 uint32(block.timestamp), // quoteTimestamp
@@ -965,5 +983,13 @@ contract CcExchangeRouterLogic is
         address _intermediaryToken
     ) private {
         intermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
+    }
+
+    /// @notice Internal setter for output token decimals
+    function _setInputTokenDecimalsOnDestinationChain(
+        address _inputToken,
+        uint256 _decimalsOnDestinationChain
+    ) private {
+        inputTokenDecimalsOnDestinationChain[_inputToken] = _decimalsOnDestinationChain;
     }
 }

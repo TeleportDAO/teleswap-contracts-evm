@@ -83,4 +83,5 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
         )
     )) public fillerAddressV2;
     // ^ [txId][recipient][token][amount][chainId][bridgePercentageFee] to filler address
+    mapping(address => uint256) public inputTokenDecimalsOnDestinationChain; // input token's address on the current chain => decimals on the destination chain (added for USDT and USDC which have different decimals on the BNB chain)
 }

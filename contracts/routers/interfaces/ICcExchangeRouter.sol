@@ -399,6 +399,11 @@ interface ICcExchangeRouter {
         address _destinationToken
     ) external;
 
+    function setInputTokenDecimalsOnDestinationChain(
+        address _inputToken,
+        uint256 _decimalsOnDestinationChain
+    ) external; 
+
     function fillTxV2(
         bytes32 _txId,
         bytes32 _recipient,
