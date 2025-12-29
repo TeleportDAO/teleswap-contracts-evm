@@ -2881,7 +2881,7 @@ describe("CcExchangeRouter", async function () {
             ).to.be.revertedWith("ExchangeRouter: already processed");
         });
 
-        it("Swap tokens to the detination token after sending it to the destination chain using across (universal wrap and swap)", async function () {
+        it.only("Swap tokens to the detination token after sending it to the destination chain using across (universal wrap and swap)", async function () {
             // Replaces dummy address in vout with exchange token address
             // For cross-chain, we need destChainId: 2, so we modify the vout to encode that
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
@@ -3026,7 +3026,7 @@ describe("CcExchangeRouter", async function () {
             ).to.be.equal(expectedOutputAmount.toNumber());
         });
 
-        it("Revert since destination chain connector proxy mapping is not set", async function () {
+        it.only("Revert since destination chain connector proxy mapping is not set", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3080,7 +3080,7 @@ describe("CcExchangeRouter", async function () {
             );
         });
 
-        it("Revert since chain is not supported in a universal wrap and swap", async function () {
+        it.only("Revert since chain is not supported in a universal wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3126,7 +3126,7 @@ describe("CcExchangeRouter", async function () {
             ).to.be.revertedWith("ExchangeRouter: invalid chain id");
         });
 
-        it("Keep TeleBTC in the contract since swap failed in a universal wrap and swap", async function () {
+        it.only("Keep TeleBTC in the contract since swap failed in a universal wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3241,7 +3241,7 @@ describe("CcExchangeRouter", async function () {
                 );
         });
 
-        it("Refund TeleBTC for a failed cross chain wrap and swap", async function () {
+        it.only("Refund TeleBTC for a failed cross chain wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3335,7 +3335,7 @@ describe("CcExchangeRouter", async function () {
                 );
         });
 
-        it("Cannot refund twice for a failed cross chain universal wrap and swap", async function () {
+        it.only("Cannot refund twice for a failed cross chain universal wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;

@@ -99,6 +99,28 @@ contract PolyConnectorLogic is
         bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
     }
 
+    /// @notice Setter for bridge token mapping universal
+    /// @param _sourceToken Address of the token on the current chain
+    /// @param _destinationChainId The ID of the destination chain
+    /// @param _destinationToken Address of the token on the target chain
+    function setBridgeTokenMappingUniversal(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        bytes32 _destinationToken
+    ) external override onlyOwner {
+        bridgeTokenMappingUniversal[_sourceToken][_destinationChainId] = _destinationToken;
+    }
+
+    /// @notice Setter for bridge connector mapping
+    /// @param _destinationChainId The ID of the destination chain
+    /// @param _bridgeConnector Address of the bridge connector
+    function setBridgeConnectorMapping(
+        uint256 _destinationChainId,
+        address _bridgeConnector
+    ) external override onlyOwner {
+        bridgeConnectorMapping[_destinationChainId] = _bridgeConnector;
+    }
+
     /// @notice Setter for currChainId
     /// @param _currChainId The new current chain ID to set.
     function setCurrChainId(uint256 _currChainId) external override onlyOwner {
@@ -131,12 +153,10 @@ contract PolyConnectorLogic is
             _swapAndUnwrap(_amount, _message, _tokenSent);
         } else if (_isEqualString(purpose, "swapAndUnwrapRune")) {
             _swapAndUnwrapRune(_amount, _message, _tokenSent);
-        } else if (_isEqualString(purpose, "swapAndUnwrapSolana")) {
-            _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
-        } else if (_isEqualString(purpose, "swapAndUnwrapUniversal")) {
-            _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
-        } else if (_isEqualString(purpose, "swapBackAndRefundBTC")) {
-            // When a wrap request fails, admin will send a cross chain message to swap back and refund the user with BTC
+        } else if (_isEqualString(purpose, "swapAndUnwrapSolana") || _isEqualString(purpose, "swapAndUnwrapUniversal") || _isEqualString(purpose, "swapBackAndRefundBTC")) {
+            // swapAndUnwrapSolana: Received swap and unwrap request from Solana chain
+            // swapAndUnwrapUniversal: Received swap and unwrap request from any other chain
+            // swapBackAndRefundBTC: When a swap and unwrap request fails, admin will send a cross chain message to swap back and refund the user with BTC
             _swapAndUnwrapUniversal(purpose, _amount, _message, _tokenSent);
         }
     }
@@ -257,11 +277,11 @@ contract PolyConnectorLogic is
             "PolygonConnectorLogic: not authorized"
         );
 
-        uint256 _amount = newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][
+        uint256 _amount = newFailedUniversalSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][
             _token
         ];
         // Update withheld amount
-        delete newFailedReqsUniversal[_refundAddress][_chainId][_uniqueCounter][_token];
+        delete newFailedUniversalSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][_token];
 
         require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
 
@@ -301,19 +321,9 @@ contract PolyConnectorLogic is
                     _amountsFromIntermediaryToInputOnSourceChain
                 );
             }
-            
-
-            emit MsgSent(
-                _uniqueCounter,
-                message,
-                _token,
-                _amount,
-                _bridgePercentageFee
-            );
 
             // Send tokens back to the user
             _sendMessageUsingAcrossUniversal(
-                _refundAddress,
                 _chainId,
                 _token,
                 _amount,
@@ -452,6 +462,10 @@ contract PolyConnectorLogic is
     }
 
     /// @notice Helper for exchanging token for BTC
+    /// @param purpose The purpose of the swap and unwrap (swapAndUnwrapUniversal, swapBackAndRefundBTC, swapAndUnwrapSolana)
+    /// @param _amount The amount of the token sent to swap and unwrap
+    /// @param _message The message containing the swap and unwrap arguments
+    /// @param _tokenSent The token sent (intermediary token) to swap and unwrap
     function _swapAndUnwrapUniversal(
         string memory purpose,
         uint256 _amount,
@@ -491,6 +505,7 @@ contract PolyConnectorLogic is
             address lockerTargetAddress = ILockersManager(lockersProxy)
                 .getLockerTargetAddress(arguments.scripts.lockerLockingScript);
 
+            // If uniqueCounter is a bitcoin txId, this is a refund (after a failed universal wrap and swap)
             emit NewSwapAndUnwrapUniversal(
                 arguments.uniqueCounter,
                 arguments.chainId,
@@ -508,6 +523,10 @@ contract PolyConnectorLogic is
                 arguments.thirdParty
             );
         } catch {
+            // console.log("swapAndUnwrap failed! Reason length:", reason.length);
+            // if (reason.length > 0) {
+            //     console.log("swapAndUnwrap failed! Reason:", string(reason));
+            // }
             // Remove spending allowance
             IERC20(_tokenSent).approve(burnRouterProxy, 0);
 
@@ -517,7 +536,8 @@ contract PolyConnectorLogic is
                     bytes32(arguments.uniqueCounter)
                 ][_tokenSent] = _amount;
             } else {
-                newFailedReqsUniversal[arguments.refundAddress][arguments.chainId][
+                // todo: store intermediary token to input token path on source chain to safety check when admin withdraws funds to source chain
+                newFailedUniversalSwapAndUnwrapReqs[arguments.refundAddress][arguments.chainId][
                     arguments.uniqueCounter
                 ][_tokenSent] = _amount;
             }
@@ -934,10 +954,9 @@ contract PolyConnectorLogic is
         Address.functionCall(across, finalCallData);
     }
 
-    /// @notice Sends tokens to Ethereum using Across
+    /// @notice Sends tokens to Other chains (EVM and SVM) using Across
     /// @dev This will be used for swapping and withdrawing funds
     function _sendMessageUsingAcrossUniversal(
-        bytes32 _refundAddress,
         uint256 _chainId,
         address _token,
         uint256 _amount,
@@ -946,20 +965,20 @@ contract PolyConnectorLogic is
     ) internal {
         IERC20(_token).approve(across, _amount);
         bytes memory callData = abi.encodeWithSignature(
-                "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
-                address(this), // depositor (can be refunded by admin)
-                address(uint160(uint256(_refundAddress))), // recipient (use only last 20 bytes)
-                _token, // inputToken
-                bridgeTokenMapping[_token][_chainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
-                _amount, // inputAmount
-                _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18, // outputAmount
-                _chainId,
-                address(0), // exclusiveRelayer (none for now)
-                uint32(block.timestamp), // quoteTimestamp
-                uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
-                0, // exclusivityDeadline
-                _message // message
-            );
+            "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
+            acrossAdmin, // depositor
+            bridgeConnectorMapping[_chainId], // recipient
+            bytes32(uint256(uint160(_token))), // inputToken
+            bridgeTokenMappingUniversal[_token][_chainId], // output token (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
+            _amount, // inputAmount
+            _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18, // outputAmount
+            _chainId, // destinationChainId
+            address(0), // exclusiveRelayer (none for now)
+            uint32(block.timestamp), // quoteTimestamp
+            uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+            0, // exclusivityDeadline
+            _message // message
+        );
 
         bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
         Address.functionCall(across, finalCallData);

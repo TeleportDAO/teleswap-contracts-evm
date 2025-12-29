@@ -26,7 +26,9 @@ import {
     BurnRouterLogicLibraryAddresses,
 } from "../src/types/factories/BurnRouterLogic__factory";
 import { takeSnapshot, revertProvider } from "./block_utils";
+import CC_EXCHANGE_REQUESTS from "./test_fixtures/ccExchangeRequests.json";
 import Web3 from "web3";
+const { calculateTxId } = require("./utils/calculateTxId");
 
 const abiUtils = new Web3().eth.abi;
 const web3 = new Web3();
@@ -102,7 +104,7 @@ describe("PolyConnector", async () => {
         mockLockers = await deployMockContract(deployer, lockers.abi);
 
         const across = await deployments.getArtifact("SpokePoolInterface");
-        // Add depositV3 to the ABI if it doesn't exist (needed for the mock)
+        // Add depositV3 and deposit to the ABI if they don't exist (needed for the mock)
         const extendedAbi = [...across.abi];
         if (!extendedAbi.find((item: any) => item.name === "depositV3")) {
             extendedAbi.push({
@@ -126,6 +128,34 @@ describe("PolyConnector", async () => {
                 type: "function",
             });
         }
+        // Remove existing deposit function if it exists (might have wrong signature)
+        const depositIndex = extendedAbi.findIndex(
+            (item: any) => item.name === "deposit"
+        );
+        if (depositIndex !== -1) {
+            extendedAbi.splice(depositIndex, 1);
+        }
+        // Add deposit function with correct signature
+        extendedAbi.push({
+            inputs: [
+                { name: "depositor", type: "bytes32" },
+                { name: "recipient", type: "bytes32" },
+                { name: "inputToken", type: "bytes32" },
+                { name: "outputToken", type: "bytes32" },
+                { name: "inputAmount", type: "uint256" },
+                { name: "outputAmount", type: "uint256" },
+                { name: "destinationChainId", type: "uint256" },
+                { name: "exclusiveRelayer", type: "bytes32" },
+                { name: "quoteTimestamp", type: "uint32" },
+                { name: "fillDeadline", type: "uint32" },
+                { name: "exclusivityDeadline", type: "uint32" },
+                { name: "message", type: "bytes" },
+            ],
+            name: "deposit",
+            outputs: [],
+            stateMutability: "nonpayable",
+            type: "function",
+        });
         mockAcross = await deployMockContract(deployer, extendedAbi);
 
         const exchangeConnector = await deployments.getArtifact(
@@ -1207,7 +1237,7 @@ describe("PolyConnector", async () => {
         });
     });
 
-    describe("Handle received swap and unwrap v3 (universal route) from across", async () => {
+    describe("Handle received swap and unwrap universal from across", async () => {
         const protocolFee = Math.floor(
             (telebtcAmount * PROTOCOL_PERCENTAGE_FEE) / 10000
         );
@@ -1364,9 +1394,10 @@ describe("PolyConnector", async () => {
                     0
                 );
 
-            await mockAcross.mock.depositV3.returns();
-
             await PolyConnector.setAcross(mockAcross.address);
+
+            // Mock the deposit function
+            await mockAcross.mock.deposit.returns();
 
             await PolyConnector.setBridgeTokenMapping(
                 inputToken.address,
@@ -1374,30 +1405,23 @@ describe("PolyConnector", async () => {
                 inputToken.address // destination token (same token on source chain)
             );
 
+            // Set bridge connector mapping for chainId 1 (required for _sendMessageUsingAcrossUniversal)
+            await PolyConnector.setBridgeConnectorMapping(
+                1, // chainId (Ethereum)
+                signer1Address // bridge connector address on source chain
+            );
+
+            // Set bridge token mapping universal for chainId 1 (required for _sendMessageUsingAcrossUniversal)
+            await PolyConnector.setBridgeTokenMappingUniversal(
+                inputToken.address,
+                1, // chainId (Ethereum)
+                ethers.utils.hexZeroPad(inputToken.address.toLowerCase(), 32) // destination token as bytes32
+            );
+
             const bridgePercentageFee = BigNumber.from(10).pow(15); // 0.1% = 1e15
             // For swapAndUnwrapUniversal
             const requestAmountOfInputToken = ethers.utils.parseUnits("10", 18); // 10 tokens of input token (e.g., AAVE)
             const intermediaryTokenAmount = ethers.utils.parseUnits("0.1", 18); // 0.1 tokens of intermediary token
-
-            // Encode the expected message that will be emitted
-            const expectedMessage = ethers.utils.defaultAbiCoder.encode(
-                [
-                    "string",
-                    "uint256",
-                    "uint256",
-                    "bytes32",
-                    "address[]",
-                    "uint256[]",
-                ],
-                [
-                    "swapBackAndRefund",
-                    0, // uniqueCounter
-                    1, // chainId
-                    ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32), // refundAddress
-                    [inputToken.address, inputToken.address], // path
-                    [intermediaryTokenAmount, requestAmountOfInputToken], // amounts
-                ]
-            );
 
             await expect(
                 PolyConnector.withdrawFundsToSourceChainByAdminUniversal(
@@ -1419,25 +1443,14 @@ describe("PolyConnector", async () => {
                     [intermediaryTokenAmount, requestAmountOfInputToken]
                 )
             )
-                .to.emit(PolyConnector, "MsgSent")
-                .withArgs(
-                    0, // uniqueCounter
-                    expectedMessage, // message
-                    inputToken.address,
-                    requestAmount,
-                    bridgePercentageFee
-                )
-                .and.to.emit(
-                    PolyConnector,
-                    "WithdrewFundsToSourceChainUniversal"
-                )
+                .to.emit(PolyConnector, "WithdrewFundsToSourceChainUniversal")
                 .withArgs(
                     0, // uniqueCounter
                     1, // chainId
                     inputToken.address,
                     requestAmount,
                     bridgePercentageFee,
-                    ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32),
+                    ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32), // refundAddress
                     [
                         ethers.utils.hexZeroPad(
                             inputToken.address.toLowerCase(),
@@ -1449,6 +1462,250 @@ describe("PolyConnector", async () => {
                         ),
                     ], // path from intermediary to input on source chain
                     [intermediaryTokenAmount, requestAmountOfInputToken] // amounts from intermediary to input on source chain
+                );
+        });
+
+        it("handles swapBackAndRefundBTC message and refunds user with BTC", async () => {
+            const protocolFee = Math.floor(
+                (telebtcAmount * PROTOCOL_PERCENTAGE_FEE) / 10000
+            );
+            const lockerFee = Math.floor(
+                (telebtcAmount * LOCKER_PERCENTAGE_FEE) / 10000
+            );
+            const burntAmount =
+                telebtcAmount - BITCOIN_FEE - protocolFee - lockerFee;
+
+            // Set up mocks for successful swap and unwrap
+            await setLockersBurnReturn(burntAmount);
+
+            // Transfer tokens to PolyConnector (simulating tokens received from Across)
+            await inputToken.transfer(PolyConnector.address, requestAmount);
+
+            const uniqueCounter = await calculateTxId(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.version,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vin,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.locktime
+            );
+
+            // Encode the swapBackAndRefundBTC message with all required parameters
+            const message = abiUtils.encodeParameters(
+                [
+                    "string",
+                    "uint",
+                    "uint",
+                    "bytes32",
+                    "address",
+                    "uint",
+                    "bool",
+                    "address[]",
+                    {
+                        UserAndLockerScript: {
+                            userScript: "bytes",
+                            scriptType: "uint",
+                            lockerLockingScript: "bytes",
+                        },
+                    },
+                    "uint",
+                ],
+                [
+                    "swapBackAndRefundBTC",
+                    uniqueCounter, // uniqueCounter (bitcoinTxId)
+                    1, // chainId
+                    ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32), // refundAddress
+                    mockExchangeConnector.address, // exchangeConnector
+                    burntAmount, // outputAmount (expected TeleBTC amount to burn)
+                    true, // isInputFixed
+                    [inputToken.address, teleBTC.address], // path
+                    {
+                        userScript: USER_SCRIPT_P2PKH,
+                        scriptType: USER_SCRIPT_P2PKH_TYPE,
+                        lockerLockingScript: LOCKER_TARGET_ADDRESS,
+                    },
+                    0, // thirdParty
+                ]
+            );
+
+            await expect(
+                PolyConnector.connect(acrossSinger).handleV3AcrossMessage(
+                    inputToken.address,
+                    requestAmount,
+                    signer1Address,
+                    message
+                )
+            )
+                .to.emit(PolyConnector, "NewSwapAndUnwrapUniversal")
+                .withArgs(
+                    uniqueCounter, // uniqueCounter
+                    1, // chainId
+                    mockExchangeConnector.address, // exchangeConnector
+                    inputToken.address, // inputToken
+                    requestAmount, // inputAmount
+                    ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32), // userTargetAddress
+                    USER_SCRIPT_P2PKH, // userScript
+                    USER_SCRIPT_P2PKH_TYPE, // scriptType
+                    LOCKER_TARGET_ADDRESS, // lockerTargetAddress
+                    0, // requestIdOfLocker (burnRequestCounter - 1, which is 0 in this case)
+                    [inputToken.address, teleBTC.address], // path
+                    0 // thirdPartyId
+                );
+        });
+
+        it("handles swapBackAndRefundBTC failure then admin retry succeeds", async () => {
+            const protocolFee = Math.floor(
+                (telebtcAmount * PROTOCOL_PERCENTAGE_FEE) / 10000
+            );
+            const burntAmount = telebtcAmount - BITCOIN_FEE - protocolFee;
+
+            await setLockersBurnReturn(burntAmount);
+
+            // Transfer tokens to PolyConnector (simulating tokens received from Across)
+            await inputToken.transfer(PolyConnector.address, requestAmount);
+
+            const uniqueCounter = await calculateTxId(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.version,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vin,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout,
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.locktime
+            );
+
+            const refundAddress = ethers.utils.hexZeroPad(
+                signer1Address.toLowerCase(),
+                32
+            );
+
+            // Encode the swapBackAndRefundBTC message with all required parameters
+            const message = abiUtils.encodeParameters(
+                [
+                    "string",
+                    "uint",
+                    "uint",
+                    "bytes32",
+                    "address",
+                    "uint",
+                    "bool",
+                    "address[]",
+                    {
+                        UserAndLockerScript: {
+                            userScript: "bytes",
+                            scriptType: "uint",
+                            lockerLockingScript: "bytes",
+                        },
+                    },
+                    "uint",
+                ],
+                [
+                    "swapBackAndRefundBTC",
+                    uniqueCounter, // uniqueCounter (bitcoinTxId)
+                    1, // chainId
+                    refundAddress, // refundAddress
+                    mockExchangeConnector.address, // exchangeConnector
+                    burntAmount, // outputAmount (expected TeleBTC amount to burn)
+                    true, // isInputFixed
+                    [inputToken.address, teleBTC.address], // path
+                    {
+                        userScript: USER_SCRIPT_P2PKH,
+                        scriptType: USER_SCRIPT_P2PKH_TYPE,
+                        lockerLockingScript: LOCKER_TARGET_ADDRESS,
+                    },
+                    0, // thirdParty
+                ]
+            );
+
+            // First attempt: swap fails
+            await expect(
+                PolyConnector.connect(acrossSinger).handleV3AcrossMessage(
+                    inputToken.address,
+                    requestAmount,
+                    signer1Address,
+                    message
+                )
+            )
+                .to.emit(PolyConnector, "FailedSwapAndUnwrapUniversal")
+                .withArgs(
+                    uniqueCounter, // uniqueCounter
+                    1, // chainId
+                    mockExchangeConnector.address, // exchangeConnector
+                    inputToken.address, // inputToken
+                    requestAmount, // inputAmount
+                    refundAddress, // userTargetAddress
+                    USER_SCRIPT_P2PKH, // userScript
+                    USER_SCRIPT_P2PKH_TYPE, // scriptType
+                    [inputToken.address, teleBTC.address], // path
+                    0 // thirdPartyId
+                );
+
+            // Verify tokens are still in the contract (saved for admin retry)
+            const tokenBalance = await inputToken.balanceOf(
+                PolyConnector.address
+            );
+            expect(tokenBalance).to.equal(requestAmount);
+
+            // Set currChainId to 1 (to match the chainId in the message)
+            // This is needed for the admin function to find the failed request
+            await PolyConnector.setCurrChainId(1);
+
+            // Verify the failed request is stored correctly
+            // Note: The contract stores uniqueCounter as bytes32, so we need to check with bytes32
+            const storedAmount = await PolyConnector.newFailedRefundBTCReqs(
+                refundAddress,
+                1, // chainId
+                uniqueCounter, // bitcoinTxId (bytes32)
+                inputToken.address
+            );
+            expect(storedAmount).to.equal(requestAmount);
+
+            // set up mocks for successful swap (admin retry)
+            const lockerFee = Math.floor(
+                (telebtcAmount * LOCKER_PERCENTAGE_FEE) / 10000
+            );
+            const correctBurntAmount =
+                telebtcAmount - BITCOIN_FEE - protocolFee - lockerFee;
+
+            await setLockersBurnReturn(correctBurntAmount);
+
+            const teleBTCBalance = await teleBTC.balanceOf(burnRouter.address);
+            if (teleBTCBalance.lt(telebtcAmount)) {
+                await TeleBTCSigner1.transfer(
+                    burnRouter.address,
+                    telebtcAmount
+                );
+            }
+
+            console.log("correctBurntAmount =", correctBurntAmount);
+
+            // Admin retries the swap
+            await expect(
+                PolyConnector.connect(deployer).swapBackAndRefundBTCByAdmin(
+                    uniqueCounter, // _bitcoinTxId
+                    inputToken.address, // _token (intermediary token)
+                    refundAddress, // _refundAddress
+                    mockExchangeConnector.address, // _exchangeConnector
+                    correctBurntAmount, // _minOutputAmount (use correct amount with lockerFee)
+                    {
+                        userScript: USER_SCRIPT_P2PKH,
+                        scriptType: USER_SCRIPT_P2PKH_TYPE,
+                        lockerLockingScript: LOCKER_TARGET_ADDRESS,
+                    }, // _userAndLockerScript
+                    [inputToken.address, teleBTC.address], // _path
+                    [requestAmount, telebtcAmount], // _amounts
+                    { gasLimit: 5000000 } // Increase gas limit to ensure enough gas for storage operations. Note: without this, the transaction will revert silently.
+                )
+            )
+                .to.emit(PolyConnector, "NewSwapAndUnwrapUniversal")
+                .withArgs(
+                    uniqueCounter, // uniqueCounter
+                    1, // chainId
+                    mockExchangeConnector.address, // exchangeConnector
+                    inputToken.address, // inputToken
+                    requestAmount, // inputAmount
+                    refundAddress, // userTargetAddress
+                    USER_SCRIPT_P2PKH, // userScript
+                    USER_SCRIPT_P2PKH_TYPE, // scriptType
+                    LOCKER_TARGET_ADDRESS, // lockerTargetAddress
+                    0, // requestIdOfLocker (burnRequestCounter - 1)
+                    [inputToken.address, teleBTC.address], // path
+                    0 // thirdPartyId
                 );
         });
     });

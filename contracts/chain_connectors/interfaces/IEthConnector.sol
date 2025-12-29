@@ -22,9 +22,15 @@ interface IEthConnector {
         address targetChainConnectorProxy;
     }
 
+    /// @notice Arguments for universal swap and unwrap function
+    /// @param _pathFromInputToIntermediaryOnSourceChain Path from input token to intermediary token on the current chain
+    /// @param _amountsFromInputToIntermediaryOnSourceChain Amounts of input token and intermediary token on the current chain
+    /// @param _pathFromIntermediaryToOutputOnIntermediaryChain Path from intermediary token to output token on intermediary chain
+    /// @param _minOutputAmount Minimum output amount of output token on the intermediary chain
+    /// @param _bridgePercentageFee Bridge percentage fee
     struct SwapAndUnwrapUniversalArguments {
         address[] _pathFromInputToIntermediaryOnSourceChain;
-        uint256[] _amountsFromInputToIntermediaryOnSourceChain;
+        uint256[2] _amountsFromInputToIntermediaryOnSourceChain;
         address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
         uint256 _minOutputAmount;
         int64 _bridgePercentageFee;
@@ -80,6 +86,17 @@ interface IEthConnector {
         address sourceChainInputToken,
         uint256 amount,
         int64 relayerFeePercentage
+    );
+
+    event SwappedBackAndRefundedBTCUniversal(
+        uint256 uniqueCounter,
+        uint256 chainId,
+        address token,
+        uint256 amount,
+        int64 bridgePercentageFee,
+        address refundAddress,
+        address[] pathFromIntermediaryToInputOnSourceChain,
+        uint256[] amountsFromIntermediaryToInputOnSourceChain
     );
 
     event AcrossUpdated(address oldAcross, address newAcross);

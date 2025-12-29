@@ -227,6 +227,17 @@ interface IPolyConnector {
         address _destinationToken
     ) external;
 
+    function setBridgeTokenMappingUniversal(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        bytes32 _destinationToken
+    ) external;
+
+    function setBridgeConnectorMapping(
+        uint256 _destinationChainId,
+        address _bridgeConnector
+    ) external;
+
     function setCurrChainId(uint256 _currChainId) external;
 
     function withdrawFundsToSourceChain(
