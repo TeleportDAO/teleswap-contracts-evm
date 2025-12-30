@@ -250,6 +250,7 @@ contract EthConnectorLogic is
         );
 
         // Send message to intermediary chain to swap intermediary token to TeleBTC
+        // todo: store intermediary token to input token path on source chain to safety check when admin refunds the failed request
         bytes memory message = abi.encode(
             "swapAndUnwrapUniversal",
             uniqueCounter,
@@ -597,7 +598,6 @@ contract EthConnectorLogic is
             );
         } else {
             // Save token amount so user can withdraw it in future
-            // todo: store intermediary token to input token path on source chain to safety check when admin refunds the failed request
             newFailedSwapBackAndRefundReqs[arguments.refundAddress][inputToken][
                 arguments.uniqueCounter
             ][_tokenSent] = _amount;

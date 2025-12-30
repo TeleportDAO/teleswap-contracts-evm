@@ -235,7 +235,7 @@ interface IPolyConnector {
 
     function setBridgeConnectorMapping(
         uint256 _destinationChainId,
-        address _bridgeConnector
+        bytes32 _bridgeConnector
     ) external;
 
     function setCurrChainId(uint256 _currChainId) external;

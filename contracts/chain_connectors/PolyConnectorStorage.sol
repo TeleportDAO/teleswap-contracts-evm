@@ -60,5 +60,5 @@ abstract contract PolyConnectorStorage is IPolyConnector {
     // ^ Mapping from [refundAddress][chainId][bitcoinTxId][token] to amount
     uint256 public currChainId;
     mapping(address => mapping(uint256 => bytes32)) public bridgeTokenMappingUniversal; // ^ Mapping from [source token][destination chain id] to destination token
-    mapping(uint256 => address) public bridgeConnectorMapping; // ^ Mapping from [destination chain id] to bridge connector address
+    mapping(uint256 => bytes32) public bridgeConnectorMapping; // ^ Mapping from [destination chain id] to bridge connector address
 }

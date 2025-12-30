@@ -1408,7 +1408,7 @@ describe("PolyConnector", async () => {
             // Set bridge connector mapping for chainId 1 (required for _sendMessageUsingAcrossUniversal)
             await PolyConnector.setBridgeConnectorMapping(
                 1, // chainId (Ethereum)
-                signer1Address // bridge connector address on source chain
+                ethers.utils.hexZeroPad(signer1Address.toLowerCase(), 32) // bridge connector address on source chain
             );
 
             // Set bridge token mapping universal for chainId 1 (required for _sendMessageUsingAcrossUniversal)
@@ -1671,8 +1671,6 @@ describe("PolyConnector", async () => {
                     telebtcAmount
                 );
             }
-
-            console.log("correctBurntAmount =", correctBurntAmount);
 
             // Admin retries the swap
             await expect(

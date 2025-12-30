@@ -681,6 +681,7 @@ contract CcExchangeRouterLogic is
             require(recipient != bytes32(0), "ExchangeRouter: destination connector proxy not set");
 
             // Create the across message to send to the destination chain connector contract
+            // todo: store teleBTC to intermediary token path on intermediary chain in the message to safety check when admin refunds the failed request
             if (arguments._destRealChainId == 34268394551451) { // Solana
                 message = abi.encode(
                     "wrapAndSwapUniversal",

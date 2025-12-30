@@ -116,7 +116,7 @@ contract PolyConnectorLogic is
     /// @param _bridgeConnector Address of the bridge connector
     function setBridgeConnectorMapping(
         uint256 _destinationChainId,
-        address _bridgeConnector
+        bytes32 _bridgeConnector
     ) external override onlyOwner {
         bridgeConnectorMapping[_destinationChainId] = _bridgeConnector;
     }
@@ -536,7 +536,6 @@ contract PolyConnectorLogic is
                     bytes32(arguments.uniqueCounter)
                 ][_tokenSent] = _amount;
             } else {
-                // todo: store intermediary token to input token path on source chain to safety check when admin withdraws funds to source chain
                 newFailedUniversalSwapAndUnwrapReqs[arguments.refundAddress][arguments.chainId][
                     arguments.uniqueCounter
                 ][_tokenSent] = _amount;
