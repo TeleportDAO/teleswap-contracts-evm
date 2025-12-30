@@ -392,7 +392,17 @@ contract CcExchangeRouterLogic is
         );
 
         // Calculate the final amount that user will receive
-        uint _finalAmount = _fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
+        uint256 fillAmount = _fillAmount;
+
+
+        // Convert the fill amount to the destination chain's decimals
+        if (inputTokenDecimalsOnDestinationChain[_intermediaryToken] != 0) {
+            fillAmount =
+                _fillAmount /
+                10 ** (18 - inputTokenDecimalsOnDestinationChain[_intermediaryToken]);
+        }
+
+        uint _finalAmount = fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
 
         // Check that the final amount is greater than or equal to the user requested amount
         require(_finalAmount >= _userRequestedAmount, "ExchangeRouter: insufficient fill amount");
