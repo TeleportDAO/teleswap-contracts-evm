@@ -22,6 +22,11 @@ interface IEthConnector {
         address targetChainConnectorProxy;
     }
 
+    struct SwapAndUnwrapUniversalPaths {
+        address[] _pathFromInputToIntermediaryOnSourceChain;
+        address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
+    }
+
     /// @notice Arguments for universal swap and unwrap function
     /// @param _pathFromInputToIntermediaryOnSourceChain Path from input token to intermediary token on the current chain
     /// @param _amountsFromInputToIntermediaryOnSourceChain Amounts of input token and intermediary token on the current chain

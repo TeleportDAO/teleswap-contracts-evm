@@ -249,8 +249,12 @@ contract EthConnectorLogic is
             _arguments._amountsFromInputToIntermediaryOnSourceChain
         );
 
+        SwapAndUnwrapUniversalPaths memory paths = SwapAndUnwrapUniversalPaths({
+            _pathFromInputToIntermediaryOnSourceChain: _arguments._pathFromInputToIntermediaryOnSourceChain,
+            _pathFromIntermediaryToOutputOnIntermediaryChain: _arguments._pathFromIntermediaryToOutputOnIntermediaryChain
+        });
+
         // Send message to intermediary chain to swap intermediary token to TeleBTC
-        // todo: store intermediary token to input token path on source chain to safety check when admin refunds the failed request
         bytes memory message = abi.encode(
             "swapAndUnwrapUniversal",
             uniqueCounter,
@@ -259,7 +263,7 @@ contract EthConnectorLogic is
             _exchangeConnector,
             _arguments._minOutputAmount,
             _isInputFixed,
-            _arguments._pathFromIntermediaryToOutputOnIntermediaryChain,
+            paths,
             _userAndLockerScript,
             _thirdParty
         );
@@ -382,6 +386,10 @@ contract EthConnectorLogic is
 
         require(_amount > 0, "EthConnector: already withdrawn");
 
+        SwapAndUnwrapUniversalPaths memory paths = SwapAndUnwrapUniversalPaths({
+            _pathFromInputToIntermediaryOnSourceChain: new address[](0),
+            _pathFromIntermediaryToOutputOnIntermediaryChain: _args.path
+        });
         // Create message to send to intermediary chain (polygon) to swap and unwrap to BTC
         bytes memory message = abi.encode(
             "swapBackAndRefundBTC",
@@ -391,7 +399,7 @@ contract EthConnectorLogic is
             _args.exchangeConnector,
             _args.minOutputAmount,
             true, // isInputFixed
-            _args.path,
+            paths,
             _args.userAndLockerScript,
             0 // _thirdParty
         );

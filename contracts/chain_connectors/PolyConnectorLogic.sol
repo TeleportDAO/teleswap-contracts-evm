@@ -277,13 +277,14 @@ contract PolyConnectorLogic is
             "PolygonConnectorLogic: not authorized"
         );
 
-        uint256 _amount = newFailedUniversalSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][
+        SwapAndUnwrapUniversalData memory data = newFailedUniversalSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][
             _token
         ];
         // Update withheld amount
         delete newFailedUniversalSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][_token];
 
-        require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
+        require(data.intermediaryTokenAmount > 0, "PolygonConnectorLogic: already withdrawn");
+
 
         if (_pathFromIntermediaryToInputOnSourceChain.length == 0) {
             // Send token back to the user
@@ -291,10 +292,14 @@ contract PolyConnectorLogic is
                 _refundAddress,
                 _chainId,
                 _token,
-                _amount,
+                data.intermediaryTokenAmount,
                 _bridgePercentageFee
             );
         } else {
+            require(data.pathFromInputToIntermediaryOnSourceChain[data.pathFromInputToIntermediaryOnSourceChain.length - 1] == _pathFromIntermediaryToInputOnSourceChain[0], "PolygonConnectorLogic: invalid intermediary token");
+
+            require(data.pathFromInputToIntermediaryOnSourceChain[0] == _pathFromIntermediaryToInputOnSourceChain[_pathFromIntermediaryToInputOnSourceChain.length - 1], "PolygonConnectorLogic: invalid input token");
+
             bytes memory message;
             if (_chainId == 34268394551451) { // Solana
                 // Send message to source chain to swap intermediary token to the input token
@@ -326,7 +331,7 @@ contract PolyConnectorLogic is
             _sendMessageUsingAcrossUniversal(
                 _chainId,
                 _token,
-                _amount,
+                data.intermediaryTokenAmount,
                 _bridgePercentageFee,
                 message
             );
@@ -336,7 +341,7 @@ contract PolyConnectorLogic is
             _uniqueCounter,
             _chainId,
             _token,
-            _amount,
+            data.intermediaryTokenAmount,
             _bridgePercentageFee,
             _refundAddress,
             _pathFromIntermediaryToInputOnSourceChain,
@@ -367,7 +372,11 @@ contract PolyConnectorLogic is
         delete newFailedRefundBTCReqs[_refundAddress][currChainId][_bitcoinTxId][_token];
 
         require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
-        
+
+        SwapAndUnwrapUniversalPaths memory paths = SwapAndUnwrapUniversalPaths({
+            _pathFromInputToIntermediaryOnSourceChain: new address[](0),
+            _pathFromIntermediaryToOutputOnIntermediaryChain: _path
+        });
         // Swap intermediary token to TeleBTC
         bytes memory message = abi.encode(
             "swapBackAndRefundBTC",
@@ -377,7 +386,7 @@ contract PolyConnectorLogic is
             _exchangeConnector,
             _minOutputAmount,
             true, // isInputFixed
-            _path,
+            paths,
             _userAndLockerScript,
             0 // _thirdParty
         );   
@@ -479,7 +488,7 @@ contract PolyConnectorLogic is
             arguments = _decodeReqSolana(_message);
         }
         require(
-            arguments.path[0] == _tokenSent,
+            arguments.paths._pathFromIntermediaryToOutputOnIntermediaryChain[0] == _tokenSent,
             "PolygonConnectorLogic: invalid path"
         );
 
@@ -494,7 +503,7 @@ contract PolyConnectorLogic is
                 arguments.exchangeConnector,
                 amounts,
                 arguments.isInputFixed,
-                arguments.path,
+                arguments.paths._pathFromIntermediaryToOutputOnIntermediaryChain,
                 block.timestamp,
                 arguments.scripts.userScript,
                 arguments.scripts.scriptType,
@@ -519,7 +528,7 @@ contract PolyConnectorLogic is
                 BurnRouterStorage(burnRouterProxy).burnRequestCounter(
                     lockerTargetAddress
                 ) - 1,
-                arguments.path,
+                arguments.paths._pathFromIntermediaryToOutputOnIntermediaryChain,
                 arguments.thirdParty
             );
         } catch {
@@ -536,9 +545,17 @@ contract PolyConnectorLogic is
                     bytes32(arguments.uniqueCounter)
                 ][_tokenSent] = _amount;
             } else {
+                bytes32[] memory pathFromInputToIntermediaryOnSourceChain = new bytes32[](arguments.paths._pathFromInputToIntermediaryOnSourceChain.length);
+                for (uint256 i = 0; i < arguments.paths._pathFromInputToIntermediaryOnSourceChain.length; i++) {
+                    pathFromInputToIntermediaryOnSourceChain[i] = bytes32(uint256(uint160(arguments.paths._pathFromInputToIntermediaryOnSourceChain[i])));
+                }
+                SwapAndUnwrapUniversalData memory data = SwapAndUnwrapUniversalData(
+                    pathFromInputToIntermediaryOnSourceChain,
+                    _amount
+                );
                 newFailedUniversalSwapAndUnwrapReqs[arguments.refundAddress][arguments.chainId][
                     arguments.uniqueCounter
-                ][_tokenSent] = _amount;
+                ][_tokenSent] = data;
             }
 
             emit FailedSwapAndUnwrapUniversal(
@@ -550,7 +567,7 @@ contract PolyConnectorLogic is
                 arguments.refundAddress,
                 arguments.scripts.userScript,
                 arguments.scripts.scriptType,
-                arguments.path,
+                arguments.paths._pathFromIntermediaryToOutputOnIntermediaryChain,
                 arguments.thirdParty
             );
         }
@@ -706,11 +723,11 @@ contract PolyConnectorLogic is
         offset += 4;
         
         // Read path array (pathLength * 32 bytes, each zero-padded EVM address)
-        arguments.path = new address[](pathLength);
+        arguments.paths._pathFromIntermediaryToOutputOnIntermediaryChain = new address[](pathLength);
         for (uint256 i = 0; i < pathLength; i++) {
             bytes32 pathItemBytes = _readBytes32(_message, offset);
             // Extract last 20 bytes for EVM address
-            arguments.path[i] = address(uint160(uint256(pathItemBytes)));
+            arguments.paths._pathFromIntermediaryToOutputOnIntermediaryChain[i] = address(uint160(uint256(pathItemBytes)));
             offset += 32;
         }
         
@@ -756,7 +773,7 @@ contract PolyConnectorLogic is
             arguments.exchangeConnector,
             arguments.outputAmount,
             arguments.isInputFixed,
-            arguments.path,
+            arguments.paths,
             ,
             // arguments.scripts,
             // arguments.thirdParty
@@ -770,7 +787,7 @@ contract PolyConnectorLogic is
                 address,
                 uint256,
                 bool,
-                address[],
+                SwapAndUnwrapUniversalPaths,
                 UserAndLockerScript,
                 uint256
             )
@@ -798,7 +815,7 @@ contract PolyConnectorLogic is
                 address,
                 uint256,
                 bool,
-                address[],
+                SwapAndUnwrapUniversalPaths,
                 UserAndLockerScript,
                 uint256
             )

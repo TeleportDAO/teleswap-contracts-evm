@@ -48,9 +48,14 @@ interface IPolyConnector {
         address exchangeConnector;
         uint256 outputAmount;
         bool isInputFixed;
-        address[] path;
+        SwapAndUnwrapUniversalPaths paths;
         UserAndLockerScript scripts;
         uint256 thirdParty;
+    }
+
+    struct SwapAndUnwrapUniversalPaths {
+        address[] _pathFromInputToIntermediaryOnSourceChain;
+        address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
     }
 
     // Events

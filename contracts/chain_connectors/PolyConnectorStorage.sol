@@ -13,6 +13,10 @@ abstract contract PolyConnectorStorage is IPolyConnector {
         bytes userScript;
         ScriptTypes scriptType;
     }
+    struct SwapAndUnwrapUniversalData {
+        bytes32[] pathFromInputToIntermediaryOnSourceChain;
+        uint256 intermediaryTokenAmount;
+    }
 
     address public constant ETH_ADDR =
         0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -41,12 +45,12 @@ abstract contract PolyConnectorStorage is IPolyConnector {
         bytes32 => mapping(
             uint256 => mapping(
                 uint256 => mapping(
-                    address => uint256
+                    address => SwapAndUnwrapUniversalData
                 )
             )
         )
     ) public newFailedUniversalSwapAndUnwrapReqs;
-    // ^ Mapping from [refundAddress][chainId][reqId][token] to amount
+    // ^ Mapping from [refundAddress][chainId][reqId][intermediaryToken] to SwapAndUnwrapUniversalPathsData
 
     mapping(
         bytes32 => mapping(

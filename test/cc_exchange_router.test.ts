@@ -134,6 +134,8 @@ describe("CcExchangeRouter", async function () {
     let teleportDAOToken: Erc20;
     let exchangeToken: Erc20;
     let anotherExchangeToken: Erc20;
+    let intermediaryTokenOnDestChain: Erc20; // Intermediary token on destination chain
+    let outputTokenOnDestChain: Erc20; // Output token on destination chain
     let weth: WETH;
     let burnRouterLib: BurnRouterLib;
     let burnRouter: Contract;
@@ -272,6 +274,20 @@ describe("CcExchangeRouter", async function () {
             100000
         );
 
+        // Deploys intermediary token for destination chain
+        intermediaryTokenOnDestChain = await erc20Factory.deploy(
+            "IntermediaryTokenDest",
+            "ITD",
+            100000
+        );
+
+        // Deploys output token for destination chain
+        outputTokenOnDestChain = await erc20Factory.deploy(
+            "OutputTokenDest",
+            "OTD",
+            100000
+        );
+
         lockers = await deployLockers();
 
         // Deploys burn router
@@ -387,10 +403,29 @@ describe("CcExchangeRouter", async function () {
             ethers.utils.hexZeroPad(exchangeToken.address, 32)
         );
 
-        // set intermediary token mapping for destination chain swaps
-        await ccExchangeRouter.setIntermediaryTokenMapping(
+        // Set bridge intermediary token mapping for exchangeToken on current chain
+        // This maps: exchangeToken ID => current chain ID => exchangeToken (intermediary on current chain)
+        // Used by "Send token to destination chain using across" test
+        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
             "0x" + exchangeToken.address.slice(-16),
-            exchangeToken.address
+            CHAIN_ID, // Current chain ID (1)
+            ethers.utils.hexZeroPad(exchangeToken.address, 32)
+        );
+
+        // Set bridge intermediary token mapping for current chain
+        // This maps: outputTokenOnDestChain ID => current chain ID => exchangeToken (intermediary on current chain)
+        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            "0x" + outputTokenOnDestChain.address.slice(-16),
+            CHAIN_ID, // Current chain ID (1), not destination chain ID
+            ethers.utils.hexZeroPad(exchangeToken.address, 32)
+        );
+
+        // Set bridge intermediary token mapping for destination chain
+        // This maps: outputTokenOnDestChain ID => destination chain ID => intermediaryTokenOnDestChain (intermediary on dest chain)
+        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            "0x" + outputTokenOnDestChain.address.slice(-16),
+            2, // Destination chain ID
+            ethers.utils.hexZeroPad(intermediaryTokenOnDestChain.address, 32)
         );
     });
 
@@ -559,6 +594,8 @@ describe("CcExchangeRouter", async function () {
         let oldDeployerBalanceTT: BigNumber;
         let oldUserBalanceTT: BigNumber;
         let oldTotalSupplyTeleBTC: BigNumber;
+        let oldReserveIntermediaryDest: BigNumber;
+        let oldReserveOutputDest: BigNumber;
 
         function calculateFees(request: any): [number, number, number] {
             // Calculates fees
@@ -773,6 +810,53 @@ describe("CcExchangeRouter", async function () {
             oldDeployerBalanceTT = await exchangeToken.balanceOf(
                 deployerAddress
             );
+
+            // Add liquidity for destination chain tokens (intermediary and output)
+            await intermediaryTokenOnDestChain.approve(
+                uniswapV2Router02.address,
+                10000
+            );
+            await outputTokenOnDestChain.approve(
+                uniswapV2Router02.address,
+                10000
+            );
+            await uniswapV2Router02.addLiquidity(
+                intermediaryTokenOnDestChain.address,
+                outputTokenOnDestChain.address,
+                10000, // Intermediary token amount
+                10000, // Output token amount
+                0,
+                0,
+                deployerAddress,
+                1000000000000000
+            );
+
+            // Get reserves for destination chain swap
+            let destChainPairAddress = await uniswapV2Factory.getPair(
+                intermediaryTokenOnDestChain.address,
+                outputTokenOnDestChain.address
+            );
+            expect(destChainPairAddress).to.not.equal(
+                ethers.constants.AddressZero
+            );
+
+            let destChainPair = await uniswapV2Pair__factory.attach(
+                destChainPairAddress
+            );
+
+            // Get reserves - getReserves() returns a tuple [reserve0, reserve1, blockTimestampLast]
+            let [reserve0, reserve1] = await destChainPair.getReserves();
+
+            // Determine which reserve corresponds to which token
+            let token0Address = await destChainPair.token0();
+
+            if (token0Address === intermediaryTokenOnDestChain.address) {
+                oldReserveIntermediaryDest = reserve0;
+                oldReserveOutputDest = reserve1;
+            } else {
+                oldReserveIntermediaryDest = reserve1;
+                oldReserveOutputDest = reserve0;
+            }
 
             await ccExchangeRouter.setTeleporter(deployerAddress, true);
             await addLockerToLockers();
@@ -1294,9 +1378,10 @@ describe("CcExchangeRouter", async function () {
             vout = vout.replace(DUMMY_TOKEN_ID, ONE_ADDRESS.slice(-16));
 
             // Set intermediary token mapping so path validation passes
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + ONE_ADDRESS.slice(-16),
-                ONE_ADDRESS
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(ONE_ADDRESS, 32)
             );
 
             // Set bridge token ID mapping for current chain (chain 1) so outputToken is set correctly
@@ -1406,9 +1491,10 @@ describe("CcExchangeRouter", async function () {
             vout = vout.replace(DUMMY_TOKEN_ID, ZERO_ADDRESS.slice(-16));
 
             // Set intermediary token mapping so path validation passes
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + ZERO_ADDRESS.slice(-16),
-                ZERO_ADDRESS
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(ZERO_ADDRESS, 32)
             );
 
             let cc_exchange_request_txId = calculateTxId(
@@ -2175,6 +2261,8 @@ describe("CcExchangeRouter", async function () {
         let oldDeployerBalanceTT: BigNumber;
         let oldUserBalanceTT: BigNumber;
         let oldTotalSupplyTeleBTC: BigNumber;
+        let oldReserveIntermediaryDest: BigNumber;
+        let oldReserveOutputDest: BigNumber;
 
         function calculateFees(request: any): [number, number, number] {
             // Calculates fees
@@ -2418,6 +2506,53 @@ describe("CcExchangeRouter", async function () {
                 deployerAddress
             );
 
+            // Add liquidity for destination chain tokens (intermediary and output)
+            await intermediaryTokenOnDestChain.approve(
+                uniswapV2Router02.address,
+                10000
+            );
+            await outputTokenOnDestChain.approve(
+                uniswapV2Router02.address,
+                10000
+            );
+            await uniswapV2Router02.addLiquidity(
+                intermediaryTokenOnDestChain.address,
+                outputTokenOnDestChain.address,
+                10000, // Intermediary token amount
+                10000, // Output token amount
+                0,
+                0,
+                deployerAddress,
+                1000000000000000
+            );
+
+            // Get reserves for destination chain swap
+            let destChainPairAddress = await uniswapV2Factory.getPair(
+                intermediaryTokenOnDestChain.address,
+                outputTokenOnDestChain.address
+            );
+            expect(destChainPairAddress).to.not.equal(
+                ethers.constants.AddressZero
+            );
+
+            let destChainPair = await uniswapV2Pair__factory.attach(
+                destChainPairAddress
+            );
+
+            // Get reserves - getReserves() returns a tuple [reserve0, reserve1, blockTimestampLast]
+            let [reserve0, reserve1] = await destChainPair.getReserves();
+
+            // Determine which reserve corresponds to which token
+            let token0Address = await destChainPair.token0();
+
+            if (token0Address === intermediaryTokenOnDestChain.address) {
+                oldReserveIntermediaryDest = reserve0;
+                oldReserveOutputDest = reserve1;
+            } else {
+                oldReserveIntermediaryDest = reserve1;
+                oldReserveOutputDest = reserve0;
+            }
+
             await ccExchangeRouter.setTeleporter(deployerAddress, true);
 
             await addLockerToLockers();
@@ -2623,9 +2758,10 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
-                deployerAddress
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(deployerAddress, 32)
             );
 
             // Set bridge token ID mapping for cross-chain (chain 2)
@@ -2728,9 +2864,10 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
-                deployerAddress
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(deployerAddress, 32)
             );
 
             // Set bridge token ID mapping for cross-chain (chain 2)
@@ -2819,9 +2956,10 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
-                deployerAddress
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(deployerAddress, 32)
             );
 
             // Set bridge token ID mapping for cross-chain (chain 2)
@@ -2881,8 +3019,8 @@ describe("CcExchangeRouter", async function () {
             ).to.be.revertedWith("ExchangeRouter: already processed");
         });
 
-        it.only("Swap tokens to the detination token after sending it to the destination chain using across (universal wrap and swap)", async function () {
-            // Replaces dummy address in vout with exchange token address
+        it("Swap tokens to the detination token after sending it to the destination chain using across (universal wrap and swap)", async function () {
+            // Replaces dummy address in vout with output token address on destination chain
             // For cross-chain, we need destChainId: 2, so we modify the vout to encode that
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -2890,7 +3028,74 @@ describe("CcExchangeRouter", async function () {
             vout = vout.replace("000101", "000201");
             vout = vout.replace(
                 DUMMY_TOKEN_ID,
-                exchangeToken.address.slice(-16)
+                outputTokenOnDestChain.address.slice(-16)
+            );
+
+            // Calculates fees
+            let [lockerFee, teleporterFee, protocolFee] = calculateFees(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+            );
+
+            // Step 1: Calculate minIntermediaryTokenAmount
+            // This is the output from swapping TeleBTC -> intermediary token on source chain
+            let inputAmount =
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+                    .bitcoinAmount -
+                teleporterFee -
+                lockerFee -
+                protocolFee;
+
+            let minIntermediaryTokenAmount =
+                await uniswapV2Router02.getAmountOut(
+                    inputAmount,
+                    oldReserveTeleBTC,
+                    oldReserveTT
+                );
+
+            // Step 2: Calculate bridge percentage fee
+            // The contract parses it as: parseBridgeFeePercentage(arbitraryData) * (10 ** 11)
+            let bridgePercentageFee = ethers.BigNumber.from(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.acrossFee
+            ).mul(ethers.BigNumber.from(10).pow(11));
+
+            // Step 3: Calculate available intermediary amount after bridge fee
+            // The contract calculates: bridgeFee = (minIntermediaryTokenAmount * bridgePercentageFee) / MAX_BRIDGE_FEE
+            // Then: outputAmount = minIntermediaryTokenAmount - bridgeFee
+            // This is equivalent to: availableIntermediaryAmount = minIntermediaryTokenAmount * (1e18 - bridgePercentageFee) / 1e18
+            let bridgeFee = minIntermediaryTokenAmount
+                .mul(bridgePercentageFee)
+                .div(ethers.BigNumber.from(10).pow(18));
+            let availableIntermediaryAmount =
+                minIntermediaryTokenAmount.sub(bridgeFee);
+
+            // Step 4: Calculate minDestTokenAmount
+            // This is the output from swapping intermediary token -> output token on destination chain
+            // On destination chain: intermediaryTokenOnDestChain -> outputTokenOnDestChain
+            // We use availableIntermediaryAmount as input for this swap
+            let minDestTokenAmount = await uniswapV2Router02.getAmountOut(
+                availableIntermediaryAmount,
+                oldReserveIntermediaryDest,
+                oldReserveOutputDest
+            );
+
+            // Replace minDestTokenAmount (position 48-60, 13 bytes)
+            vout = vout.replace(
+                "00000000000000000000000011",
+                ethers.utils
+                    .hexZeroPad(ethers.utils.hexlify(minDestTokenAmount), 13)
+                    .slice(2) // Remove '0x' prefix
+            );
+
+            // Replace minIntermediaryTokenAmount (position 61-73, 13 bytes)
+            // This is the amount of intermediary token we expect from swapping TeleBTC -> intermediary token
+            vout = vout.replace(
+                "00000000000000000000000012",
+                ethers.utils
+                    .hexZeroPad(
+                        ethers.utils.hexlify(minIntermediaryTokenAmount),
+                        13
+                    )
+                    .slice(2) // Remove '0x' prefix
             );
 
             let cc_exchange_request_txId = calculateTxId(
@@ -2900,27 +3105,12 @@ describe("CcExchangeRouter", async function () {
                 CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.locktime
             );
 
-            // Calculates fees
-            let [lockerFee, teleporterFee, protocolFee] = calculateFees(
-                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+            // Set bridge token ID mapping for output token on destination chain
+            await ccExchangeRouter.setBridgeTokenIDMapping(
+                "0x" + outputTokenOnDestChain.address.slice(-16),
+                2, // destination chain ID
+                ethers.utils.hexZeroPad(outputTokenOnDestChain.address, 32)
             );
-
-            // Finds expected output amount that user receives (input token is fixed)
-            let expectedOutputAmount = await uniswapV2Router02.getAmountOut(
-                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
-                    .bitcoinAmount -
-                    teleporterFee -
-                    lockerFee -
-                    protocolFee,
-                oldReserveTeleBTC,
-                oldReserveTT
-            );
-
-            let bridgeFee = expectedOutputAmount
-                .mul(
-                    CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.acrossFee
-                )
-                .div(10 ** 7);
 
             // Exchanges teleBTC for TT
             await expect(
@@ -2947,10 +3137,16 @@ describe("CcExchangeRouter", async function () {
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
                     [
-                        ethers.utils.hexZeroPad(exchangeToken.address, 32),
-                        ethers.utils.hexZeroPad(exchangeToken.address, 32),
+                        ethers.utils.hexZeroPad(
+                            intermediaryTokenOnDestChain.address,
+                            32
+                        ),
+                        ethers.utils.hexZeroPad(
+                            outputTokenOnDestChain.address,
+                            32
+                        ),
                     ], // path from intermediary to dest token on dest chain
-                    [expectedOutputAmount, expectedOutputAmount] // amounts from intermediary to dest token on dest chain
+                    [availableIntermediaryAmount, minDestTokenAmount] // amounts: [intermediary token input on dest chain, output token amount on dest chain]
                 )
             )
                 .to.emit(ccExchangeRouter, "NewWrapAndSwapUniversal")
@@ -2969,17 +3165,19 @@ describe("CcExchangeRouter", async function () {
                             .hexZeroPad(exchangeToken.address, 32)
                             .toLowerCase(),
                         ethers.utils
-                            .hexZeroPad(exchangeToken.address, 32)
+                            .hexZeroPad(outputTokenOnDestChain.address, 32)
                             .toLowerCase(),
-                    ], // inputIntermediaryOutputToken
+                    ], // inputIntermediaryOutputToken [inputToken, intermediaryToken, outputToken]
                     [
-                        CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
-                            .bitcoinAmount -
-                            teleporterFee -
-                            lockerFee -
-                            protocolFee,
-                        expectedOutputAmount, // intermediaryAmount
-                        expectedOutputAmount.sub(bridgeFee), // outputAmount
+                        ethers.BigNumber.from(
+                            CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+                                .bitcoinAmount -
+                                teleporterFee -
+                                lockerFee -
+                                protocolFee
+                        ),
+                        minIntermediaryTokenAmount, // intermediaryAmount
+                        availableIntermediaryAmount, // outputAmount (intermediary amount - bridgeFee)
                     ],
                     0, // speed
                     deployerAddress, // teleporter
@@ -2990,16 +3188,25 @@ describe("CcExchangeRouter", async function () {
                             .appId, // appId
                         0, // thirdPartyId
                     ],
-                    [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
+                    [
+                        ethers.BigNumber.from(teleporterFee),
+                        ethers.BigNumber.from(lockerFee),
+                        ethers.BigNumber.from(protocolFee),
+                        ethers.BigNumber.from(0),
+                        bridgeFee,
+                    ], // fees
                     [
                         ethers.utils
-                            .hexZeroPad(exchangeToken.address, 32)
+                            .hexZeroPad(
+                                intermediaryTokenOnDestChain.address,
+                                32
+                            )
                             .toLowerCase(),
                         ethers.utils
-                            .hexZeroPad(exchangeToken.address, 32)
+                            .hexZeroPad(outputTokenOnDestChain.address, 32)
                             .toLowerCase(),
                     ], // path from intermediary to dest token on dest chain
-                    [expectedOutputAmount, expectedOutputAmount] // amounts from intermediary to dest token on dest chain
+                    [availableIntermediaryAmount, minDestTokenAmount] // amounts from intermediary to dest token on dest chain
                 );
 
             await checksWhenExchangeSucceed(
@@ -3020,13 +3227,13 @@ describe("CcExchangeRouter", async function () {
                     ccExchangeRouter.address,
                     mockAcross.address
                 )
-            ).to.be.equal(expectedOutputAmount.toNumber());
+            ).to.be.equal(minIntermediaryTokenAmount.toNumber());
             await expect(
                 await exchangeToken.balanceOf(ccExchangeRouter.address)
-            ).to.be.equal(expectedOutputAmount.toNumber());
+            ).to.be.equal(minIntermediaryTokenAmount.toNumber());
         });
 
-        it.only("Revert since destination chain connector proxy mapping is not set", async function () {
+        it("Revert since destination chain connector proxy mapping is not set", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3037,6 +3244,14 @@ describe("CcExchangeRouter", async function () {
                 exchangeToken.address.slice(-16)
             );
 
+            // Set up mappings for destination chain swap so validation passes
+            // Set bridge intermediary token mapping for destination chain
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+                "0x" + exchangeToken.address.slice(-16),
+                2, // Destination chain ID
+                ethers.utils.hexZeroPad(exchangeToken.address, 32)
+            );
+
             // Set destination connector proxy mapping to 0 means that the destination connector proxy is not set
             await ccExchangeRouter.setDestConnectorProxyMapping(
                 2,
@@ -3045,6 +3260,29 @@ describe("CcExchangeRouter", async function () {
                     32
                 )
             );
+
+            // Calculate amounts for destination chain swap
+            let [lockerFee, teleporterFee, protocolFee] = calculateFees(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+            );
+            let minIntermediaryTokenAmount =
+                await uniswapV2Router02.getAmountOut(
+                    CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+                        .bitcoinAmount -
+                        teleporterFee -
+                        lockerFee -
+                        protocolFee,
+                    oldReserveTeleBTC,
+                    oldReserveTT
+                );
+            let bridgePercentageFee = ethers.BigNumber.from(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.acrossFee
+            ).mul(ethers.BigNumber.from(10).pow(11));
+            let bridgeFee = minIntermediaryTokenAmount
+                .mul(bridgePercentageFee)
+                .div(ethers.BigNumber.from(10).pow(18));
+            let availableIntermediaryAmount =
+                minIntermediaryTokenAmount.sub(bridgeFee);
 
             await expect(
                 ccExchangeRouter.wrapAndSwapUniversal(
@@ -3073,14 +3311,14 @@ describe("CcExchangeRouter", async function () {
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
                     ], // path from intermediary to dest token on dest chain
-                    [10000, 10000] // amounts from intermediary to dest token on dest chain
+                    [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
                 )
             ).to.be.revertedWith(
                 "ExchangeRouter: destination connector proxy not set"
             );
         });
 
-        it.only("Revert since chain is not supported in a universal wrap and swap", async function () {
+        it("Revert since chain is not supported in a universal wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3126,7 +3364,7 @@ describe("CcExchangeRouter", async function () {
             ).to.be.revertedWith("ExchangeRouter: invalid chain id");
         });
 
-        it.only("Keep TeleBTC in the contract since swap failed in a universal wrap and swap", async function () {
+        it("Keep TeleBTC in the contract since swap failed in a universal wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3137,9 +3375,10 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
-                deployerAddress
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(deployerAddress, 32)
             );
 
             // Set bridge token ID mapping for cross-chain (chain 2)
@@ -3147,6 +3386,14 @@ describe("CcExchangeRouter", async function () {
                 "0x" + deployerAddress.slice(-16),
                 2, // destination chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
+            );
+
+            // Set bridge intermediary token mapping for destination chain
+            // This is required for destination chain swap validation
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+                "0x" + deployerAddress.slice(-16),
+                2, // Destination chain ID
+                ethers.utils.hexZeroPad(exchangeToken.address, 32)
             );
 
             let cc_exchange_request_txId = calculateTxId(
@@ -3160,6 +3407,26 @@ describe("CcExchangeRouter", async function () {
             let [lockerFee, teleporterFee, protocolFee] = calculateFees(
                 CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
             );
+
+            // Calculate amounts for destination chain swap
+            let minIntermediaryTokenAmount =
+                await uniswapV2Router02.getAmountOut(
+                    CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+                        .bitcoinAmount -
+                        teleporterFee -
+                        lockerFee -
+                        protocolFee,
+                    oldReserveTeleBTC,
+                    oldReserveTT
+                );
+            let bridgePercentageFee = ethers.BigNumber.from(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.acrossFee
+            ).mul(ethers.BigNumber.from(10).pow(11));
+            let bridgeFee = minIntermediaryTokenAmount
+                .mul(bridgePercentageFee)
+                .div(ethers.BigNumber.from(10).pow(18));
+            let availableIntermediaryAmount =
+                minIntermediaryTokenAmount.sub(bridgeFee);
 
             await expect(
                 await ccExchangeRouter.wrapAndSwapUniversal(
@@ -3186,9 +3453,9 @@ describe("CcExchangeRouter", async function () {
                     [teleBTC.address, deployerAddress],
                     [
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
-                        ethers.utils.hexZeroPad(exchangeToken.address, 32),
+                        ethers.utils.hexZeroPad(deployerAddress, 32),
                     ], // path from intermediary to dest token on dest chain
-                    [10000, 10000] // amounts from intermediary to dest token on dest chain
+                    [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
                 )
             )
                 .to.emit(ccExchangeRouter, "FailedWrapAndSwapUniversal")
@@ -3234,14 +3501,14 @@ describe("CcExchangeRouter", async function () {
                             .hexZeroPad(exchangeToken.address, 32)
                             .toLowerCase(),
                         ethers.utils
-                            .hexZeroPad(exchangeToken.address, 32)
+                            .hexZeroPad(deployerAddress, 32)
                             .toLowerCase(),
                     ], // path from intermediary to dest token on dest chain
-                    [10000, 10000] // amounts from intermediary to dest token on dest chain
+                    [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
                 );
         });
 
-        it.only("Refund TeleBTC for a failed cross chain wrap and swap", async function () {
+        it("Refund TeleBTC for a failed cross chain universal wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3252,9 +3519,10 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
-                deployerAddress
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(deployerAddress, 32)
             );
 
             // Set bridge token ID mapping for cross-chain (chain 2)
@@ -3262,6 +3530,14 @@ describe("CcExchangeRouter", async function () {
                 "0x" + deployerAddress.slice(-16),
                 2, // destination chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
+            );
+
+            // Set bridge intermediary token mapping for destination chain
+            // This is required for destination chain swap validation
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+                "0x" + deployerAddress.slice(-16),
+                2, // Destination chain ID
+                ethers.utils.hexZeroPad(exchangeToken.address, 32)
             );
 
             let cc_exchange_request_txId = calculateTxId(
@@ -3275,6 +3551,26 @@ describe("CcExchangeRouter", async function () {
             let [lockerFee, teleporterFee, protocolFee] = calculateFees(
                 CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
             );
+
+            // Calculate amounts for destination chain swap
+            let minIntermediaryTokenAmount =
+                await uniswapV2Router02.getAmountOut(
+                    CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
+                        .bitcoinAmount -
+                        teleporterFee -
+                        lockerFee -
+                        protocolFee,
+                    oldReserveTeleBTC,
+                    oldReserveTT
+                );
+            let bridgePercentageFee = ethers.BigNumber.from(
+                CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.acrossFee
+            ).mul(ethers.BigNumber.from(10).pow(11));
+            let bridgeFee = minIntermediaryTokenAmount
+                .mul(bridgePercentageFee)
+                .div(ethers.BigNumber.from(10).pow(18));
+            let availableIntermediaryAmount =
+                minIntermediaryTokenAmount.sub(bridgeFee);
 
             // Fail the swap
             await ccExchangeRouter.wrapAndSwapUniversal(
@@ -3300,9 +3596,9 @@ describe("CcExchangeRouter", async function () {
                 [teleBTC.address, deployerAddress],
                 [
                     ethers.utils.hexZeroPad(exchangeToken.address, 32),
-                    ethers.utils.hexZeroPad(exchangeToken.address, 32),
+                    ethers.utils.hexZeroPad(deployerAddress, 32),
                 ], // path from intermediary to dest token on dest chain
-                [10000, 10000] // amounts from intermediary to dest token on dest chain
+                [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
             );
 
             let burntAmount =
@@ -3335,7 +3631,7 @@ describe("CcExchangeRouter", async function () {
                 );
         });
 
-        it.only("Cannot refund twice for a failed cross chain universal wrap and swap", async function () {
+        it("Cannot refund twice for a failed cross chain universal wrap and swap", async function () {
             // Replaces dummy address in vout with exchange token address
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
@@ -3346,9 +3642,17 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setIntermediaryTokenMapping(
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
-                deployerAddress
+                CHAIN_ID, // Current chain ID
+                ethers.utils.hexZeroPad(deployerAddress, 32)
+            );
+
+            // Set intermediary token mapping for destination chain (chain 2)
+            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+                "0x" + deployerAddress.slice(-16),
+                2, // destination chain ID
+                ethers.utils.hexZeroPad(exchangeToken.address, 32)
             );
 
             // Set bridge token ID mapping for cross-chain (chain 2)
@@ -3389,7 +3693,7 @@ describe("CcExchangeRouter", async function () {
                 [teleBTC.address, deployerAddress],
                 [
                     ethers.utils.hexZeroPad(exchangeToken.address, 32),
-                    ethers.utils.hexZeroPad(exchangeToken.address, 32),
+                    ethers.utils.hexZeroPad(deployerAddress, 32),
                 ], // path from intermediary to dest token on dest chain
                 [10000, 10000] // amounts from intermediary to dest token on dest chain
             );

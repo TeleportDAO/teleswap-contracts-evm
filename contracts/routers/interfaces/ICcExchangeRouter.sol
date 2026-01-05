@@ -39,6 +39,7 @@ interface ICcExchangeRouter {
     /// @param appId that user wants to use (which DEX)
     /// @param inputAmount Amount of locked BTC on source chain
     /// @param outputAmount Amount of output token
+    /// @param minIntermediaryTokenAmount Minimum expected intermediary token amount (slippage guard on the intermediary chain)
     /// @param isFixedToken True if amount of input token is fixed
     /// @param recipientAddress Address of exchange recipient: Solana address, or zero padded EVM address
     /// @param fee Amount of fee that is paid to Teleporter (for tx, relayer and teleporter fees)
@@ -47,6 +48,7 @@ interface ICcExchangeRouter {
     /// @param outputToken Output token on the destination chain (32 bytes)
     /// @param deadline for exchanging tokens (not used anymore)
     /// @param speed of the request (normal or instant)
+    /// @param destRealChainId Real destination chain ID
     struct ccExchangeRequestV2 {
         uint appId;
         uint inputAmount;
@@ -443,6 +445,12 @@ interface ICcExchangeRouter {
     ) external;
 
     function setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) external;
+    
+    function setBridgeIntermediaryTokenMapping(
+        bytes8 _outputTokenID,
+        uint256 _chainId,
+        bytes32 _intermediaryToken
+    ) external;
 
     function fillTxUniversal(
         bytes32 _txId,
@@ -469,11 +477,6 @@ interface ICcExchangeRouter {
         bytes8 _tokenID,
         uint256 _destRealChainId,
         bytes32 _destinationToken
-    ) external;
-
-    function setIntermediaryTokenMapping(
-        bytes8 _destinationTokenID,
-        address _intermediaryToken
     ) external;
 
     function wrapAndSwapUniversal(

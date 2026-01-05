@@ -704,7 +704,14 @@ describe("EthConnector", async () => {
                     "address",
                     "uint",
                     "bool",
-                    "address[]",
+                    {
+                        SwapAndUnwrapUniversalPaths: {
+                            _pathFromInputToIntermediaryOnSourceChain:
+                                "address[]",
+                            _pathFromIntermediaryToOutputOnIntermediaryChain:
+                                "address[]",
+                        },
+                    },
                     {
                         UserAndLockerScript: {
                             userScript: "bytes",
@@ -722,7 +729,16 @@ describe("EthConnector", async () => {
                     exchangeConnectorAddress, // _exchangeConnector
                     minOutputAmount.toString(), // _minOutputAmount
                     true, // _isInputFixed
-                    [polygonToken.address, teleBTC.address], // _pathFromIntermediaryToOutputOnIntermediaryChain
+                    {
+                        _pathFromInputToIntermediaryOnSourceChain: [
+                            inputToken.address,
+                            intermediaryToken.address,
+                        ],
+                        _pathFromIntermediaryToOutputOnIntermediaryChain: [
+                            polygonToken.address,
+                            teleBTC.address,
+                        ],
+                    },
                     {
                         userScript: USER_SCRIPT_P2PKH,
                         scriptType: USER_SCRIPT_P2PKH_TYPE,

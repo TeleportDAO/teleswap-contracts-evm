@@ -1268,7 +1268,14 @@ describe("PolyConnector", async () => {
                     "address",
                     "uint",
                     "bool",
-                    "address[]",
+                    {
+                        SwapAndUnwrapUniversalPaths: {
+                            _pathFromInputToIntermediaryOnSourceChain:
+                                "address[]",
+                            _pathFromIntermediaryToOutputOnIntermediaryChain:
+                                "address[]",
+                        },
+                    },
                     {
                         UserAndLockerScript: {
                             userScript: "bytes",
@@ -1286,7 +1293,16 @@ describe("PolyConnector", async () => {
                     mockExchangeConnector.address,
                     burntAmount,
                     true,
-                    [inputToken.address, teleBTC.address],
+                    {
+                        _pathFromInputToIntermediaryOnSourceChain: [
+                            inputToken.address,
+                            teleBTC.address,
+                        ],
+                        _pathFromIntermediaryToOutputOnIntermediaryChain: [
+                            inputToken.address,
+                            teleBTC.address,
+                        ],
+                    },
                     {
                         userScript: USER_SCRIPT_P2PKH,
                         scriptType: USER_SCRIPT_P2PKH_TYPE,
@@ -1340,7 +1356,14 @@ describe("PolyConnector", async () => {
                     "address",
                     "uint",
                     "bool",
-                    "address[]",
+                    {
+                        SwapAndUnwrapUniversalPaths: {
+                            _pathFromInputToIntermediaryOnSourceChain:
+                                "address[]",
+                            _pathFromIntermediaryToOutputOnIntermediaryChain:
+                                "address[]",
+                        },
+                    },
                     {
                         UserAndLockerScript: {
                             userScript: "bytes",
@@ -1358,7 +1381,16 @@ describe("PolyConnector", async () => {
                     mockExchangeConnector.address,
                     burntAmount,
                     true,
-                    [inputToken.address, teleBTC.address],
+                    {
+                        _pathFromInputToIntermediaryOnSourceChain: [
+                            teleBTC.address,
+                            inputToken.address,
+                        ],
+                        _pathFromIntermediaryToOutputOnIntermediaryChain: [
+                            inputToken.address,
+                            teleBTC.address,
+                        ],
+                    },
                     {
                         userScript: USER_SCRIPT_P2PKH,
                         scriptType: USER_SCRIPT_P2PKH_TYPE,
@@ -1436,7 +1468,7 @@ describe("PolyConnector", async () => {
                             32
                         ),
                         ethers.utils.hexZeroPad(
-                            inputToken.address.toLowerCase(),
+                            teleBTC.address.toLowerCase(),
                             32
                         ),
                     ], // path from intermediary to input on source chain
@@ -1457,7 +1489,7 @@ describe("PolyConnector", async () => {
                             32
                         ),
                         ethers.utils.hexZeroPad(
-                            inputToken.address.toLowerCase(),
+                            teleBTC.address.toLowerCase(),
                             32
                         ),
                     ], // path from intermediary to input on source chain
@@ -1498,7 +1530,14 @@ describe("PolyConnector", async () => {
                     "address",
                     "uint",
                     "bool",
-                    "address[]",
+                    {
+                        SwapAndUnwrapUniversalPaths: {
+                            _pathFromInputToIntermediaryOnSourceChain:
+                                "address[]",
+                            _pathFromIntermediaryToOutputOnIntermediaryChain:
+                                "address[]",
+                        },
+                    },
                     {
                         UserAndLockerScript: {
                             userScript: "bytes",
@@ -1516,7 +1555,13 @@ describe("PolyConnector", async () => {
                     mockExchangeConnector.address, // exchangeConnector
                     burntAmount, // outputAmount (expected TeleBTC amount to burn)
                     true, // isInputFixed
-                    [inputToken.address, teleBTC.address], // path
+                    {
+                        _pathFromInputToIntermediaryOnSourceChain: [],
+                        _pathFromIntermediaryToOutputOnIntermediaryChain: [
+                            inputToken.address,
+                            teleBTC.address,
+                        ],
+                    },
                     {
                         userScript: USER_SCRIPT_P2PKH,
                         scriptType: USER_SCRIPT_P2PKH_TYPE,
@@ -1584,7 +1629,14 @@ describe("PolyConnector", async () => {
                     "address",
                     "uint",
                     "bool",
-                    "address[]",
+                    {
+                        SwapAndUnwrapUniversalPaths: {
+                            _pathFromInputToIntermediaryOnSourceChain:
+                                "address[]",
+                            _pathFromIntermediaryToOutputOnIntermediaryChain:
+                                "address[]",
+                        },
+                    },
                     {
                         UserAndLockerScript: {
                             userScript: "bytes",
@@ -1602,7 +1654,13 @@ describe("PolyConnector", async () => {
                     mockExchangeConnector.address, // exchangeConnector
                     burntAmount, // outputAmount (expected TeleBTC amount to burn)
                     true, // isInputFixed
-                    [inputToken.address, teleBTC.address], // path
+                    {
+                        _pathFromInputToIntermediaryOnSourceChain: [],
+                        _pathFromIntermediaryToOutputOnIntermediaryChain: [
+                            inputToken.address,
+                            teleBTC.address,
+                        ],
+                    },
                     {
                         userScript: USER_SCRIPT_P2PKH,
                         scriptType: USER_SCRIPT_P2PKH_TYPE,

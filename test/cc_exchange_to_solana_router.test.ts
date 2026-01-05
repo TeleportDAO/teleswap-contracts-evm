@@ -472,15 +472,17 @@ describe("CcExchangeRouter", async function () {
         );
 
         // set intermediary token ID mapping for USDC on Solana (USDC.Sol -> USDC.Pol)
-        await ccExchangeRouter.setIntermediaryTokenMapping(
+        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
             "0x" + exchangeTokenOnSolanaAddress.slice(-16),
-            exchangeToken.address
+            1, // current chain ID for Ethereum
+            ethers.utils.hexZeroPad(exchangeToken.address, 32)
         );
 
         // SOL -> USDC.Pol
-        await ccExchangeRouter.setIntermediaryTokenMapping(
+        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
             "0x" + solanaAddressToBytes32(wrappedSOL).slice(-16),
-            exchangeToken.address
+            1, // current chain ID for Ethereum
+            ethers.utils.hexZeroPad(exchangeToken.address, 32)
         );
     });
 
