@@ -391,17 +391,10 @@ contract CcExchangeRouterLogic is
             "ExchangeRouter: invalid intermediary token"
         );
 
-        // Calculate the final amount that user will receive
-        uint256 fillAmount = _fillAmount;
-
-
         // Convert the fill amount to the destination chain's decimals
-        if (inputTokenDecimalsOnDestinationChain[_intermediaryToken] != 0) {
-            fillAmount =
-                _fillAmount /
-                10 ** (18 - inputTokenDecimalsOnDestinationChain[_intermediaryToken]);
-        }
+        uint256 fillAmount = _convertTokenDecimals(_intermediaryToken, _fillAmount, _destRealChainId);
 
+        // Calculate the final amount that user will receive
         uint _finalAmount = fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
 
         // Check that the final amount is greater than or equal to the user requested amount
@@ -635,15 +628,10 @@ contract CcExchangeRouterLogic is
         IERC20(_intermediaryToken).approve(across, _amount);
         bytes memory callData;
 
-        uint256 inputAmount = _amount;
-        if (inputTokenDecimalsOnDestinationChain[_intermediaryToken] != 0) {
-            inputAmount =
-                _amount /
-                10 ** (18 - inputTokenDecimalsOnDestinationChain[_intermediaryToken]);
-        }
+        // Convert amount to destination chain decimals
+        uint256 inputAmount = _convertTokenDecimals(_intermediaryToken, _amount, _destRealChainId);
 
         uint256 outputAmount = inputAmount * (1e18 - _bridgePercentageFee) / 1e18;
-        
 
         if (_destRealChainId == 34268394551451) { // Solana
             callData = abi.encodeWithSignature(
@@ -1001,5 +989,33 @@ contract CcExchangeRouterLogic is
         uint256 _decimalsOnDestinationChain
     ) private {
         inputTokenDecimalsOnDestinationChain[_inputToken] = _decimalsOnDestinationChain;
+    }
+
+    /// @notice Internal function to convert token decimals between chains
+    /// @dev Handles USDT/USDC decimal differences between BSC (18) and other chains (6)
+    /// @param _token Address of the token on the current chain
+    /// @param _amount Amount to convert
+    /// @param _destinationChainId Destination chain ID
+    /// @return convertedAmount The amount converted to destination chain decimals
+    function _convertTokenDecimals(
+        address _token,
+        uint256 _amount,
+        uint256 _destinationChainId
+    ) private view returns (uint256 convertedAmount) {
+        convertedAmount = _amount;
+        if (inputTokenDecimalsOnDestinationChain[_token] != 0) {
+            if (_destinationChainId != chainId) {
+                if (chainId == 56) { // BSC chain
+                    convertedAmount =
+                        _amount /
+                        10 ** (18 - inputTokenDecimalsOnDestinationChain[_token]);
+                } else if (_destinationChainId == 56) { // BSC chain
+                    convertedAmount =
+                        _amount *
+                        10 ** (18 - inputTokenDecimalsOnDestinationChain[_token]);
+                }
+            }
+        }
+        return convertedAmount;
     }
 }
