@@ -19,6 +19,7 @@
 		"@typescript-eslint/eslint-plugin": "^4.33.0",
 		"@typescript-eslint/parser": "^4.33.0",
 		"chai": "^4.3.6",
+		"circomlib": "^2.0.5",
 		"dotenv": "^16.0.1",
 		"eslint": "^7.32.0",
 		"eslint-config-prettier": "^8.5.0",
@@ -29,6 +30,7 @@
 		"eslint-plugin-promise": "^5.2.0",
 		"ethereum-waffle": "^4.0.10",
 		"ethers": "^5.6.8",
+		"ffjavascript": "^0.2.60",
 		"hardhat": "^2.9.9",
 		"hardhat-contract-sizer": "^2.6.1",
 		"hardhat-deploy": "^0.9.10",
@@ -37,6 +39,7 @@
 		"husky": "^8.0.3",
 		"prettier": "^2.6.2",
 		"prettier-plugin-solidity": "^1.0.0-beta.19",
+		"snarkjs": "^0.7.3",
 		"solhint": "^3.3.7",
 		"solidity-coverage": "^0.8.14",
 		"ts-node": "^10.8.1",
@@ -64,6 +67,11 @@
 		"deploy": "NODE_ENV=$NETWORK hardhat deploy --tags $TAG --network $NETWORK --export export/abi/$NETWORK.json",
 		"config": "NODE_ENV=$NETWORK hardhat deploy --network $NETWORK --export export/abi/$NETWORK.json --deploy-scripts scripts/$TAG",
 		"lint": "commitlint --from=HEAD",
-		"prepare": "husky install"
+		"prepare": "husky install",
+		"circuit:compile": "cd circuits && bash ../zkproof/scripts/compile.sh",
+		"circuit:setup": "cd circuits && bash ../zkproof/scripts/setup.sh",
+		"circuit:test": "cd circuits && node test/main.test.js",
+		"zk:generate-proof": "node zkproof/scripts/generate_proof.js",
+		"zk:verify-proof": "node zkproof/scripts/verify_proof.js"
 	}
 }

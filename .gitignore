@@ -32,3 +32,17 @@ deployments/bsc/.DS_Store
 deployments/arbitrum/.DS_Store
 deployments/.DS_Store
 deployments/base/.DS_Store
+
+# ZK Proof build artifacts
+zkproof/build/*.r1cs
+zkproof/build/*.wasm
+zkproof/build/*.sym
+zkproof/build/*.zkey
+zkproof/build/*.ptau
+zkproof/build/ptau/
+zkproof/build/*.json
+zkproof/build/*.txt
+circuits/build/
+
+# Keep verification key for reference
+!zkproof/build/verification_key.json
