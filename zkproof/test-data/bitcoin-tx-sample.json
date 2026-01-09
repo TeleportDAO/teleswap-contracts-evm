@@ -1,0 +1,79 @@
+{
+  "description": "Real Bitcoin transaction from block 931456 for ZK proof testing",
+  "blockNumber": 931456,
+  "blockHeader": "00000020f23ea983401c2ca5c3b2ea22037982bfcd9f82aa5ead010000000000000000008e53d6a40c6d09916dfb91ac0c0e52cad4d9543420ab241d6e430531a1149f4e95066069f2eb0117f423f669",
+  "transaction": {
+    "txid": "027CAB460A55430817E43416DFB002CCFF72CA654811E7464DB70C0129EFAAA8",
+    "txidFormat": "little-endian",
+    "version": "02000000",
+    "vin": "01bf54b76b6298e30af69661b0bbd625854f47be8229610bb32a46eacecaca3dc80000000017160014ff18ae8049173713c509ad3046a970bf2f452a10fdffffff",
+    "vout": "024e4a0000000000001600144a80adba4391c3d4784e9e34c0206cca7e6dffd2f95307000000000017a91472df0f82c4bcfe01a274bd521e5d4c66586b7a5b87",
+    "locktime": "00000000",
+    "rawTx": "0200000001bf54b76b6298e30af69661b0bbd625854f47be8229610bb32a46eacecaca3dc80000000017160014ff18ae8049173713c509ad3046a970bf2f452a10fdffffff024e4a0000000000001600144a80adba4391c3d4784e9e34c0206cca7e6dffd2f95307000000000017a91472df0f82c4bcfe01a274bd521e5d4c66586b7a5b8700000000",
+    "size": {
+      "version": 4,
+      "vin": 67,
+      "vout": 63,
+      "locktime": 4,
+      "total": 138
+    }
+  },
+  "voutDetails": {
+    "count": 2,
+    "outputs": [
+      {
+        "index": 0,
+        "value": 19022,
+        "valueSatoshis": "19,022 sats",
+        "valueHex": "4e4a000000000000",
+        "scriptPubKey": "1600144a80adba4391c3d4784e9e34c0206cca7e6dffd2",
+        "scriptType": "P2WPKH",
+        "size": 30
+      },
+      {
+        "index": 1,
+        "value": 480249,
+        "valueSatoshis": "480,249 sats",
+        "valueHex": "f953070000000000",
+        "scriptPubKey": "17a91472df0f82c4bcfe01a274bd521e5d4c66586b7a5b87",
+        "scriptType": "P2SH",
+        "size": 31
+      }
+    ]
+  },
+  "merkleProof": {
+    "index": 2582,
+    "indexBinary": "101000010110",
+    "depth": 12,
+    "intermediateNodes": "c381149836df2b3e64bc2ad3f8fef3cbf2930ee187580aacb75b944eae114d3aa4fe52387e7afa254fa4ecf669c4ae6ed5f5d6b5def36abb52da6f39054882aab29f7ae9270cf01db09a8a68d721e87aa4c5f7c98e6a59f15b20c1ad3e513b1635cd4119b09d2349cbd8487f377050562c1fc08407989735e4e77675c91f1475af18bbe406f439a2507ae9e66ed914d35bba290a8f4ececc8f8b89fb53eafff435e8507db4d427095d7bf4f74d2e79e7f57a910465bd4d218f2fb6bee728b9c8db9a29e1a89fbb56c5ca3340675f6e66481a18986842c14e36635ab929d1ef925674d07611ed56347cfbc28b1c12840620fbcd98ebd4c119403830421899d25c47a7a7c9e979b256f1e7c20e3fcd4249a8db3638cb7685b808694a375958e245232ff649ca9f180aba958624bb85e6a6db4a048d2453372bb383782bb50904f26980a548983149d81268f47f2f5da071e862f66ae77ee44394aa0aba34410de78835345b562596f5d8e1d2404847070d8619b01f78a0f43d8cdc5b13c6c502ee",
+    "siblings": [
+      "c381149836df2b3e64bc2ad3f8fef3cbf2930ee187580aacb75b944eae114d3a",
+      "a4fe52387e7afa254fa4ecf669c4ae6ed5f5d6b5def36abb52da6f39054882aa",
+      "b29f7ae9270cf01db09a8a68d721e87aa4c5f7c98e6a59f15b20c1ad3e513b16",
+      "35cd4119b09d2349cbd8487f377050562c1fc08407989735e4e77675c91f1475",
+      "af18bbe406f439a2507ae9e66ed914d35bba290a8f4ececc8f8b89fb53eafff4",
+      "35e8507db4d427095d7bf4f74d2e79e7f57a910465bd4d218f2fb6bee728b9c8",
+      "db9a29e1a89fbb56c5ca3340675f6e66481a18986842c14e36635ab929d1ef92",
+      "5674d07611ed56347cfbc28b1c12840620fbcd98ebd4c119403830421899d25c",
+      "47a7a7c9e979b256f1e7c20e3fcd4249a8db3638cb7685b808694a375958e245",
+      "232ff649ca9f180aba958624bb85e6a6db4a048d2453372bb383782bb50904f2",
+      "6980a548983149d81268f47f2f5da071e862f66ae77ee44394aa0aba34410de7",
+      "8835345b562596f5d8e1d2404847070d8619b01f78a0f43d8cdc5b13c6c502ee"
+    ]
+  },
+  "notes": {
+    "circuitCompatibility": {
+      "maxTxSize": "256 bytes (2048 bits)",
+      "actualTxSize": "138 bytes (1104 bits)",
+      "compatible": true,
+      "maxVoutSize": "64 bytes (512 bits)",
+      "actualVoutSizes": [30, 31],
+      "voutCompatible": true
+    },
+    "usage": "This transaction is within the circuit's current limits and can be used for testing the ZK proof generation and verification.",
+    "testScenarios": [
+      "Prove vout[0] (P2WPKH output, 19,022 sats)",
+      "Prove vout[1] (P2SH output, 480,249 sats)"
+    ]
+  }
+}

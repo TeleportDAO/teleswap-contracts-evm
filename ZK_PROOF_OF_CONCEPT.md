@@ -1,24 +1,41 @@
-# Bitcoin ZK Privacy Proof-of-Concept
+# Bitcoin ZK Verification Proof-of-Concept
 
 ## 🎯 Overview
 
-This proof-of-concept demonstrates how to use zero-knowledge proofs (ZK-SNARKs) to verify Bitcoin transactions while preserving privacy. Users can prove they control a specific Bitcoin transaction output (vout) without revealing the entire transaction.
+This proof-of-concept demonstrates how to use zero-knowledge proofs (ZK-SNARKs) to **reduce on-chain computation costs and improve scalability** for Bitcoin transaction verification. Instead of submitting full transaction data and Merkle proofs on-chain (expensive), users submit a compact ZK proof that the smart contract can verify efficiently.
 
 ### What This Proves
 
-**Public Information (Visible to Everyone):**
+**Public Inputs (Submitted to Smart Contract):**
 - Merkle root of a Bitcoin block
-- Hash of a specific transaction output (vout)
+- **Vout data (64 bytes)** - the actual transaction output data for on-chain use
 - Block number
+- **ZK Proof (128 bytes)** - compact cryptographic proof
 
-**Private Information (Hidden):**
+**Private Inputs (Computed Off-Chain):**
 - Full Bitcoin transaction
-- Other transaction outputs
-- Transaction inputs
-- Merkle proof path
+- Merkle proof siblings (384+ bytes)
+- Transaction index in the Merkle tree
+- Vout offset within transaction
 
 **The Proof Statement:**
-> "I know a Bitcoin transaction that is included in block #X with Merkle root Y, and this transaction contains an output that hashes to Z, but I'm not telling you the rest of the transaction"
+> "I can prove that a Bitcoin transaction exists in block #X with Merkle root Y, and this transaction contains the specific output (vout). The vout data is provided for on-chain calculations, while the heavy Merkle verification is done off-chain, saving significant gas costs."
+
+### Why ZK for Cost Reduction?
+
+**Traditional Approach (Current Implementation):**
+- Submit full transaction data (variable size, 250 bytes - 4 KB)
+- Submit Merkle siblings (12 x 32 = 384 bytes minimum)
+- Smart contract verifies on-chain (expensive computation)
+- **Total data:** ~1-4 KB per transaction
+- **Gas cost:** High due to data storage and computation
+
+**ZK Approach (This POC):**
+- Submit vout data (64 bytes) + ZK proof (128 bytes) + public inputs (~32 bytes)
+- Heavy verification (Merkle proof) happens off-chain during proof generation
+- Smart contract verifies the proof and uses vout data directly
+- **Total data:** ~224 bytes per transaction (still much better)
+- **Gas cost:** Fixed ~280k gas for proof verification, vout data available for on-chain logic
 
 ---
 
@@ -137,10 +154,11 @@ npm run zk:verify-proof
 ✓ PROOF IS VALID
 
 The proof successfully demonstrates:
-  1. Knowledge of a Bitcoin transaction
+  1. Bitcoin transaction exists and is valid
   2. Transaction is included in the specified Merkle root
-  3. The revealed vout hash matches the transaction
-  4. All without revealing the full transaction
+  3. The vout hash matches the transaction output
+  4. All verification done off-chain with only proof submitted on-chain
+  5. ~90% reduction in on-chain data compared to traditional approach
 ```
 
 ---
@@ -187,17 +205,18 @@ teleswap-contracts/
 
 ```
 ┌─────────────────────────────────────────────┐
-│         Bitcoin Privacy Verifier            │
+│    Bitcoin Transaction Verifier (ZK)        │
+│      (Off-Chain Computation)                │
 ├─────────────────────────────────────────────┤
 │                                             │
 │  Public Inputs:                             │
 │    - merkleRoot                             │
-│    - voutHash                               │
+│    - voutData[512 bits]                     │
 │    - blockNumber                            │
 │                                             │
 │  Private Inputs:                            │
 │    - transaction[2048 bits]                 │
-│    - voutData[512 bits]                     │
+│    - voutOffset                             │
 │    - merkleSiblings[12 x 256 bits]         │
 │    - merkleIndex                            │
 │                                             │
@@ -208,9 +227,10 @@ teleswap-contracts/
 │  1. Double SHA256 (Bitcoin tx hash)         │
 │     transaction → SHA256 → SHA256 → txId    │
 │                                             │
-│  2. Vout Hash Verification                  │
-│     voutData → SHA256 → hash                │
-│     Constraint: hash === voutHash           │
+│  2. Vout Verification                       │
+│     Constraint: transaction[voutOffset+i]   │
+│                 === voutData[i]             │
+│     Ensures vout is part of transaction     │
 │                                             │
 │  3. Merkle Proof Verification               │
 │     Proves: txId is in merkleRoot           │
@@ -225,8 +245,8 @@ teleswap-contracts/
 |-----------|------------|-------|
 | Bitcoin TX hash (2x SHA256) | ~50,000 | Double hashing of 256 bytes |
 | Merkle verification (12 levels) | ~144,000 | 12 x 2 SHA256 per level |
-| Vout hash (1x SHA256) | ~25,000 | Hash 64 bytes of vout data |
-| **Total** | **~220,000** | Reasonable for Groth16 |
+| Vout verification | ~500 | Verify vout is in transaction |
+| **Total** | **~195,000** | Reasonable for Groth16 |
 
 ### Performance Metrics
 
@@ -251,7 +271,7 @@ Create a test file `circuits/test/main.test.js`:
 const wasm_tester = require("circom_tester").wasm;
 const path = require("path");
 
-describe("Bitcoin Privacy Verifier", function() {
+describe("Bitcoin ZK Verifier", function() {
     let circuit;
 
     before(async function() {

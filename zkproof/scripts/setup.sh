@@ -84,11 +84,21 @@ echo ""
 
 PTAU_FILE="$PTAU_DIR/pot${POWER}_final.ptau"
 
-# Check if powers of tau already exists
+# Check if powers of tau already exists and verify it
 if [ -f "$PTAU_FILE" ]; then
-    echo -e "${GREEN}✓ Powers of Tau file already exists${NC}"
-    echo "  $PTAU_FILE"
-else
+    echo -e "${YELLOW}Checking existing Powers of Tau file...${NC}"
+    if snarkjs powersoftau verify "$PTAU_FILE" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Powers of Tau file exists and is valid${NC}"
+        echo "  $PTAU_FILE"
+    else
+        echo -e "${RED}✗ Powers of Tau file is corrupted, regenerating...${NC}"
+        rm -f "$PTAU_DIR/pot${POWER}"*.ptau
+        # Fall through to regeneration
+    fi
+fi
+
+# Regenerate if file doesn't exist or was corrupted
+if [ ! -f "$PTAU_FILE" ]; then
     echo -e "${YELLOW}Step 1.1: Starting new Powers of Tau ceremony...${NC}"
     snarkjs powersoftau new bn128 $POWER $PTAU_DIR/pot${POWER}_0000.ptau -v
 
@@ -115,13 +125,85 @@ echo "   Phase 2: Circuit-Specific Setup"
 echo "================================================"
 echo ""
 
-echo -e "${YELLOW}Step 2.1: Generating zkey (proving key)...${NC}"
-snarkjs groth16 setup $BUILD_DIR/main.r1cs $PTAU_FILE $BUILD_DIR/circuit_0000.zkey
+# Check if zkey already exists (skip verification for faster dev setup)
+if [ -f "$BUILD_DIR/circuit_0000.zkey" ] && [ -s "$BUILD_DIR/circuit_0000.zkey" ]; then
+    echo -e "${GREEN}✓ zkey file exists${NC}"
+    echo "  $BUILD_DIR/circuit_0000.zkey"
+    echo -e "${YELLOW}(Skipping verification for faster dev setup)${NC}"
+fi
+
+# Regenerate if file doesn't exist or was corrupted
+if [ ! -f "$BUILD_DIR/circuit_0000.zkey" ]; then
+    echo -e "${YELLOW}Step 2.1: Generating zkey (proving key)...${NC}"
+    
+    # Estimate time based on constraints (rough estimate: ~1000 constraints per minute)
+    ESTIMATED_MINUTES=$((CONSTRAINTS / 1000))
+    if [ $ESTIMATED_MINUTES -lt 1 ]; then
+        ESTIMATED_MINUTES=1
+    fi
+    if [ $ESTIMATED_MINUTES -gt 60 ]; then
+        ESTIMATED_HOURS=$((ESTIMATED_MINUTES / 60))
+        echo -e "${YELLOW}⚠ WARNING: This may take ${ESTIMATED_HOURS}+ hours for ${CONSTRAINTS} constraints${NC}"
+        echo -e "${YELLOW}   This is CPU-intensive and will use 100% of one CPU core${NC}"
+    else
+        echo -e "${YELLOW}Estimated time: ~${ESTIMATED_MINUTES} minutes${NC}"
+    fi
+    echo -e "${YELLOW}Monitoring progress (file size will grow as it processes)...${NC}"
+    echo ""
+    
+    # Start monitoring file size in background
+    (
+        while [ ! -f "$BUILD_DIR/circuit_0000.zkey" ] || [ ! -s "$BUILD_DIR/circuit_0000.zkey" ]; do
+            sleep 5
+        done
+        PREV_SIZE=0
+        while true; do
+            if [ -f "$BUILD_DIR/circuit_0000.zkey" ]; then
+                CURRENT_SIZE=$(stat -f%z "$BUILD_DIR/circuit_0000.zkey" 2>/dev/null || stat -c%s "$BUILD_DIR/circuit_0000.zkey" 2>/dev/null || echo 0)
+                if [ "$CURRENT_SIZE" -gt "$PREV_SIZE" ]; then
+                    SIZE_MB=$((CURRENT_SIZE / 1024 / 1024))
+                    echo -e "${GREEN}[Progress] zkey file size: ${SIZE_MB} MB${NC}"
+                    PREV_SIZE=$CURRENT_SIZE
+                fi
+            fi
+            sleep 30
+        done
+    ) &
+    MONITOR_PID=$!
+    
+    # Run the setup command with unbuffered output
+    snarkjs groth16 setup $BUILD_DIR/main.r1cs $PTAU_FILE $BUILD_DIR/circuit_0000.zkey -v || SETUP_EXIT=$?
+    
+    # Stop the monitor
+    kill $MONITOR_PID 2>/dev/null || true
+    wait $MONITOR_PID 2>/dev/null || true
+    
+    if [ -n "$SETUP_EXIT" ] && [ "$SETUP_EXIT" -ne 0 ]; then
+        echo -e "${RED}✗ zkey generation failed${NC}"
+        exit $SETUP_EXIT
+    fi
+    
+    if [ -f "$BUILD_DIR/circuit_0000.zkey" ]; then
+        FINAL_SIZE=$(stat -f%z "$BUILD_DIR/circuit_0000.zkey" 2>/dev/null || stat -c%s "$BUILD_DIR/circuit_0000.zkey" 2>/dev/null || echo 0)
+        FINAL_SIZE_MB=$((FINAL_SIZE / 1024 / 1024))
+        echo -e "${GREEN}✓ zkey generated successfully (${FINAL_SIZE_MB} MB)${NC}"
+    fi
+fi
 
 echo ""
-echo -e "${YELLOW}Step 2.2: Contributing to zkey...${NC}"
-snarkjs zkey contribute $BUILD_DIR/circuit_0000.zkey $BUILD_DIR/circuit_final.zkey \
-    --name="1st Contributor" -v -e="random entropy $(date +%s)"
+# Check if final zkey already exists (skip verification for faster dev setup)
+if [ -f "$BUILD_DIR/circuit_final.zkey" ] && [ -s "$BUILD_DIR/circuit_final.zkey" ]; then
+    echo -e "${GREEN}✓ Final zkey file exists${NC}"
+    echo "  $BUILD_DIR/circuit_final.zkey"
+    echo -e "${YELLOW}(Skipping verification for faster dev setup)${NC}"
+fi
+
+# Regenerate if file doesn't exist or was corrupted
+if [ ! -f "$BUILD_DIR/circuit_final.zkey" ]; then
+    echo -e "${YELLOW}Step 2.2: Contributing to zkey...${NC}"
+    snarkjs zkey contribute $BUILD_DIR/circuit_0000.zkey $BUILD_DIR/circuit_final.zkey \
+        --name="1st Contributor" -v -e="random entropy $(date +%s)"
+fi
 
 echo ""
 echo -e "${YELLOW}Step 2.3: Exporting verification key...${NC}"

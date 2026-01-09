@@ -2,28 +2,34 @@
 
 ## Overview
 
-This proof-of-concept implements zero-knowledge proofs for Bitcoin transaction verification, allowing users to prove transaction inclusion in a Bitcoin block without revealing the entire transaction details.
+This proof-of-concept implements zero-knowledge proofs for Bitcoin transaction verification to **reduce on-chain computation costs and improve scalability**. Instead of submitting full Bitcoin transaction data and Merkle proofs on-chain (which is expensive), users submit a compact ZK proof that verifies the transaction off-chain. The smart contract only needs to verify the proof, drastically reducing gas costs and on-chain data storage.
 
 ## What We're Proving
 
-**Public Inputs:**
+**Public Inputs (Submitted On-Chain):**
 - `merkleRoot`: The Merkle root from a Bitcoin block header
 - `blockNumber`: The Bitcoin block number
-- `voutHash`: Hash of the specific vout we want to reveal
-- `outputIndex`: Which output position in the transaction
+- `voutData`: The actual vout data (64 bytes) - available for on-chain calculations
 
-**Private Inputs:**
+**Private Inputs (Kept Off-Chain):**
 - Full Bitcoin transaction (version, vin, vout, locktime)
-- Merkle proof siblings
+- Merkle proof siblings (12 x 32 bytes)
 - Transaction index in the Merkle tree
+- Vout offset within transaction
 
 **Proof Statement:**
 ```
-"I know a Bitcoin transaction tx such that:
+"I can prove that a Bitcoin transaction tx exists such that:
   1. SHA256(SHA256(tx)) is included in the merkleRoot at the given index
-  2. SHA256(tx.vout[outputIndex]) == voutHash
-  3. All other transaction details remain private"
+  2. tx.vout[outputIndex] == voutData (the vout is part of the transaction)
+  3. The vout data is provided as public input for on-chain use
+  4. The heavy computation (Merkle verification) is done off-chain"
 ```
+
+**Why ZK Instead of On-Chain Verification?**
+- **Traditional approach:** Submit full tx data + Merkle siblings (1-4 KB) + do all verification on-chain → expensive
+- **ZK approach:** Submit vout data (64 bytes) + proof (128 bytes) → verification only on-chain, much cheaper
+- **Benefit:** Reduced Merkle proof data, lower gas for verification, vout available for on-chain calculations
 
 ## Directory Structure
 
@@ -82,6 +88,22 @@ snarkjs --version # Should show 0.7.0 or higher
 npm install --save-dev circomlib snarkjs ffjavascript
 ```
 
+## Test Data
+
+We've included a **real Bitcoin transaction** from block 931456 for testing:
+- **Location:** `zkproof/test-data/`
+- **Transaction size:** 138 bytes (fits in 256-byte circuit limit)
+- **Outputs:** 2 vouts (P2WPKH and P2SH)
+- **Complete Merkle proof** with 12 siblings
+
+**Generate circuit inputs from test data:**
+```bash
+node zkproof/test-data/generate_input.js 0  # For first output
+node zkproof/test-data/generate_input.js 1  # For second output
+```
+
+See `zkproof/test-data/README.md` for detailed documentation.
+
 ## Quick Start
 
 ### 1. Compile the Circuit
@@ -134,8 +156,8 @@ For the proof-of-concept, we're using a **simplified version** to validate the a
 **Estimated Constraints:**
 - Double SHA256 (txId): ~50,000 constraints
 - Merkle verification (12 levels): ~144,000 constraints
-- Vout hash: ~25,000 constraints
-- **Total: ~220,000 constraints**
+- Vout verification (in-transaction check): ~500 constraints
+- **Total: ~195,000 constraints**
 
 **Performance:**
 - Proof generation time: ~5-10 seconds
@@ -174,7 +196,7 @@ The production version would include:
 2. **No SegWit**: Only supports legacy transactions
 3. **Single Output**: Can only prove one vout at a time
 4. **Trusted Setup**: Requires ceremony (using Groth16)
-5. **Gas Cost**: Higher than current implementation (~230k extra gas)
+5. **Verification Gas**: ~280k gas for proof verification (tradeoff: less data storage, better scalability for high-volume transactions)
 
 ## Next Steps
 
