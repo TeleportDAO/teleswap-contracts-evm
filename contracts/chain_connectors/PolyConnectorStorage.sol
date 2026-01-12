@@ -47,4 +47,11 @@ abstract contract PolyConnectorStorage is IPolyConnector {
         )
     ) public newFailedReqsV2;
     // ^ Mapping from [refundAddress][chainId][reqId][token] to amount
+
+    // Chain ID of the current chain (used for decimal conversion)
+    uint256 public chainId;
+
+    // Mapping from token address to its decimals on destination chains
+    // Used for handling decimal differences (e.g., USDT: 18 on BSC, 6 on other chains)
+    mapping(address => uint256) public tokenDecimalsOnDestinationChain;
 }

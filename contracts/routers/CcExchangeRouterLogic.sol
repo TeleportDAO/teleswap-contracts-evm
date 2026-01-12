@@ -344,10 +344,7 @@ contract CcExchangeRouterLogic is
                     destRealChainId
                 );
                 return true;
-            } else { // Request has not been filled
-                // Treat it as a normal request
-                ccExchangeRequestsV2[txId].speed = 0;
-            }
+            } // Otherwise, request has not been filled so treat it as a normal request
         }
 
         _wrapAndSwapV2(
@@ -564,55 +561,75 @@ contract CcExchangeRouterLogic is
         // Send fees to the teleporter, treasury, third party, and locker
         _sendFees(_txId, _lockerLockingScript);
 
-        ccExchangeRequestV2 memory request = ccExchangeRequestsV2[_txId];
-        extendedCcExchangeRequest
-            memory extendedRequest = extendedCcExchangeRequests[_txId];
-
         // Mark the request as completed
         extendedCcExchangeRequests[_txId].isRequestCompleted = true;
 
-        // Send TeleBTC to filler
-        ITeleBTC(teleBTC).transfer(
-            _filler,
-            extendedRequest.remainedInputAmount
-        );
+        extendedCcExchangeRequest storage extendedRequest = extendedCcExchangeRequests[_txId];
 
-        uint256[5] memory fees = [
-            request.networkFee,
-            extendedRequest.lockerFee,
-            extendedRequest.protocolFee,
-            extendedRequest.thirdPartyFee,
-            extendedRequest.bridgePercentageFee
-        ];
+        // Send TeleBTC to filler first
+        ITeleBTC(teleBTC).transfer(_filler, extendedRequest.remainedInputAmount);
 
-        emit NewWrapAndSwapV2(
-            ILockersManager(lockers).getLockerTargetAddress(
-                _lockerLockingScript
-            ),
+        emit FillerRefunded(_filler, _txId, extendedRequest.remainedInputAmount);
+
+        ccExchangeRequestV2 storage request = ccExchangeRequestsV2[_txId];
+
+        uint256 outputAmount = finalAmount[_txId];
+
+        bytes32[3] memory tokens;
+        tokens[0] = bytes32(uint256(uint160(teleBTC)));
+        tokens[1] = bytes32(uint256(uint160(intermediaryTokenMapping[request.tokenIDs[1]])));
+        tokens[2] = request.outputToken;
+
+        uint256[3] memory amounts;
+        amounts[0] = extendedRequest.remainedInputAmount;
+        amounts[1] = request.minIntermediaryTokenAmount;
+        amounts[2] = outputAmount;
+
+        uint256[5] memory fees;
+        fees[0] = request.networkFee;
+        fees[1] = extendedRequest.lockerFee;
+        fees[2] = extendedRequest.protocolFee;
+        fees[3] = extendedRequest.thirdPartyFee;
+        fees[4] = outputAmount * extendedRequest.bridgePercentageFee / (1e18 - extendedRequest.bridgePercentageFee);
+
+        _emitNewWrapAndSwapV2(
+            ILockersManager(lockers).getLockerTargetAddress(_lockerLockingScript),
             request.recipientAddress,
-            [
-                bytes32(uint256(uint160(teleBTC))), // Input token
-                bytes32(uint256(uint160(intermediaryTokenMapping[request.tokenIDs[1]]))), // Intermediary token
-                request.outputToken // Output token
-            ],
-            [
-                extendedRequest.remainedInputAmount, // Input amount
-                request.minIntermediaryTokenAmount, // Intermediary amount
-                finalAmount[_txId] // Output amount
-            ],
-            1,
             _msgSender(),
             _txId,
             request.appId,
             extendedRequest.thirdParty,
-            fees,
-            _destinationChainId
+            _destinationChainId,
+            tokens,
+            amounts,
+            fees
         );
+    }
 
-        emit FillerRefunded(
-            _filler,
+    function _emitNewWrapAndSwapV2(
+        address _lockerAddress,
+        bytes32 _recipientAddress,
+        address _teleporter,
+        bytes32 _txId,
+        uint256 _appId,
+        uint256 _thirdParty,
+        uint256 _destinationChainId,
+        bytes32[3] memory _tokens,
+        uint256[3] memory _amounts,
+        uint256[5] memory _fees
+    ) private {
+        emit NewWrapAndSwapV2(
+            _lockerAddress,
+            _recipientAddress,
+            _tokens,
+            _amounts,
+            1,
+            _teleporter,
             _txId,
-            extendedRequest.remainedInputAmount
+            _appId,
+            _thirdParty,
+            _fees,
+            _destinationChainId
         );
     }
 

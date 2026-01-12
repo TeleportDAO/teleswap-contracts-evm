@@ -8,16 +8,17 @@ TeleSwap is a fully decentralized protocol for bridging and exchanging BTC betwe
 
 ## Documentation
 
-See the links below: 
-- [TeleSwap documentation](https://docs.teleswap.xyz/teleswap/introduction)
-- [TeleBTC technical paper](https://arxiv.org/abs/2307.13848) 
+- [TeleSwap Docs](https://docs.teleswap.xyz)
+- [TeleBTC Technical Paper](https://arxiv.org/abs/2307.13848)
 
 ## Audits
-- [Quantstamp report](https://github.com/TeleportDAO/audits/blob/main/reports/Quantstamp-Bitcoin-EVM.pdf) (Feb 2023)
+
+- [Quantstamp Report](https://github.com/TeleportDAO/audits/blob/main/reports/Quantstamp-Bitcoin-EVM.pdf) (Feb 2023)
 
 ## Community
-- Follow us on [Twitter](https://twitter.com/Teleport_DAO).
-- Join our [discord channel](https://discord.com/invite/6RSsgfQgcb).
+
+- Follow us on [X](https://x.com/tele_swap)
+- Join our [Discord](https://discord.com/invite/6RSsgfQgcb)
 
 ## Install dependencies
 
@@ -27,28 +28,18 @@ To start, clone the codes and install the required packages using:
 
 ## Compile contracts
 
-To compile the codes, use the below command:
-
-`yarn clean` & `yarn build`
+`yarn build`
 
 ## Run tests
-
-You can run the entire test suite with the following command:
 
 `yarn test`
 
 ## Deploy contracts
 
-You can deploy contracts on supported networks (mumbai and polygon) with the following command:
+Supported networks: polygon, bsc, ethereum, arbitrum, base, optimism, unichain, bob, bsquared, worldchain
 
-`NETWORK= yarn deploy`
+`NETWORK=<network> TAG=<tag> yarn deploy`
 
 ## Config contracts
 
-After deployment, some variables need to be set using the following commands:
-
-`NETWORK= yarn init_config`
-
-Run the below command with a different private key to config upgradable contracts:
-
-`NETWORK= yarn config_upgradables`
+`NETWORK=<network> TAG=<tag> yarn config`
