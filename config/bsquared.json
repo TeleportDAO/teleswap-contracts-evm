@@ -1,0 +1,40 @@
+{
+	"proxy_admin": "0x4565aE5c90E52c058410fC7f05711fFed9b6e62a",
+	"bitcoin_network": "mainnet",
+	"bitcoin_relay": "0xDd833309e9E9EAd3a7c4520D53e02e685C3751eB",
+	"starting_block_height": "850570",
+	"wrapped_native_token": "0x4200000000000000000000000000000000000006",
+	"usdt_token": "0x681202351a488040Fa4FdCc24188AfB582c9DD62",
+	"usdc_token": "0xe544e8a38add9b1abf21922090445ba93f74b9e5",
+	"acceptable_delay": 177,
+	"chain_id": 60808,
+	"treasury": "0x24004f4f6d2e75b039d528e82b100355d8b1d4fb",
+	"uniswap_v3_swap_router": "0x96C565B2285842921beD78c8f3a1403a9E277070",
+	"uniswap_v3_quoter": "0xaaDE1302a1b6d28949b630C873Fe2AB937D12BC6",
+	"chain_link_oracles": {
+		"wrapped_native_token_usd": "0xfcd454d19f9B8806F8908e99d85b8eA17b3c7346",
+		"btc_usd": "0xfcd454d19f9B8806F8908e99d85b8eA17b3c7346",
+		"usdt_usd": "0xfcd454d19f9B8806F8908e99d85b8eA17b3c7346",
+		"usdc_usd": "0xfcd454d19f9B8806F8908e99d85b8eA17b3c7346"
+	},
+	"cc_transfer": {
+		"app_id": 1,
+		"protocol_percentage_fee": 5
+	},
+	"cc_exchange": {
+		"app_id": 10,
+		"protocol_percentage_fee": 5
+	},
+	"cc_burn": {
+		"protocol_percentage_fee": 5,
+		"slasher_percentage_reward": 500,
+		"bitcoin_fee": 3000,
+		"transfer_deadLine": 720
+	},
+	"lockers_contract": {
+		"collateral_ratio": 1000,
+		"liquidation_ratio": 500,
+		"locker_percentage_fee": 15,
+		"price_with_discount_ratio": 9000
+	}
+}

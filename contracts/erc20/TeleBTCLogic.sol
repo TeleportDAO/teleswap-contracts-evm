@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.0 <0.8.4;
+pragma solidity >=0.8.0 <=0.8.4;
 
 import "./interfaces/ITeleBTC.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
@@ -247,7 +247,7 @@ contract TeleBTCLogic is ITeleBTC, ERC20Upgradeable, OwnableUpgradeable, Reentra
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 amount
+        uint256 
     ) internal view override {
         require(!isBlackListed(from), "TeleBTC: from is blacklisted");
         require(!isBlackListed(to), "TeleBTC: to is blacklisted");

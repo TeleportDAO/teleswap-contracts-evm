@@ -1,0 +1,847 @@
+{
+  "address": "0xe32ABDD3A080ab0D42922FC6e64F1968876A148F",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_acceptableDelay",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_oracleNativeToken",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "exchangeRouter",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "exchangeConnector",
+          "type": "address"
+        }
+      ],
+      "name": "ExchangeConnectorAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "exchangeRouter",
+          "type": "address"
+        }
+      ],
+      "name": "ExchangeConnectorRemoved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "oldAcceptableDelay",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newAcceptableDelay",
+          "type": "uint256"
+        }
+      ],
+      "name": "NewAcceptableDelay",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "oldOracleNativeToken",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOracleNativeToken",
+          "type": "address"
+        }
+      ],
+      "name": "NewOracleNativeToken",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "_token",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "_priceProxyAddress",
+          "type": "address"
+        }
+      ],
+      "name": "SetPriceProxy",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "ChainlinkPriceProxy",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "NATIVE_TOKEN",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "acceptableDelay",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_exchangeRouter",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_exchangeConnector",
+          "type": "address"
+        }
+      ],
+      "name": "addExchangeConnector",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_inputAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_inputDecimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_outputDecimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_inputToken",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_outputToken",
+          "type": "address"
+        }
+      ],
+      "name": "equivalentOutputAmount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "_outputAmount",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_inputAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_inputDecimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_outputDecimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_inputToken",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_outputToken",
+          "type": "address"
+        }
+      ],
+      "name": "equivalentOutputAmountByAverage",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_exchangeRouter",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_inputAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_inputToken",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_outputToken",
+          "type": "address"
+        }
+      ],
+      "name": "equivalentOutputAmountFromExchange",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_inputAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_inputDecimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_outputDecimals",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "_inputToken",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_outputToken",
+          "type": "address"
+        }
+      ],
+      "name": "equivalentOutputAmountFromOracle",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "_outputAmount",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "exchangeConnector",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "exchangeRoutersList",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getExchangeRoutersListLength",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "oracleNativeToken",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_exchangeRouterIndex",
+          "type": "uint256"
+        }
+      ],
+      "name": "removeExchangeConnector",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_acceptableDelay",
+          "type": "uint256"
+        }
+      ],
+      "name": "setAcceptableDelay",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_oracleNativeToken",
+          "type": "address"
+        }
+      ],
+      "name": "setOracleNativeToken",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_token",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_priceProxyAddress",
+          "type": "address"
+        }
+      ],
+      "name": "setPriceProxy",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "transactionHash": "0xabcf5be6f9ffe49d96ae5cddebe10f733ce1b8b4acc62a5989bd21e81a0646d4",
+  "receipt": {
+    "to": null,
+    "from": "0xF560bf3CC92903C4CB2534fc447ac4Adffd49822",
+    "contractAddress": "0xe32ABDD3A080ab0D42922FC6e64F1968876A148F",
+    "transactionIndex": 3,
+    "gasUsed": "1562499",
+    "logsBloom": "0x00000000000000000000000800000000000000000010000000800000000000001000000000000000000000000040000020008000000000000000010000000000000000000000000000000000000000800001000020200000000100000000000000000000020000000040000000000800000000000000000080000000000000400000000000000000000000020800000000004000000000100000000000000000200000000000400000000000000000000000000000000000000000100000004000000000000000200001000000000000000008000000000000100000000020000000000000000000000000010000000000000000000000000000000000100000",
+    "blockHash": "0xf28858257dd1544efbe1c6f1ebc00c8327fe400557d5324626c4e085402b39bd",
+    "transactionHash": "0xabcf5be6f9ffe49d96ae5cddebe10f733ce1b8b4acc62a5989bd21e81a0646d4",
+    "logs": [
+      {
+        "transactionIndex": 3,
+        "blockNumber": 5983147,
+        "transactionHash": "0xabcf5be6f9ffe49d96ae5cddebe10f733ce1b8b4acc62a5989bd21e81a0646d4",
+        "address": "0xe32ABDD3A080ab0D42922FC6e64F1968876A148F",
+        "topics": [
+          "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x000000000000000000000000f560bf3cc92903c4cb2534fc447ac4adffd49822"
+        ],
+        "data": "0x",
+        "logIndex": 9,
+        "blockHash": "0xf28858257dd1544efbe1c6f1ebc00c8327fe400557d5324626c4e085402b39bd"
+      },
+      {
+        "transactionIndex": 3,
+        "blockNumber": 5983147,
+        "transactionHash": "0xabcf5be6f9ffe49d96ae5cddebe10f733ce1b8b4acc62a5989bd21e81a0646d4",
+        "address": "0xe32ABDD3A080ab0D42922FC6e64F1968876A148F",
+        "topics": [
+          "0x61fcc6fa9ba5b3ab5f72b919bc6324527ede6b5d73e12c63bbc4d4e0352e7002"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001c20",
+        "logIndex": 10,
+        "blockHash": "0xf28858257dd1544efbe1c6f1ebc00c8327fe400557d5324626c4e085402b39bd"
+      },
+      {
+        "transactionIndex": 3,
+        "blockNumber": 5983147,
+        "transactionHash": "0xabcf5be6f9ffe49d96ae5cddebe10f733ce1b8b4acc62a5989bd21e81a0646d4",
+        "address": "0xe32ABDD3A080ab0D42922FC6e64F1968876A148F",
+        "topics": [
+          "0x4a6beeb37b9f482406bcaf6e918424d6a3d27c6e726f2934b56e75e086bd0a79",
+          "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "0x0000000000000000000000000ae690aad8663aab12a671a6a0d74242332de85f"
+        ],
+        "data": "0x",
+        "logIndex": 11,
+        "blockHash": "0xf28858257dd1544efbe1c6f1ebc00c8327fe400557d5324626c4e085402b39bd"
+      },
+      {
+        "transactionIndex": 3,
+        "blockNumber": 5983147,
+        "transactionHash": "0xabcf5be6f9ffe49d96ae5cddebe10f733ce1b8b4acc62a5989bd21e81a0646d4",
+        "address": "0x0000000000000000000000000000000000001010",
+        "topics": [
+          "0x4dfe1bbbcf077ddc3e01291eea2d5c70c2b422b415d95645b9adcfd678cb1d63",
+          "0x0000000000000000000000000000000000000000000000000000000000001010",
+          "0x000000000000000000000000f560bf3cc92903c4cb2534fc447ac4adffd49822",
+          "0x00000000000000000000000009207a6efee346cb3e4a54ac18523e3715d38b3f"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000a688896e4f6353000000000000000000000000000000000000000000000002300f0655bcbb777a000000000000000000000000000000000000000000000097d14060012b260db40000000000000000000000000000000000000000000000022f687dcc4e6c1427000000000000000000000000000000000000000000000097d1e6e88a99757107",
+        "logIndex": 12,
+        "blockHash": "0xf28858257dd1544efbe1c6f1ebc00c8327fe400557d5324626c4e085402b39bd"
+      }
+    ],
+    "blockNumber": 5983147,
+    "cumulativeGasUsed": "1804532",
+    "status": 1,
+    "byzantium": true
+  },
+  "args": [
+    7200,
+    "0x0ae690aad8663aab12a671a6a0d74242332de85f"
+  ],
+  "numDeployments": 1,
+  "solcInputHash": "69a6c07099b56044da2d237d5505ab2c",
+  "metadata": "{\"compiler\":{\"version\":\"0.8.4+commit.c7e474f2\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_acceptableDelay\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_oracleNativeToken\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"exchangeRouter\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"exchangeConnector\",\"type\":\"address\"}],\"name\":\"ExchangeConnectorAdded\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"exchangeRouter\",\"type\":\"address\"}],\"name\":\"ExchangeConnectorRemoved\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"oldAcceptableDelay\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"newAcceptableDelay\",\"type\":\"uint256\"}],\"name\":\"NewAcceptableDelay\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"oldOracleNativeToken\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOracleNativeToken\",\"type\":\"address\"}],\"name\":\"NewOracleNativeToken\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"_token\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"_priceProxyAddress\",\"type\":\"address\"}],\"name\":\"SetPriceProxy\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"ChainlinkPriceProxy\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"NATIVE_TOKEN\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"acceptableDelay\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_exchangeRouter\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_exchangeConnector\",\"type\":\"address\"}],\"name\":\"addExchangeConnector\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_inputAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_inputDecimals\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_outputDecimals\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_inputToken\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_outputToken\",\"type\":\"address\"}],\"name\":\"equivalentOutputAmount\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"_outputAmount\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_inputAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_inputDecimals\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_outputDecimals\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_inputToken\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_outputToken\",\"type\":\"address\"}],\"name\":\"equivalentOutputAmountByAverage\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_exchangeRouter\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_inputAmount\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_inputToken\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_outputToken\",\"type\":\"address\"}],\"name\":\"equivalentOutputAmountFromExchange\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_inputAmount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_inputDecimals\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"_outputDecimals\",\"type\":\"uint256\"},{\"internalType\":\"address\",\"name\":\"_inputToken\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_outputToken\",\"type\":\"address\"}],\"name\":\"equivalentOutputAmountFromOracle\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"_outputAmount\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"exchangeConnector\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"exchangeRoutersList\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getExchangeRoutersListLength\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"oracleNativeToken\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_exchangeRouterIndex\",\"type\":\"uint256\"}],\"name\":\"removeExchangeConnector\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_acceptableDelay\",\"type\":\"uint256\"}],\"name\":\"setAcceptableDelay\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_oracleNativeToken\",\"type\":\"address\"}],\"name\":\"setOracleNativeToken\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_token\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"_priceProxyAddress\",\"type\":\"address\"}],\"name\":\"setPriceProxy\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{\"addExchangeConnector(address,address)\":{\"details\":\"Only owner can call this\",\"params\":{\"_exchangeConnector\":\"New exchange connector contract address\",\"_exchangeRouter\":\"Exchange router contract address\"}},\"constructor\":{\"params\":{\"_acceptableDelay\":\"Maximum acceptable delay for data given from Chainlink\",\"_oracleNativeToken\":\"The address of the chainlink oracle for the native token\"}},\"equivalentOutputAmount(uint256,uint256,uint256,address,address)\":{\"details\":\"The oracle is ChainLink\",\"params\":{\"_inputAmount\":\"Amount of the input token\",\"_inputDecimals\":\"Number of input token decimals\",\"_inputToken\":\"Address of the input token\",\"_outputDecimals\":\"Number of output token decimals\",\"_outputToken\":\"Address of output token\"},\"returns\":{\"_outputAmount\":\"          Amount of the output token\"}},\"equivalentOutputAmountByAverage(uint256,uint256,uint256,address,address)\":{\"details\":\"First we try to get the output amount from Chain Link                                 Only if the price is not available or out-of-date we will                                  reach to exchange routers\",\"params\":{\"_inputAmount\":\"Amount of the input token\",\"_inputDecimals\":\"Number of input token decimals\",\"_inputToken\":\"Address of the input token\",\"_outputDecimals\":\"Number of output token decimals\",\"_outputToken\":\"Address of output token\"},\"returns\":{\"_0\":\"Amount of the output token\"}},\"equivalentOutputAmountFromExchange(address,uint256,address,address)\":{\"details\":\"Input amount should have the same decimal as input token                                 Output amount has the same decimal as output token\",\"params\":{\"_exchangeRouter\":\"Address of the exchange router we are reading the price from\",\"_inputAmount\":\"Amount of the input token\",\"_inputToken\":\"Address of the input token\",\"_outputToken\":\"Address of output token\"},\"returns\":{\"_0\":\"Amount of the output token\"}},\"equivalentOutputAmountFromOracle(uint256,uint256,uint256,address,address)\":{\"details\":\"The oracle is ChainLink\",\"params\":{\"_inputAmount\":\"Amount of the input token\",\"_inputDecimals\":\"Number of input token decimals\",\"_inputToken\":\"Address of the input token\",\"_outputDecimals\":\"Number of output token decimals\",\"_outputToken\":\"Address of output token\"},\"returns\":{\"_outputAmount\":\"          Amount of the output token\"}},\"owner()\":{\"details\":\"Returns the address of the current owner.\"},\"removeExchangeConnector(uint256)\":{\"details\":\"Only owner can call this\",\"params\":{\"_exchangeRouterIndex\":\"The exchange router index in the list\"}},\"renounceOwnership()\":{\"details\":\"Leaves the contract without owner. It will not be possible to call `onlyOwner` functions anymore. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby removing any functionality that is only available to the owner.\"},\"setAcceptableDelay(uint256)\":{\"details\":\"If oracle data has not been updated for a while,                              we will get data from exchange routers\",\"params\":{\"_acceptableDelay\":\"Maximum acceptable delay (in seconds)\"}},\"setPriceProxy(address,address)\":{\"details\":\"Only owner can call this                             This price proxy gives exchange rate of _token/USD                             Setting price proxy address to zero means that we remove it\",\"params\":{\"_priceProxyAddress\":\"The address of the proxy price\",\"_token\":\"Address of the token\"}},\"transferOwnership(address)\":{\"details\":\"Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner.\"}},\"stateVariables\":{\"ChainlinkPriceProxy\":{\"params\":{\"_token\":\"Address of the token\"},\"return\":\"Address of price proxy contract\",\"returns\":{\"_0\":\"Address of price proxy contract\"}},\"exchangeConnector\":{\"params\":{\"_exchangeRouter\":\"Address of exchange router\"},\"return\":\"Address of exchange connector\",\"returns\":{\"_0\":\"Address of exchange connector\"}},\"exchangeRoutersList\":{\"params\":{\"_index\":\"Index of exchange router\"},\"return\":\"Address of exchange router\",\"returns\":{\"_0\":\"Address of exchange router\"}}},\"version\":1},\"userdoc\":{\"events\":{\"ExchangeConnectorAdded(address,address)\":{\"notice\":\"Emits when new exchange router is added\"},\"ExchangeConnectorRemoved(address)\":{\"notice\":\"Emits when an exchange router is removed\"},\"NewAcceptableDelay(uint256,uint256)\":{\"notice\":\"Emits when changes made to acceptable delay\"},\"NewOracleNativeToken(address,address)\":{\"notice\":\"Emits when changes made to oracle native token\"},\"SetPriceProxy(address,address)\":{\"notice\":\"Emits when a price proxy is set\"}},\"kind\":\"user\",\"methods\":{\"ChainlinkPriceProxy(address)\":{\"notice\":\"Gives USD price proxy address for a token\"},\"addExchangeConnector(address,address)\":{\"notice\":\"Adds an exchange connector\"},\"constructor\":{\"notice\":\"This contract is used to get relative price of two assets from Chainlink and available exchanges \"},\"equivalentOutputAmount(uint256,uint256,uint256,address,address)\":{\"notice\":\"Finds amount of output token that has equal value                                 as the input amount of the input token\"},\"equivalentOutputAmountByAverage(uint256,uint256,uint256,address,address)\":{\"notice\":\"Finds amount of output token that has same value as the input amount of the input token\"},\"equivalentOutputAmountFromExchange(address,uint256,address,address)\":{\"notice\":\"Finds amount of output token that has same value                                  as the input amount of the input token\"},\"equivalentOutputAmountFromOracle(uint256,uint256,uint256,address,address)\":{\"notice\":\"Finds amount of output token that has equal value                                 as the input amount of the input token\"},\"exchangeConnector(address)\":{\"notice\":\"Gives exchange connector address for an exchange router\"},\"exchangeRoutersList(uint256)\":{\"notice\":\"Gives address of an exchange router from exchange routers list\"},\"getExchangeRoutersListLength()\":{\"notice\":\"Getter for the length of exchange router list\"},\"removeExchangeConnector(uint256)\":{\"notice\":\"Removes an exchange connector\"},\"setAcceptableDelay(uint256)\":{\"notice\":\"Sets acceptable delay for oracle responses\"},\"setOracleNativeToken(address)\":{\"notice\":\"Sets oracle native token address\"},\"setPriceProxy(address,address)\":{\"notice\":\"Sets a USD price proxy for a token\"}},\"version\":1}},\"settings\":{\"compilationTarget\":{\"contracts/oracle/PriceOracle.sol\":\"PriceOracle\"},\"evmVersion\":\"istanbul\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\",\"useLiteralContent\":true},\"optimizer\":{\"enabled\":true,\"runs\":20},\"remappings\":[]},\"sources\":{\"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity ^0.8.0;\\n\\ninterface AggregatorV3Interface {\\n  function decimals() external view returns (uint8);\\n\\n  function description() external view returns (string memory);\\n\\n  function version() external view returns (uint256);\\n\\n  function getRoundData(uint80 _roundId)\\n    external\\n    view\\n    returns (\\n      uint80 roundId,\\n      int256 answer,\\n      uint256 startedAt,\\n      uint256 updatedAt,\\n      uint80 answeredInRound\\n    );\\n\\n  function latestRoundData()\\n    external\\n    view\\n    returns (\\n      uint80 roundId,\\n      int256 answer,\\n      uint256 startedAt,\\n      uint256 updatedAt,\\n      uint80 answeredInRound\\n    );\\n}\\n\",\"keccak256\":\"0x6e6e4b0835904509406b070ee173b5bc8f677c19421b76be38aea3b1b3d30846\",\"license\":\"MIT\"},\"@openzeppelin/contracts/access/Ownable.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.0;\\n\\nimport \\\"../utils/Context.sol\\\";\\n\\n/**\\n * @dev Contract module which provides a basic access control mechanism, where\\n * there is an account (an owner) that can be granted exclusive access to\\n * specific functions.\\n *\\n * By default, the owner account will be the one that deploys the contract. This\\n * can later be changed with {transferOwnership}.\\n *\\n * This module is used through inheritance. It will make available the modifier\\n * `onlyOwner`, which can be applied to your functions to restrict their use to\\n * the owner.\\n */\\nabstract contract Ownable is Context {\\n    address private _owner;\\n\\n    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);\\n\\n    /**\\n     * @dev Initializes the contract setting the deployer as the initial owner.\\n     */\\n    constructor() {\\n        _setOwner(_msgSender());\\n    }\\n\\n    /**\\n     * @dev Returns the address of the current owner.\\n     */\\n    function owner() public view virtual returns (address) {\\n        return _owner;\\n    }\\n\\n    /**\\n     * @dev Throws if called by any account other than the owner.\\n     */\\n    modifier onlyOwner() {\\n        require(owner() == _msgSender(), \\\"Ownable: caller is not the owner\\\");\\n        _;\\n    }\\n\\n    /**\\n     * @dev Leaves the contract without owner. It will not be possible to call\\n     * `onlyOwner` functions anymore. Can only be called by the current owner.\\n     *\\n     * NOTE: Renouncing ownership will leave the contract without an owner,\\n     * thereby removing any functionality that is only available to the owner.\\n     */\\n    function renounceOwnership() public virtual onlyOwner {\\n        _setOwner(address(0));\\n    }\\n\\n    /**\\n     * @dev Transfers ownership of the contract to a new account (`newOwner`).\\n     * Can only be called by the current owner.\\n     */\\n    function transferOwnership(address newOwner) public virtual onlyOwner {\\n        require(newOwner != address(0), \\\"Ownable: new owner is the zero address\\\");\\n        _setOwner(newOwner);\\n    }\\n\\n    function _setOwner(address newOwner) private {\\n        address oldOwner = _owner;\\n        _owner = newOwner;\\n        emit OwnershipTransferred(oldOwner, newOwner);\\n    }\\n}\\n\",\"keccak256\":\"0x6bb804a310218875e89d12c053e94a13a4607cdf7cc2052f3e52bd32a0dc50a1\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/Context.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Provides information about the current execution context, including the\\n * sender of the transaction and its data. While these are generally available\\n * via msg.sender and msg.data, they should not be accessed in such a direct\\n * manner, since when dealing with meta-transactions the account sending and\\n * paying for execution may not be the actual sender (as far as an application\\n * is concerned).\\n *\\n * This contract is only required for intermediate, library-like contracts.\\n */\\nabstract contract Context {\\n    function _msgSender() internal view virtual returns (address) {\\n        return msg.sender;\\n    }\\n\\n    function _msgData() internal view virtual returns (bytes calldata) {\\n        return msg.data;\\n    }\\n}\\n\",\"keccak256\":\"0x90565a39ae45c80f0468dc96c7b20d0afc3055f344c8203a0c9258239f350b9f\",\"license\":\"MIT\"},\"@openzeppelin/contracts/utils/math/SafeCast.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\n\\npragma solidity ^0.8.0;\\n\\n/**\\n * @dev Wrappers over Solidity's uintXX/intXX casting operators with added overflow\\n * checks.\\n *\\n * Downcasting from uint256/int256 in Solidity does not revert on overflow. This can\\n * easily result in undesired exploitation or bugs, since developers usually\\n * assume that overflows raise errors. `SafeCast` restores this intuition by\\n * reverting the transaction when such an operation overflows.\\n *\\n * Using this library instead of the unchecked operations eliminates an entire\\n * class of bugs, so it's recommended to use it always.\\n *\\n * Can be combined with {SafeMath} and {SignedSafeMath} to extend it to smaller types, by performing\\n * all math on `uint256` and `int256` and then downcasting.\\n */\\nlibrary SafeCast {\\n    /**\\n     * @dev Returns the downcasted uint224 from uint256, reverting on\\n     * overflow (when the input is greater than largest uint224).\\n     *\\n     * Counterpart to Solidity's `uint224` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 224 bits\\n     */\\n    function toUint224(uint256 value) internal pure returns (uint224) {\\n        require(value <= type(uint224).max, \\\"SafeCast: value doesn't fit in 224 bits\\\");\\n        return uint224(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted uint128 from uint256, reverting on\\n     * overflow (when the input is greater than largest uint128).\\n     *\\n     * Counterpart to Solidity's `uint128` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 128 bits\\n     */\\n    function toUint128(uint256 value) internal pure returns (uint128) {\\n        require(value <= type(uint128).max, \\\"SafeCast: value doesn't fit in 128 bits\\\");\\n        return uint128(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted uint96 from uint256, reverting on\\n     * overflow (when the input is greater than largest uint96).\\n     *\\n     * Counterpart to Solidity's `uint96` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 96 bits\\n     */\\n    function toUint96(uint256 value) internal pure returns (uint96) {\\n        require(value <= type(uint96).max, \\\"SafeCast: value doesn't fit in 96 bits\\\");\\n        return uint96(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted uint64 from uint256, reverting on\\n     * overflow (when the input is greater than largest uint64).\\n     *\\n     * Counterpart to Solidity's `uint64` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 64 bits\\n     */\\n    function toUint64(uint256 value) internal pure returns (uint64) {\\n        require(value <= type(uint64).max, \\\"SafeCast: value doesn't fit in 64 bits\\\");\\n        return uint64(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted uint32 from uint256, reverting on\\n     * overflow (when the input is greater than largest uint32).\\n     *\\n     * Counterpart to Solidity's `uint32` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 32 bits\\n     */\\n    function toUint32(uint256 value) internal pure returns (uint32) {\\n        require(value <= type(uint32).max, \\\"SafeCast: value doesn't fit in 32 bits\\\");\\n        return uint32(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted uint16 from uint256, reverting on\\n     * overflow (when the input is greater than largest uint16).\\n     *\\n     * Counterpart to Solidity's `uint16` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 16 bits\\n     */\\n    function toUint16(uint256 value) internal pure returns (uint16) {\\n        require(value <= type(uint16).max, \\\"SafeCast: value doesn't fit in 16 bits\\\");\\n        return uint16(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted uint8 from uint256, reverting on\\n     * overflow (when the input is greater than largest uint8).\\n     *\\n     * Counterpart to Solidity's `uint8` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 8 bits.\\n     */\\n    function toUint8(uint256 value) internal pure returns (uint8) {\\n        require(value <= type(uint8).max, \\\"SafeCast: value doesn't fit in 8 bits\\\");\\n        return uint8(value);\\n    }\\n\\n    /**\\n     * @dev Converts a signed int256 into an unsigned uint256.\\n     *\\n     * Requirements:\\n     *\\n     * - input must be greater than or equal to 0.\\n     */\\n    function toUint256(int256 value) internal pure returns (uint256) {\\n        require(value >= 0, \\\"SafeCast: value must be positive\\\");\\n        return uint256(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted int128 from int256, reverting on\\n     * overflow (when the input is less than smallest int128 or\\n     * greater than largest int128).\\n     *\\n     * Counterpart to Solidity's `int128` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 128 bits\\n     *\\n     * _Available since v3.1._\\n     */\\n    function toInt128(int256 value) internal pure returns (int128) {\\n        require(value >= type(int128).min && value <= type(int128).max, \\\"SafeCast: value doesn't fit in 128 bits\\\");\\n        return int128(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted int64 from int256, reverting on\\n     * overflow (when the input is less than smallest int64 or\\n     * greater than largest int64).\\n     *\\n     * Counterpart to Solidity's `int64` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 64 bits\\n     *\\n     * _Available since v3.1._\\n     */\\n    function toInt64(int256 value) internal pure returns (int64) {\\n        require(value >= type(int64).min && value <= type(int64).max, \\\"SafeCast: value doesn't fit in 64 bits\\\");\\n        return int64(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted int32 from int256, reverting on\\n     * overflow (when the input is less than smallest int32 or\\n     * greater than largest int32).\\n     *\\n     * Counterpart to Solidity's `int32` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 32 bits\\n     *\\n     * _Available since v3.1._\\n     */\\n    function toInt32(int256 value) internal pure returns (int32) {\\n        require(value >= type(int32).min && value <= type(int32).max, \\\"SafeCast: value doesn't fit in 32 bits\\\");\\n        return int32(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted int16 from int256, reverting on\\n     * overflow (when the input is less than smallest int16 or\\n     * greater than largest int16).\\n     *\\n     * Counterpart to Solidity's `int16` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 16 bits\\n     *\\n     * _Available since v3.1._\\n     */\\n    function toInt16(int256 value) internal pure returns (int16) {\\n        require(value >= type(int16).min && value <= type(int16).max, \\\"SafeCast: value doesn't fit in 16 bits\\\");\\n        return int16(value);\\n    }\\n\\n    /**\\n     * @dev Returns the downcasted int8 from int256, reverting on\\n     * overflow (when the input is less than smallest int8 or\\n     * greater than largest int8).\\n     *\\n     * Counterpart to Solidity's `int8` operator.\\n     *\\n     * Requirements:\\n     *\\n     * - input must fit into 8 bits.\\n     *\\n     * _Available since v3.1._\\n     */\\n    function toInt8(int256 value) internal pure returns (int8) {\\n        require(value >= type(int8).min && value <= type(int8).max, \\\"SafeCast: value doesn't fit in 8 bits\\\");\\n        return int8(value);\\n    }\\n\\n    /**\\n     * @dev Converts an unsigned uint256 into a signed int256.\\n     *\\n     * Requirements:\\n     *\\n     * - input must be less than or equal to maxInt256.\\n     */\\n    function toInt256(uint256 value) internal pure returns (int256) {\\n        // Note: Unsafe cast below is okay because `type(int256).max` is guaranteed to be positive\\n        require(value <= uint256(type(int256).max), \\\"SafeCast: value doesn't fit in an int256\\\");\\n        return int256(value);\\n    }\\n}\\n\",\"keccak256\":\"0x08d867b4c0bb782b9135691fa732b6846e0f133006489c3aa505abd1f6de56cb\",\"license\":\"MIT\"},\"contracts/connectors/interfaces/IExchangeConnector.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity >=0.8.0 <=0.8.4;\\n\\ninterface IExchangeConnector {\\n\\n    // Events\\n    \\n    event Swap(address[] path, uint[] amounts, address receiver);\\n\\n    // Read-only functions\\n\\n    function name() external view returns (string memory);\\n\\n    function exchangeRouter() external view returns (address);\\n\\n    function liquidityPoolFactory() external view returns (address);\\n\\n    function wrappedNativeToken() external view returns (address);\\n\\n    function getInputAmount(\\n        uint _outputAmount,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view returns (bool, uint);\\n\\n    function getOutputAmount(\\n        uint _inputAmount,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view returns (bool, uint);\\n\\n    // State-changing functions\\n\\n    function setExchangeRouter(address _exchangeRouter) external;\\n\\n    function setLiquidityPoolFactory() external;\\n\\n    function setWrappedNativeToken() external;\\n\\n    function swap(\\n        uint256 _inputAmount,\\n        uint256 _outputAmount,\\n        address[] memory _path,\\n        address _to,\\n        uint256 _deadline,\\n        bool _isFixedToken\\n    ) external returns (bool, uint[] memory);\\n\\n    function isPathValid(address[] memory _path) external view returns(bool);\\n}\",\"keccak256\":\"0xb47f56253fab205caf0f6668ea680100efce9ab4988328f184967e2b84506802\",\"license\":\"MIT\"},\"contracts/oracle/PriceOracle.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity >=0.8.0 <=0.8.4;\\n\\nimport \\\"./interfaces/IPriceOracle.sol\\\";\\nimport \\\"../connectors/interfaces/IExchangeConnector.sol\\\";\\nimport \\\"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\\\";\\nimport \\\"@openzeppelin/contracts/access/Ownable.sol\\\";\\nimport \\\"@openzeppelin/contracts/utils/math/SafeCast.sol\\\";\\n\\n\\ncontract PriceOracle is IPriceOracle, Ownable {\\n\\n    using SafeCast for uint;\\n\\n    modifier nonZeroAddress(address _address) {\\n        require(_address != address(0), \\\"PriceOracle: zero address\\\");\\n        _;\\n    }\\n\\n    // Public variables\\n    mapping (address => address) public override ChainlinkPriceProxy; // Given two token addresses returns related Chainlink price proxy\\n    mapping(address => address) public override exchangeConnector; // Mapping from exchange router to exchange connector\\n    address[] public override exchangeRoutersList; // List of available exchange routers\\n    uint public override acceptableDelay;\\n    address public constant NATIVE_TOKEN = address(1); // ONE_ADDRESS is used for getting price of blockchain native token \\n    address public override oracleNativeToken;\\n\\n    /// @notice                         This contract is used to get relative price of two assets from Chainlink and available exchanges \\n    /// @param _acceptableDelay         Maximum acceptable delay for data given from Chainlink\\n    /// @param _oracleNativeToken       The address of the chainlink oracle for the native token\\n    constructor(uint _acceptableDelay,address _oracleNativeToken) {\\n        _setAcceptableDelay(_acceptableDelay);\\n        _setOracleNativeToken(_oracleNativeToken);\\n    }\\n\\n    function renounceOwnership() public virtual override onlyOwner {}\\n\\n    /// @notice                 Getter for the length of exchange router list\\n    function getExchangeRoutersListLength() public view override returns (uint) {\\n        return exchangeRoutersList.length;\\n    }\\n\\n    /// @notice                         Finds amount of output token that has same value as the input amount of the input token\\n    /// @dev                            First we try to get the output amount from Chain Link\\n    ///                                 Only if the price is not available or out-of-date we will \\n    ///                                 reach to exchange routers\\n    /// @param _inputAmount             Amount of the input token\\n    /// @param _inputDecimals           Number of input token decimals\\n    /// @param _outputDecimals          Number of output token decimals\\n    /// @param _inputToken              Address of the input token\\n    /// @param _outputToken             Address of output token\\n    /// @return                         Amount of the output token\\n    function equivalentOutputAmountByAverage(\\n        uint _inputAmount,\\n        uint _inputDecimals,\\n        uint _outputDecimals,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view nonZeroAddress(_inputToken) nonZeroAddress(_outputToken) override returns (uint) {\\n        // Gets output amount from oracle\\n        (bool result, uint outputAmount, uint timestamp) = _equivalentOutputAmountFromOracle(\\n            _inputAmount,\\n            _inputDecimals,\\n            _outputDecimals,\\n            _inputToken,\\n            _outputToken\\n        );\\n\\n        // Checks timestamp of the oracle result\\n        if (result == true && _abs(timestamp.toInt256() - block.timestamp.toInt256()) <= acceptableDelay) {\\n            return outputAmount;\\n        } else {\\n            uint _totalAmount;\\n            uint _totalNumber;\\n\\n            // If Chainlink price is available but out-of-date, we still use it\\n            if (result == true) {\\n                _totalAmount = outputAmount;\\n                _totalNumber = 1;\\n            }\\n\\n            // Gets output amounts from exchange routers\\n            // note: we assume that the decimal of exchange returned result is _outputDecimals.\\n            for (uint i = 0; i < getExchangeRoutersListLength(); i++) {\\n                (result, outputAmount) = _equivalentOutputAmountFromExchange(\\n                    exchangeRoutersList[i],\\n                    _inputAmount,\\n                    _inputToken,\\n                    _outputToken\\n                );\\n\\n                if (result == true) {\\n                    _totalNumber = _totalNumber + 1;\\n                    _totalAmount = _totalAmount + outputAmount;\\n                }\\n            }\\n\\n            require(_totalNumber > 0, \\\"PriceOracle: no price feed is available\\\");\\n\\n            // Returns average of results from different sources\\n            return _totalAmount/_totalNumber;\\n        }\\n    }\\n\\n    /// @notice                         Finds amount of output token that has equal value\\n    ///                                 as the input amount of the input token\\n    /// @dev                            The oracle is ChainLink\\n    /// @param _inputAmount             Amount of the input token\\n    /// @param _inputDecimals           Number of input token decimals\\n    /// @param _outputDecimals          Number of output token decimals\\n    /// @param _inputToken              Address of the input token\\n    /// @param _outputToken             Address of output token\\n    /// @return _outputAmount           Amount of the output token\\n    function equivalentOutputAmount(\\n        uint _inputAmount,\\n        uint _inputDecimals,\\n        uint _outputDecimals,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view nonZeroAddress(_inputToken) nonZeroAddress(_outputToken) override returns (uint _outputAmount) {\\n        bool result;\\n        (result, _outputAmount, /*timestamp*/) = _equivalentOutputAmountFromOracle(\\n            _inputAmount,\\n            _inputDecimals,\\n            _outputDecimals,\\n            _inputToken,\\n            _outputToken\\n        );\\n        require(result == true, \\\"PriceOracle: oracle not exist or up to date\\\");\\n    }\\n\\n    /// @notice                         Finds amount of output token that has equal value\\n    ///                                 as the input amount of the input token\\n    /// @dev                            The oracle is ChainLink\\n    /// @param _inputAmount             Amount of the input token\\n    /// @param _inputDecimals           Number of input token decimals\\n    /// @param _outputDecimals          Number of output token decimals\\n    /// @param _inputToken              Address of the input token\\n    /// @param _outputToken             Address of output token\\n    /// @return _outputAmount           Amount of the output token\\n    function equivalentOutputAmountFromOracle(\\n        uint _inputAmount,\\n        uint _inputDecimals,\\n        uint _outputDecimals,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view nonZeroAddress(_inputToken) nonZeroAddress(_outputToken) override returns (uint _outputAmount) {\\n        bool result;\\n        (result, _outputAmount, /*timestamp*/) = _equivalentOutputAmountFromOracle(\\n            _inputAmount,\\n            _inputDecimals,\\n            _outputDecimals,\\n            _inputToken,\\n            _outputToken\\n        );\\n        require(result == true, \\\"PriceOracle: oracle not exist or up to date\\\");\\n    }\\n\\n    /// @notice                         Finds amount of output token that has same value \\n    ///                                 as the input amount of the input token\\n    /// @dev                            Input amount should have the same decimal as input token\\n    ///                                 Output amount has the same decimal as output token\\n    /// @param _exchangeRouter          Address of the exchange router we are reading the price from\\n    /// @param _inputAmount             Amount of the input token\\n    /// @param _inputToken              Address of the input token\\n    /// @param _outputToken             Address of output token\\n    /// @return                         Amount of the output token\\n    function equivalentOutputAmountFromExchange(\\n        address _exchangeRouter,\\n        uint _inputAmount,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view nonZeroAddress(_inputToken) nonZeroAddress(_outputToken) override returns (uint) {\\n        (bool result, uint outputAmount) = _equivalentOutputAmountFromExchange(\\n            _exchangeRouter,\\n            _inputAmount,\\n            _inputToken,\\n            _outputToken\\n        );\\n        require(result == true, \\\"PriceOracle: Pair does not exist on exchange\\\");\\n        return outputAmount;\\n    }\\n\\n    /// @notice                    Adds an exchange connector\\n    /// @dev                       Only owner can call this\\n    /// @param _exchangeRouter     Exchange router contract address\\n    /// @param _exchangeConnector  New exchange connector contract address\\n    function addExchangeConnector(\\n        address _exchangeRouter, \\n        address _exchangeConnector\\n    ) external nonZeroAddress(_exchangeRouter) nonZeroAddress(_exchangeConnector) override onlyOwner {\\n        require(exchangeConnector[_exchangeRouter] == address(0), \\\"PriceOracle: exchange router already exists\\\");\\n        exchangeRoutersList.push(_exchangeRouter);\\n        exchangeConnector[_exchangeRouter] = _exchangeConnector;\\n        emit ExchangeConnectorAdded(_exchangeRouter, _exchangeConnector);\\n    }\\n\\n    /// @notice                       Removes an exchange connector\\n    /// @dev                          Only owner can call this\\n    /// @param _exchangeRouterIndex   The exchange router index in the list\\n    function removeExchangeConnector(uint _exchangeRouterIndex) external override onlyOwner {\\n        require(_exchangeRouterIndex < exchangeRoutersList.length, \\\"PriceOracle: Index is out of bound\\\");\\n        address exchangeRouterAddress = exchangeRoutersList[_exchangeRouterIndex];\\n        _removeElementFromExchangeRoutersList(_exchangeRouterIndex);\\n        exchangeConnector[exchangeRouterAddress] = address(0);\\n        emit ExchangeConnectorRemoved(exchangeRouterAddress);\\n    }\\n\\n    /// @notice                     Sets a USD price proxy for a token\\n    /// @dev                        Only owner can call this\\n    ///                             This price proxy gives exchange rate of _token/USD\\n    ///                             Setting price proxy address to zero means that we remove it\\n    /// @param _token               Address of the token\\n    /// @param _priceProxyAddress   The address of the proxy price\\n    function setPriceProxy(\\n        address _token, \\n        address _priceProxyAddress\\n    ) external nonZeroAddress(_token) override onlyOwner {\\n        ChainlinkPriceProxy[_token] = _priceProxyAddress;\\n        emit SetPriceProxy(_token, _priceProxyAddress);\\n    }\\n\\n    /// @notice                     Sets acceptable delay for oracle responses\\n    /// @dev                        If oracle data has not been updated for a while, \\n    ///                             we will get data from exchange routers\\n    /// @param _acceptableDelay     Maximum acceptable delay (in seconds)\\n    function setAcceptableDelay(uint _acceptableDelay) external override onlyOwner {\\n        _setAcceptableDelay(_acceptableDelay);\\n    }\\n\\n    /// @notice                     Sets oracle native token address\\n    function setOracleNativeToken(address _oracleNativeToken) external override onlyOwner {\\n       _setOracleNativeToken(_oracleNativeToken);\\n    }\\n\\n    /// @notice                     Internal setter for acceptable delay for oracle responses\\n    /// @dev                        If oracle data has not been updated for a while, \\n    ///                             we will get data from exchange routers\\n    /// @param _acceptableDelay     Maximum acceptable delay (in seconds)\\n    function _setAcceptableDelay(uint _acceptableDelay) private {\\n        emit NewAcceptableDelay(acceptableDelay, _acceptableDelay);\\n        require(\\n            _acceptableDelay > 0,\\n            \\\"PriceOracle: zero amount\\\"\\n        );\\n        acceptableDelay = _acceptableDelay;\\n    }\\n\\n    /// @notice                     Internal setter for oracle native token address\\n    function _setOracleNativeToken(address _oracleNativeToken) private nonZeroAddress(_oracleNativeToken) {\\n        emit NewOracleNativeToken(oracleNativeToken, _oracleNativeToken);\\n        oracleNativeToken = _oracleNativeToken;\\n    }\\n\\n    /// @notice                         Finds amount of output token that has same value \\n    ///                                 as the input amount of the input token\\n    /// @param _exchangeRouter          Address of the exchange we are reading the price from\\n    /// @param _inputAmount             Amount of the input token\\n    /// @param _inputToken              Address of the input token\\n    /// @param _outputToken             Address of output token\\n    /// @return _result                 True if getting amount was successful\\n    /// @return _outputAmount           Amount of the output token\\n    function _equivalentOutputAmountFromExchange(\\n        address _exchangeRouter,\\n        uint _inputAmount,\\n        address _inputToken,\\n        address _outputToken\\n    ) private view returns (bool _result, uint _outputAmount) {\\n        if (_inputToken == NATIVE_TOKEN) {\\n            // note: different exchanges may use different wrapped native token versions\\n            address wrappedNativeToken = IExchangeConnector(exchangeConnector[_exchangeRouter]).wrappedNativeToken();\\n\\n            (_result, _outputAmount) = IExchangeConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(\\n                _inputAmount,\\n                wrappedNativeToken,\\n                _outputToken\\n            );\\n        } else if (_outputToken == NATIVE_TOKEN) {\\n            // note: different exchanges may use different wrapped native token versions\\n            address wrappedNativeToken = IExchangeConnector(exchangeConnector[_exchangeRouter]).wrappedNativeToken();\\n\\n            (_result, _outputAmount) = IExchangeConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(\\n                _inputAmount,\\n                _inputToken,\\n                wrappedNativeToken\\n            );\\n        } else {\\n            (_result, _outputAmount) = IExchangeConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(\\n                _inputAmount,\\n                _inputToken,\\n                _outputToken\\n            );\\n        }\\n\\n    }\\n\\n    /// @notice                         Finds amount of output token that is equal as the input amount of the input token\\n    /// @dev                            The oracle is ChainLink\\n    /// @param _inputAmount             Amount of the input token\\n    /// @param _inputDecimals           Number of input token decimals\\n    /// @param _outputDecimals          Number of output token decimals\\n    /// @param _inputToken              Address of the input token\\n    /// @param _outputToken             Address of output token\\n    /// @return _result                 True if getting amount was successful\\n    /// @return _outputAmount           Amount of the output token\\n    /// @return _timestamp              Timestamp of the result\\n    function _equivalentOutputAmountFromOracle(\\n        uint _inputAmount,\\n        uint _inputDecimals,\\n        uint _outputDecimals,\\n        address _inputToken,\\n        address _outputToken\\n    ) private view returns (bool, uint _outputAmount, uint _timestamp) {\\n        uint decimals0;\\n        uint decimals1;\\n        int price0;\\n        int price1;\\n\\n        if (_inputToken == NATIVE_TOKEN) {\\n            _inputToken = oracleNativeToken;\\n        }\\n\\n        if (_outputToken == NATIVE_TOKEN) {\\n            _outputToken = oracleNativeToken;\\n        }\\n\\n        if (ChainlinkPriceProxy[_inputToken] != address(0) && ChainlinkPriceProxy[_outputToken] != address(0)) {\\n            uint[2] memory _timestamps;\\n\\n            // Gets price of _inputToken/USD\\n            (\\n            /*uint80 roundID*/,\\n            price0,\\n            /*uint startedAt*/,\\n            _timestamps[0],\\n            /*uint80 answeredInRound*/\\n            ) = AggregatorV3Interface(ChainlinkPriceProxy[_inputToken]).latestRoundData();\\n\\n            require(price0 != 0, \\\"PriceOracle: zero price for input token\\\");\\n\\n            // Gets number of decimals\\n            decimals0 = AggregatorV3Interface(ChainlinkPriceProxy[_inputToken]).decimals();\\n\\n\\n            // Gets price of _outputToken/USD\\n            (\\n            /*uint80 roundID*/,\\n            price1,\\n            /*uint startedAt*/,\\n            _timestamps[1],\\n            /*uint80 answeredInRound*/\\n            ) = AggregatorV3Interface(ChainlinkPriceProxy[_outputToken]).latestRoundData();\\n\\n            require(price1 != 0, \\\"PriceOracle: zero price for output token\\\");\\n\\n            // Gets number of decimals\\n            decimals1 = AggregatorV3Interface(ChainlinkPriceProxy[_outputToken]).decimals();\\n\\n            // uint price = (uint(price0) * 10**(decimals1)) / (uint(price1) * 10**(decimals0));\\n\\n            // // note: to make inside of power parentheses greater than zero, we add them with one\\n            // _outputAmount = price*_inputAmount*(10**(_outputDecimals + 1))/(10**(_inputDecimals + 1));\\n\\n            // convert the above calculation to the below one to eliminate precision loss\\n            _outputAmount = (uint(price0) * 10**(decimals1))*_inputAmount*(10**(_outputDecimals + 1));\\n            _outputAmount = _outputAmount/((10**(_inputDecimals + 1))*(uint(price1) * 10**(decimals0)));\\n\\n            if (_abs(block.timestamp.toInt256() - _timestamps[0].toInt256()) > acceptableDelay) {\\n                return (false, _outputAmount, _timestamps[0]);\\n            }\\n\\n            if (_abs(block.timestamp.toInt256() - _timestamps[1].toInt256()) > acceptableDelay) {\\n                return (false, _outputAmount, _timestamps[1]);\\n            }\\n\\n            _timestamp = _timestamps[0] > _timestamps[1] ? _timestamps[1] : _timestamps[0];\\n\\n            return (true, _outputAmount, _timestamp);\\n            \\n        } else {\\n            return (false, 0, 0);\\n        }\\n    }\\n\\n    /// @notice             Removes an element of excahngeRouterList\\n    /// @dev                Deletes and shifts the array\\n    /// @param _index       Index of the element that will be deleted\\n    function _removeElementFromExchangeRoutersList(uint _index) private {\\n        exchangeRoutersList[_index] = exchangeRoutersList[exchangeRoutersList.length - 1];\\n        exchangeRoutersList.pop();\\n    }\\n\\n    /// @notice             Returns absolute value\\n    function _abs(int _value) private pure returns (uint) {\\n        return _value >= 0 ? uint(_value) : uint(-_value);\\n    }\\n\\n}\",\"keccak256\":\"0x69944f49eaa6a8747f083e114127d7add5c21d7be242383109f61faaea729d84\",\"license\":\"MIT\"},\"contracts/oracle/interfaces/IPriceOracle.sol\":{\"content\":\"// SPDX-License-Identifier: MIT\\npragma solidity >=0.8.0 <=0.8.4;\\n\\ninterface IPriceOracle {\\n\\n    /// @notice                     Emits when new exchange router is added\\n    /// @param exchangeRouter       Address of new exchange router\\n    /// @param exchangeConnector    Address of exchange connector\\n    event ExchangeConnectorAdded(address indexed exchangeRouter, address indexed exchangeConnector);\\n\\n    /// @notice                     Emits when an exchange router is removed\\n    /// @param exchangeRouter       Address of removed exchange router\\n    event ExchangeConnectorRemoved(address indexed exchangeRouter);\\n\\n    /// @notice                     Emits when a price proxy is set\\n    /// @param _token               Address of the token\\n    /// @param _priceProxyAddress   Address of price proxy contract\\n    event SetPriceProxy(address indexed _token, address indexed _priceProxyAddress);\\n\\n    /// @notice                     Emits when changes made to acceptable delay\\n\\tevent NewAcceptableDelay(uint oldAcceptableDelay, uint newAcceptableDelay);\\n\\n    /// @notice                     Emits when changes made to oracle native token\\n\\tevent NewOracleNativeToken(address indexed oldOracleNativeToken, address indexed newOracleNativeToken);\\n\\n    // Read-only functions\\n    \\n    /// @notice                     Gives USD price proxy address for a token\\n    /// @param _token          Address of the token\\n    /// @return                     Address of price proxy contract\\n    function ChainlinkPriceProxy(address _token) external view returns (address);\\n\\n    /// @notice                     Gives exchange connector address for an exchange router\\n    /// @param _exchangeRouter      Address of exchange router\\n    /// @return                     Address of exchange connector\\n    function exchangeConnector(address _exchangeRouter) external view returns (address);\\n\\n    /// @notice                     Gives address of an exchange router from exchange routers list\\n    /// @param _index               Index of exchange router\\n    /// @return                     Address of exchange router\\n    function exchangeRoutersList(uint _index) external view returns (address);\\n\\n    function getExchangeRoutersListLength() external view returns (uint);\\n\\n    function acceptableDelay() external view returns (uint);\\n\\n    function oracleNativeToken() external view returns (address);\\n\\n    function equivalentOutputAmountByAverage(\\n        uint _inputAmount,\\n        uint _inputDecimals,\\n        uint _outputDecimals,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view returns (uint);\\n\\n    function equivalentOutputAmount(\\n        uint _inputAmount,\\n        uint _inputDecimals,\\n        uint _outputDecimals,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view returns (uint);\\n\\n    function equivalentOutputAmountFromOracle(\\n        uint _inputAmount,\\n        uint _inputDecimals,\\n        uint _outputDecimals,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view returns (uint);\\n\\n    function equivalentOutputAmountFromExchange(\\n        address _exchangeRouter,\\n        uint _inputAmount,\\n        address _inputToken,\\n        address _outputToken\\n    ) external view returns (uint);\\n    \\n    // State-changing functions\\n    \\n    function addExchangeConnector(address _exchangeRouter, address _exchangeConnector) external;\\n\\n    function removeExchangeConnector(uint _exchangeRouterIndex) external;\\n\\n    function setPriceProxy(address _token, address _priceProxyAddress) external;\\n\\n    function setAcceptableDelay(uint _acceptableDelay) external;\\n\\n    function setOracleNativeToken(address _oracleNativeToken) external;\\n}\",\"keccak256\":\"0x123ae247106ef583652a87639f83cf3cecd5fba068ea06be3710e43bcd429d13\",\"license\":\"MIT\"}},\"version\":1}",
+  "bytecode": "0x60806040523480156200001157600080fd5b5060405162001c1d38038062001c1d8339810160408190526200003491620001fa565b6200003f336200005d565b6200004a82620000ad565b620000558162000144565b505062000237565b600080546001600160a01b038381166001600160a01b0319831681178455604051919092169283917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09190a35050565b60045460408051918252602082018390527f61fcc6fa9ba5b3ab5f72b919bc6324527ede6b5d73e12c63bbc4d4e0352e7002910160405180910390a1600081116200013f5760405162461bcd60e51b815260206004820152601860248201527f50726963654f7261636c653a207a65726f20616d6f756e74000000000000000060448201526064015b60405180910390fd5b600455565b806001600160a01b0381166200019d5760405162461bcd60e51b815260206004820152601960248201527f50726963654f7261636c653a207a65726f206164647265737300000000000000604482015260640162000136565b6005546040516001600160a01b038085169216907f4a6beeb37b9f482406bcaf6e918424d6a3d27c6e726f2934b56e75e086bd0a7990600090a350600580546001600160a01b0319166001600160a01b0392909216919091179055565b600080604083850312156200020d578182fd5b825160208401519092506001600160a01b03811681146200022c578182fd5b809150509250929050565b6119d680620002476000396000f3fe608060405234801561001057600080fd5b50600436106100f15760003560e01c806304c95544146100f6578063092307da1461010b57806316fac92a146101315780631d4a7b211461014457806331f7d964146101575780634205d68f146101775780636fbd0657146101a0578063715018a6146101b357806385c44376146101bb578063862efd4b146101ce5780638da5cb5b146101d7578063ab44048414610131578063d86faec7146101df578063de03d10d14610208578063e70f33031461021b578063f2e0b6a51461022e578063f2fde38b14610241578063f4fe5e6f14610254578063fed5a0191461025c575b600080fd5b61010961010436600461154a565b61026f565b005b61011e6101193660046115c1565b6102b3565b6040519081526020015b60405180910390f35b61011e61013f36600461165c565b61038a565b610109610152366004611644565b610460565b61015f600181565b6040516001600160a01b039091168152602001610128565b61015f61018536600461154a565b6001602052600090815260409020546001600160a01b031681565b60055461015f906001600160a01b031681565b610109610498565b6101096101c9366004611589565b6104c9565b61011e60045481565b61015f610577565b61015f6101ed36600461154a565b6002602052600090815260409020546001600160a01b031681565b610109610216366004611644565b610586565b61015f610229366004611644565b6106a4565b61010961023c366004611589565b6106ce565b61010961024f36600461154a565b61085d565b60035461011e565b61011e61026a36600461165c565b6108fa565b33610278610577565b6001600160a01b0316146102a75760405162461bcd60e51b815260040161029e90611754565b60405180910390fd5b6102b081610ac6565b50565b6000826001600160a01b0381166102dc5760405162461bcd60e51b815260040161029e90611721565b826001600160a01b0381166103035760405162461bcd60e51b815260040161029e90611721565b60008061031289898989610b4a565b909250905060018215151461037e5760405162461bcd60e51b815260206004820152602c60248201527f50726963654f7261636c653a205061697220646f6573206e6f7420657869737460448201526b206f6e2065786368616e676560a01b606482015260840161029e565b98975050505050505050565b6000826001600160a01b0381166103b35760405162461bcd60e51b815260040161029e90611721565b826001600160a01b0381166103da5760405162461bcd60e51b815260040161029e90611721565b60006103e98989898989610e0b565b50945090506001811515146104545760405162461bcd60e51b815260206004820152602b60248201527f50726963654f7261636c653a206f7261636c65206e6f74206578697374206f7260448201526a20757020746f206461746560a81b606482015260840161029e565b50505095945050505050565b33610469610577565b6001600160a01b03161461048f5760405162461bcd60e51b815260040161029e90611754565b6102b0816112d3565b336104a1610577565b6001600160a01b0316146104c75760405162461bcd60e51b815260040161029e90611754565b565b816001600160a01b0381166104f05760405162461bcd60e51b815260040161029e90611721565b336104f9610577565b6001600160a01b03161461051f5760405162461bcd60e51b815260040161029e90611754565b6001600160a01b0383811660008181526001602052604080822080546001600160a01b0319169487169485179055517f7a94f0ad15b775c1f9cbf924619ec6379ccf1230a329c8bb3243b48f495d88449190a3505050565b6000546001600160a01b031690565b3361058f610577565b6001600160a01b0316146105b55760405162461bcd60e51b815260040161029e90611754565b60035481106106115760405162461bcd60e51b815260206004820152602260248201527f50726963654f7261636c653a20496e646578206973206f7574206f6620626f756044820152611b9960f21b606482015260840161029e565b60006003828154811061063457634e487b7160e01b600052603260045260246000fd5b6000918252602090912001546001600160a01b031690506106548261135f565b6001600160a01b03811660008181526002602052604080822080546001600160a01b0319169055517fd4c309ca8e170bf136bae67942030e0ac2e3992e9ea36936196c38be6d67a47d9190a25050565b600381815481106106b457600080fd5b6000918252602090912001546001600160a01b0316905081565b816001600160a01b0381166106f55760405162461bcd60e51b815260040161029e90611721565b816001600160a01b03811661071c5760405162461bcd60e51b815260040161029e90611721565b33610725610577565b6001600160a01b03161461074b5760405162461bcd60e51b815260040161029e90611754565b6001600160a01b0384811660009081526002602052604090205416156107c75760405162461bcd60e51b815260206004820152602b60248201527f50726963654f7261636c653a2065786368616e676520726f7574657220616c7260448201526a656164792065786973747360a81b606482015260840161029e565b60038054600181019091557fc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b0180546001600160a01b038087166001600160a01b03199283168117909355600083815260026020526040808220805493891693909416831790935591519092917f19dd93282347163d78a1e91a8278207144203887305da5724821079ffcc138ad91a350505050565b33610866610577565b6001600160a01b03161461088c5760405162461bcd60e51b815260040161029e90611754565b6001600160a01b0381166108f15760405162461bcd60e51b815260206004820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b606482015260840161029e565b6102b081611439565b6000826001600160a01b0381166109235760405162461bcd60e51b815260040161029e90611721565b826001600160a01b03811661094a5760405162461bcd60e51b815260040161029e90611721565b600080600061095c8b8b8b8b8b610e0b565b91945092509050600183151514801561099a575060045461099761097f42611489565b61098884611489565b61099291906118ea565b6114f7565b11155b156109a957509350610abb9050565b600080600185151514156109be575082905060015b60005b600354811015610a4857610a0c600382815481106109ef57634e487b7160e01b600052603260045260246000fd5b6000918252602090912001546001600160a01b03168f8d8d610b4a565b909650945060018615151415610a3657610a278260016117a8565b9150610a3385846117a8565b92505b80610a4081611940565b9150506109c1565b5060008111610aa95760405162461bcd60e51b815260206004820152602760248201527f50726963654f7261636c653a206e6f207072696365206665656420697320617660448201526661696c61626c6560c81b606482015260840161029e565b610ab381836117c0565b975050505050505b505095945050505050565b806001600160a01b038116610aed5760405162461bcd60e51b815260040161029e90611721565b6005546040516001600160a01b038085169216907f4a6beeb37b9f482406bcaf6e918424d6a3d27c6e726f2934b56e75e086bd0a7990600090a350600580546001600160a01b0319166001600160a01b0392909216919091179055565b6000806001600160a01b03841660011415610c89576001600160a01b0380871660009081526002602090815260408083205481516317fcb39b60e01b81529151939416926317fcb39b92600480840193919291829003018186803b158015610bb157600080fd5b505afa158015610bc5573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610be9919061156d565b6001600160a01b038089166000908152600260205260409081902054905163df71d7f360e01b8152929350169063df71d7f390610c2e90899085908990600401611789565b604080518083038186803b158015610c4557600080fd5b505afa158015610c59573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610c7d9190611613565b9093509150610e029050565b6001600160a01b03831660011415610d6a576001600160a01b0380871660009081526002602090815260408083205481516317fcb39b60e01b81529151939416926317fcb39b92600480840193919291829003018186803b158015610ced57600080fd5b505afa158015610d01573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610d25919061156d565b6001600160a01b038089166000908152600260205260409081902054905163df71d7f360e01b8152929350169063df71d7f390610c2e90899089908690600401611789565b6001600160a01b038087166000908152600260205260409081902054905163df71d7f360e01b815291169063df71d7f390610dad90889088908890600401611789565b604080518083038186803b158015610dc457600080fd5b505afa158015610dd8573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610dfc9190611613565b90925090505b94509492505050565b60008080808080806001600160a01b03891660011415610e34576005546001600160a01b031698505b6001600160a01b03881660011415610e55576005546001600160a01b031697505b6001600160a01b038981166000908152600160205260409020541615801590610e9757506001600160a01b038881166000908152600160205260409020541615155b156112b857610ea4611510565b6001600160a01b03808b1660009081526001602052604090819020548151633fabe5a360e21b8152915192169163feaf968c9160048082019260a092909190829003018186803b158015610ef757600080fd5b505afa158015610f0b573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610f2f91906116b1565b508452509350839050610f945760405162461bcd60e51b815260206004820152602760248201527f50726963654f7261636c653a207a65726f20707269636520666f7220696e70756044820152663a103a37b5b2b760c91b606482015260840161029e565b6001600160a01b03808b1660009081526001602090815260409182902054825163313ce56760e01b8152925193169263313ce567926004808201939291829003018186803b158015610fe557600080fd5b505afa158015610ff9573d6000803e3d6000fd5b505050506040513d601f19601f8201168201806040525081019061101d9190611700565b6001600160a01b03808b1660009081526001602052604090819020548151633fabe5a360e21b8152915160ff9490941698509091169163feaf968c9160048082019260a092909190829003018186803b15801561107957600080fd5b505afa15801561108d573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906110b191906116b1565b50602085015250925082905061111a5760405162461bcd60e51b815260206004820152602860248201527f50726963654f7261636c653a207a65726f20707269636520666f72206f7574706044820152673aba103a37b5b2b760c11b606482015260840161029e565b6001600160a01b03808a1660009081526001602090815260409182902054825163313ce56760e01b8152925193169263313ce567926004808201939291829003018186803b15801561116b57600080fd5b505afa15801561117f573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906111a39190611700565b60ff1693506111b38b60016117a8565b6111be90600a611823565b8d6111ca86600a611823565b6111d490866118cb565b6111de91906118cb565b6111e891906118cb565b96506111f585600a611823565b6111ff90836118cb565b61120a8d60016117a8565b61121590600a611823565b61121f91906118cb565b61122990886117c0565b60045490975061124c6112438360005b6020020151611489565b61098842611489565b111561126d5760008782825b602002015197509750975050505050506112c8565b60045461127e611243836001611239565b111561128f57600087826001611258565b60208101518151116112a25780516112a8565b60208101515b95506001975050505050506112c8565b6000806000965096509650505050505b955095509592505050565b60045460408051918252602082018390527f61fcc6fa9ba5b3ab5f72b919bc6324527ede6b5d73e12c63bbc4d4e0352e7002910160405180910390a16000811161135a5760405162461bcd60e51b8152602060048201526018602482015277141c9a58d953dc9858db194e881e995c9bc8185b5bdd5b9d60421b604482015260640161029e565b600455565b6003805461136f90600190611929565b8154811061138d57634e487b7160e01b600052603260045260246000fd5b600091825260209091200154600380546001600160a01b0390921691839081106113c757634e487b7160e01b600052603260045260246000fd5b9060005260206000200160006101000a8154816001600160a01b0302191690836001600160a01b03160217905550600380548061141457634e487b7160e01b600052603160045260246000fd5b600082815260209020810160001990810180546001600160a01b031916905501905550565b600080546001600160a01b038381166001600160a01b0319831681178455604051919092169283917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09190a35050565b60006001600160ff1b038211156114f35760405162461bcd60e51b815260206004820152602860248201527f53616665436173743a2076616c756520646f65736e27742066697420696e2061604482015267371034b73a191a9b60c11b606482015260840161029e565b5090565b6000808212156114f35761150a8261195b565b92915050565b60405180604001604052806002906020820280368337509192915050565b80516001600160501b038116811461154557600080fd5b919050565b60006020828403121561155b578081fd5b81356115668161198b565b9392505050565b60006020828403121561157e578081fd5b81516115668161198b565b6000806040838503121561159b578081fd5b82356115a68161198b565b915060208301356115b68161198b565b809150509250929050565b600080600080608085870312156115d6578182fd5b84356115e18161198b565b93506020850135925060408501356115f88161198b565b915060608501356116088161198b565b939692955090935050565b60008060408385031215611625578182fd5b82518015158114611634578283fd5b6020939093015192949293505050565b600060208284031215611655578081fd5b5035919050565b600080600080600060a08688031215611673578081fd5b85359450602086013593506040860135925060608601356116938161198b565b915060808601356116a38161198b565b809150509295509295909350565b600080600080600060a086880312156116c8578081fd5b6116d18661152e565b94506020860151935060408601519250606086015191506116f46080870161152e565b90509295509295909350565b600060208284031215611711578081fd5b815160ff81168114611566578182fd5b60208082526019908201527850726963654f7261636c653a207a65726f206164647265737360381b604082015260600190565b6020808252818101527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e6572604082015260600190565b9283526001600160a01b03918216602084015216604082015260600190565b600082198211156117bb576117bb611975565b500190565b6000826117db57634e487b7160e01b81526012600452602481fd5b500490565b600181815b8085111561181b57816000190482111561180157611801611975565b8085161561180e57918102915b93841c93908002906117e5565b509250929050565b600061156683836000826118395750600161150a565b816118465750600061150a565b816001811461185c576002811461186657611882565b600191505061150a565b60ff84111561187757611877611975565b50506001821b61150a565b5060208310610133831016604e8410600b84101617156118a5575081810a61150a565b6118af83836117e0565b80600019048211156118c3576118c3611975565b029392505050565b60008160001904831182151516156118e5576118e5611975565b500290565b60008083128015600160ff1b85018412161561190857611908611975565b6001600160ff1b038401831381161561192357611923611975565b50500390565b60008282101561193b5761193b611975565b500390565b600060001982141561195457611954611975565b5060010190565b6000600160ff1b82141561197157611971611975565b0390565b634e487b7160e01b600052601160045260246000fd5b6001600160a01b03811681146102b057600080fdfea26469706673582212201b4c2ef3a668a4fa90d6321e1297f2858236a0d26ccb43ad516b32249754801364736f6c63430008040033",
+  "deployedBytecode": "0x608060405234801561001057600080fd5b50600436106100f15760003560e01c806304c95544146100f6578063092307da1461010b57806316fac92a146101315780631d4a7b211461014457806331f7d964146101575780634205d68f146101775780636fbd0657146101a0578063715018a6146101b357806385c44376146101bb578063862efd4b146101ce5780638da5cb5b146101d7578063ab44048414610131578063d86faec7146101df578063de03d10d14610208578063e70f33031461021b578063f2e0b6a51461022e578063f2fde38b14610241578063f4fe5e6f14610254578063fed5a0191461025c575b600080fd5b61010961010436600461154a565b61026f565b005b61011e6101193660046115c1565b6102b3565b6040519081526020015b60405180910390f35b61011e61013f36600461165c565b61038a565b610109610152366004611644565b610460565b61015f600181565b6040516001600160a01b039091168152602001610128565b61015f61018536600461154a565b6001602052600090815260409020546001600160a01b031681565b60055461015f906001600160a01b031681565b610109610498565b6101096101c9366004611589565b6104c9565b61011e60045481565b61015f610577565b61015f6101ed36600461154a565b6002602052600090815260409020546001600160a01b031681565b610109610216366004611644565b610586565b61015f610229366004611644565b6106a4565b61010961023c366004611589565b6106ce565b61010961024f36600461154a565b61085d565b60035461011e565b61011e61026a36600461165c565b6108fa565b33610278610577565b6001600160a01b0316146102a75760405162461bcd60e51b815260040161029e90611754565b60405180910390fd5b6102b081610ac6565b50565b6000826001600160a01b0381166102dc5760405162461bcd60e51b815260040161029e90611721565b826001600160a01b0381166103035760405162461bcd60e51b815260040161029e90611721565b60008061031289898989610b4a565b909250905060018215151461037e5760405162461bcd60e51b815260206004820152602c60248201527f50726963654f7261636c653a205061697220646f6573206e6f7420657869737460448201526b206f6e2065786368616e676560a01b606482015260840161029e565b98975050505050505050565b6000826001600160a01b0381166103b35760405162461bcd60e51b815260040161029e90611721565b826001600160a01b0381166103da5760405162461bcd60e51b815260040161029e90611721565b60006103e98989898989610e0b565b50945090506001811515146104545760405162461bcd60e51b815260206004820152602b60248201527f50726963654f7261636c653a206f7261636c65206e6f74206578697374206f7260448201526a20757020746f206461746560a81b606482015260840161029e565b50505095945050505050565b33610469610577565b6001600160a01b03161461048f5760405162461bcd60e51b815260040161029e90611754565b6102b0816112d3565b336104a1610577565b6001600160a01b0316146104c75760405162461bcd60e51b815260040161029e90611754565b565b816001600160a01b0381166104f05760405162461bcd60e51b815260040161029e90611721565b336104f9610577565b6001600160a01b03161461051f5760405162461bcd60e51b815260040161029e90611754565b6001600160a01b0383811660008181526001602052604080822080546001600160a01b0319169487169485179055517f7a94f0ad15b775c1f9cbf924619ec6379ccf1230a329c8bb3243b48f495d88449190a3505050565b6000546001600160a01b031690565b3361058f610577565b6001600160a01b0316146105b55760405162461bcd60e51b815260040161029e90611754565b60035481106106115760405162461bcd60e51b815260206004820152602260248201527f50726963654f7261636c653a20496e646578206973206f7574206f6620626f756044820152611b9960f21b606482015260840161029e565b60006003828154811061063457634e487b7160e01b600052603260045260246000fd5b6000918252602090912001546001600160a01b031690506106548261135f565b6001600160a01b03811660008181526002602052604080822080546001600160a01b0319169055517fd4c309ca8e170bf136bae67942030e0ac2e3992e9ea36936196c38be6d67a47d9190a25050565b600381815481106106b457600080fd5b6000918252602090912001546001600160a01b0316905081565b816001600160a01b0381166106f55760405162461bcd60e51b815260040161029e90611721565b816001600160a01b03811661071c5760405162461bcd60e51b815260040161029e90611721565b33610725610577565b6001600160a01b03161461074b5760405162461bcd60e51b815260040161029e90611754565b6001600160a01b0384811660009081526002602052604090205416156107c75760405162461bcd60e51b815260206004820152602b60248201527f50726963654f7261636c653a2065786368616e676520726f7574657220616c7260448201526a656164792065786973747360a81b606482015260840161029e565b60038054600181019091557fc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b0180546001600160a01b038087166001600160a01b03199283168117909355600083815260026020526040808220805493891693909416831790935591519092917f19dd93282347163d78a1e91a8278207144203887305da5724821079ffcc138ad91a350505050565b33610866610577565b6001600160a01b03161461088c5760405162461bcd60e51b815260040161029e90611754565b6001600160a01b0381166108f15760405162461bcd60e51b815260206004820152602660248201527f4f776e61626c653a206e6577206f776e657220697320746865207a65726f206160448201526564647265737360d01b606482015260840161029e565b6102b081611439565b6000826001600160a01b0381166109235760405162461bcd60e51b815260040161029e90611721565b826001600160a01b03811661094a5760405162461bcd60e51b815260040161029e90611721565b600080600061095c8b8b8b8b8b610e0b565b91945092509050600183151514801561099a575060045461099761097f42611489565b61098884611489565b61099291906118ea565b6114f7565b11155b156109a957509350610abb9050565b600080600185151514156109be575082905060015b60005b600354811015610a4857610a0c600382815481106109ef57634e487b7160e01b600052603260045260246000fd5b6000918252602090912001546001600160a01b03168f8d8d610b4a565b909650945060018615151415610a3657610a278260016117a8565b9150610a3385846117a8565b92505b80610a4081611940565b9150506109c1565b5060008111610aa95760405162461bcd60e51b815260206004820152602760248201527f50726963654f7261636c653a206e6f207072696365206665656420697320617660448201526661696c61626c6560c81b606482015260840161029e565b610ab381836117c0565b975050505050505b505095945050505050565b806001600160a01b038116610aed5760405162461bcd60e51b815260040161029e90611721565b6005546040516001600160a01b038085169216907f4a6beeb37b9f482406bcaf6e918424d6a3d27c6e726f2934b56e75e086bd0a7990600090a350600580546001600160a01b0319166001600160a01b0392909216919091179055565b6000806001600160a01b03841660011415610c89576001600160a01b0380871660009081526002602090815260408083205481516317fcb39b60e01b81529151939416926317fcb39b92600480840193919291829003018186803b158015610bb157600080fd5b505afa158015610bc5573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610be9919061156d565b6001600160a01b038089166000908152600260205260409081902054905163df71d7f360e01b8152929350169063df71d7f390610c2e90899085908990600401611789565b604080518083038186803b158015610c4557600080fd5b505afa158015610c59573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610c7d9190611613565b9093509150610e029050565b6001600160a01b03831660011415610d6a576001600160a01b0380871660009081526002602090815260408083205481516317fcb39b60e01b81529151939416926317fcb39b92600480840193919291829003018186803b158015610ced57600080fd5b505afa158015610d01573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610d25919061156d565b6001600160a01b038089166000908152600260205260409081902054905163df71d7f360e01b8152929350169063df71d7f390610c2e90899089908690600401611789565b6001600160a01b038087166000908152600260205260409081902054905163df71d7f360e01b815291169063df71d7f390610dad90889088908890600401611789565b604080518083038186803b158015610dc457600080fd5b505afa158015610dd8573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610dfc9190611613565b90925090505b94509492505050565b60008080808080806001600160a01b03891660011415610e34576005546001600160a01b031698505b6001600160a01b03881660011415610e55576005546001600160a01b031697505b6001600160a01b038981166000908152600160205260409020541615801590610e9757506001600160a01b038881166000908152600160205260409020541615155b156112b857610ea4611510565b6001600160a01b03808b1660009081526001602052604090819020548151633fabe5a360e21b8152915192169163feaf968c9160048082019260a092909190829003018186803b158015610ef757600080fd5b505afa158015610f0b573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610f2f91906116b1565b508452509350839050610f945760405162461bcd60e51b815260206004820152602760248201527f50726963654f7261636c653a207a65726f20707269636520666f7220696e70756044820152663a103a37b5b2b760c91b606482015260840161029e565b6001600160a01b03808b1660009081526001602090815260409182902054825163313ce56760e01b8152925193169263313ce567926004808201939291829003018186803b158015610fe557600080fd5b505afa158015610ff9573d6000803e3d6000fd5b505050506040513d601f19601f8201168201806040525081019061101d9190611700565b6001600160a01b03808b1660009081526001602052604090819020548151633fabe5a360e21b8152915160ff9490941698509091169163feaf968c9160048082019260a092909190829003018186803b15801561107957600080fd5b505afa15801561108d573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906110b191906116b1565b50602085015250925082905061111a5760405162461bcd60e51b815260206004820152602860248201527f50726963654f7261636c653a207a65726f20707269636520666f72206f7574706044820152673aba103a37b5b2b760c11b606482015260840161029e565b6001600160a01b03808a1660009081526001602090815260409182902054825163313ce56760e01b8152925193169263313ce567926004808201939291829003018186803b15801561116b57600080fd5b505afa15801561117f573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906111a39190611700565b60ff1693506111b38b60016117a8565b6111be90600a611823565b8d6111ca86600a611823565b6111d490866118cb565b6111de91906118cb565b6111e891906118cb565b96506111f585600a611823565b6111ff90836118cb565b61120a8d60016117a8565b61121590600a611823565b61121f91906118cb565b61122990886117c0565b60045490975061124c6112438360005b6020020151611489565b61098842611489565b111561126d5760008782825b602002015197509750975050505050506112c8565b60045461127e611243836001611239565b111561128f57600087826001611258565b60208101518151116112a25780516112a8565b60208101515b95506001975050505050506112c8565b6000806000965096509650505050505b955095509592505050565b60045460408051918252602082018390527f61fcc6fa9ba5b3ab5f72b919bc6324527ede6b5d73e12c63bbc4d4e0352e7002910160405180910390a16000811161135a5760405162461bcd60e51b8152602060048201526018602482015277141c9a58d953dc9858db194e881e995c9bc8185b5bdd5b9d60421b604482015260640161029e565b600455565b6003805461136f90600190611929565b8154811061138d57634e487b7160e01b600052603260045260246000fd5b600091825260209091200154600380546001600160a01b0390921691839081106113c757634e487b7160e01b600052603260045260246000fd5b9060005260206000200160006101000a8154816001600160a01b0302191690836001600160a01b03160217905550600380548061141457634e487b7160e01b600052603160045260246000fd5b600082815260209020810160001990810180546001600160a01b031916905501905550565b600080546001600160a01b038381166001600160a01b0319831681178455604051919092169283917f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09190a35050565b60006001600160ff1b038211156114f35760405162461bcd60e51b815260206004820152602860248201527f53616665436173743a2076616c756520646f65736e27742066697420696e2061604482015267371034b73a191a9b60c11b606482015260840161029e565b5090565b6000808212156114f35761150a8261195b565b92915050565b60405180604001604052806002906020820280368337509192915050565b80516001600160501b038116811461154557600080fd5b919050565b60006020828403121561155b578081fd5b81356115668161198b565b9392505050565b60006020828403121561157e578081fd5b81516115668161198b565b6000806040838503121561159b578081fd5b82356115a68161198b565b915060208301356115b68161198b565b809150509250929050565b600080600080608085870312156115d6578182fd5b84356115e18161198b565b93506020850135925060408501356115f88161198b565b915060608501356116088161198b565b939692955090935050565b60008060408385031215611625578182fd5b82518015158114611634578283fd5b6020939093015192949293505050565b600060208284031215611655578081fd5b5035919050565b600080600080600060a08688031215611673578081fd5b85359450602086013593506040860135925060608601356116938161198b565b915060808601356116a38161198b565b809150509295509295909350565b600080600080600060a086880312156116c8578081fd5b6116d18661152e565b94506020860151935060408601519250606086015191506116f46080870161152e565b90509295509295909350565b600060208284031215611711578081fd5b815160ff81168114611566578182fd5b60208082526019908201527850726963654f7261636c653a207a65726f206164647265737360381b604082015260600190565b6020808252818101527f4f776e61626c653a2063616c6c6572206973206e6f7420746865206f776e6572604082015260600190565b9283526001600160a01b03918216602084015216604082015260600190565b600082198211156117bb576117bb611975565b500190565b6000826117db57634e487b7160e01b81526012600452602481fd5b500490565b600181815b8085111561181b57816000190482111561180157611801611975565b8085161561180e57918102915b93841c93908002906117e5565b509250929050565b600061156683836000826118395750600161150a565b816118465750600061150a565b816001811461185c576002811461186657611882565b600191505061150a565b60ff84111561187757611877611975565b50506001821b61150a565b5060208310610133831016604e8410600b84101617156118a5575081810a61150a565b6118af83836117e0565b80600019048211156118c3576118c3611975565b029392505050565b60008160001904831182151516156118e5576118e5611975565b500290565b60008083128015600160ff1b85018412161561190857611908611975565b6001600160ff1b038401831381161561192357611923611975565b50500390565b60008282101561193b5761193b611975565b500390565b600060001982141561195457611954611975565b5060010190565b6000600160ff1b82141561197157611971611975565b0390565b634e487b7160e01b600052601160045260246000fd5b6001600160a01b03811681146102b057600080fdfea26469706673582212201b4c2ef3a668a4fa90d6321e1297f2858236a0d26ccb43ad516b32249754801364736f6c63430008040033",
+  "devdoc": {
+    "kind": "dev",
+    "methods": {
+      "addExchangeConnector(address,address)": {
+        "details": "Only owner can call this",
+        "params": {
+          "_exchangeConnector": "New exchange connector contract address",
+          "_exchangeRouter": "Exchange router contract address"
+        }
+      },
+      "constructor": {
+        "params": {
+          "_acceptableDelay": "Maximum acceptable delay for data given from Chainlink",
+          "_oracleNativeToken": "The address of the chainlink oracle for the native token"
+        }
+      },
+      "equivalentOutputAmount(uint256,uint256,uint256,address,address)": {
+        "details": "The oracle is ChainLink",
+        "params": {
+          "_inputAmount": "Amount of the input token",
+          "_inputDecimals": "Number of input token decimals",
+          "_inputToken": "Address of the input token",
+          "_outputDecimals": "Number of output token decimals",
+          "_outputToken": "Address of output token"
+        },
+        "returns": {
+          "_outputAmount": "          Amount of the output token"
+        }
+      },
+      "equivalentOutputAmountByAverage(uint256,uint256,uint256,address,address)": {
+        "details": "First we try to get the output amount from Chain Link                                 Only if the price is not available or out-of-date we will                                  reach to exchange routers",
+        "params": {
+          "_inputAmount": "Amount of the input token",
+          "_inputDecimals": "Number of input token decimals",
+          "_inputToken": "Address of the input token",
+          "_outputDecimals": "Number of output token decimals",
+          "_outputToken": "Address of output token"
+        },
+        "returns": {
+          "_0": "Amount of the output token"
+        }
+      },
+      "equivalentOutputAmountFromExchange(address,uint256,address,address)": {
+        "details": "Input amount should have the same decimal as input token                                 Output amount has the same decimal as output token",
+        "params": {
+          "_exchangeRouter": "Address of the exchange router we are reading the price from",
+          "_inputAmount": "Amount of the input token",
+          "_inputToken": "Address of the input token",
+          "_outputToken": "Address of output token"
+        },
+        "returns": {
+          "_0": "Amount of the output token"
+        }
+      },
+      "equivalentOutputAmountFromOracle(uint256,uint256,uint256,address,address)": {
+        "details": "The oracle is ChainLink",
+        "params": {
+          "_inputAmount": "Amount of the input token",
+          "_inputDecimals": "Number of input token decimals",
+          "_inputToken": "Address of the input token",
+          "_outputDecimals": "Number of output token decimals",
+          "_outputToken": "Address of output token"
+        },
+        "returns": {
+          "_outputAmount": "          Amount of the output token"
+        }
+      },
+      "owner()": {
+        "details": "Returns the address of the current owner."
+      },
+      "removeExchangeConnector(uint256)": {
+        "details": "Only owner can call this",
+        "params": {
+          "_exchangeRouterIndex": "The exchange router index in the list"
+        }
+      },
+      "renounceOwnership()": {
+        "details": "Leaves the contract without owner. It will not be possible to call `onlyOwner` functions anymore. Can only be called by the current owner. NOTE: Renouncing ownership will leave the contract without an owner, thereby removing any functionality that is only available to the owner."
+      },
+      "setAcceptableDelay(uint256)": {
+        "details": "If oracle data has not been updated for a while,                              we will get data from exchange routers",
+        "params": {
+          "_acceptableDelay": "Maximum acceptable delay (in seconds)"
+        }
+      },
+      "setPriceProxy(address,address)": {
+        "details": "Only owner can call this                             This price proxy gives exchange rate of _token/USD                             Setting price proxy address to zero means that we remove it",
+        "params": {
+          "_priceProxyAddress": "The address of the proxy price",
+          "_token": "Address of the token"
+        }
+      },
+      "transferOwnership(address)": {
+        "details": "Transfers ownership of the contract to a new account (`newOwner`). Can only be called by the current owner."
+      }
+    },
+    "stateVariables": {
+      "ChainlinkPriceProxy": {
+        "params": {
+          "_token": "Address of the token"
+        },
+        "return": "Address of price proxy contract",
+        "returns": {
+          "_0": "Address of price proxy contract"
+        }
+      },
+      "exchangeConnector": {
+        "params": {
+          "_exchangeRouter": "Address of exchange router"
+        },
+        "return": "Address of exchange connector",
+        "returns": {
+          "_0": "Address of exchange connector"
+        }
+      },
+      "exchangeRoutersList": {
+        "params": {
+          "_index": "Index of exchange router"
+        },
+        "return": "Address of exchange router",
+        "returns": {
+          "_0": "Address of exchange router"
+        }
+      }
+    },
+    "version": 1
+  },
+  "userdoc": {
+    "events": {
+      "ExchangeConnectorAdded(address,address)": {
+        "notice": "Emits when new exchange router is added"
+      },
+      "ExchangeConnectorRemoved(address)": {
+        "notice": "Emits when an exchange router is removed"
+      },
+      "NewAcceptableDelay(uint256,uint256)": {
+        "notice": "Emits when changes made to acceptable delay"
+      },
+      "NewOracleNativeToken(address,address)": {
+        "notice": "Emits when changes made to oracle native token"
+      },
+      "SetPriceProxy(address,address)": {
+        "notice": "Emits when a price proxy is set"
+      }
+    },
+    "kind": "user",
+    "methods": {
+      "ChainlinkPriceProxy(address)": {
+        "notice": "Gives USD price proxy address for a token"
+      },
+      "addExchangeConnector(address,address)": {
+        "notice": "Adds an exchange connector"
+      },
+      "constructor": {
+        "notice": "This contract is used to get relative price of two assets from Chainlink and available exchanges "
+      },
+      "equivalentOutputAmount(uint256,uint256,uint256,address,address)": {
+        "notice": "Finds amount of output token that has equal value                                 as the input amount of the input token"
+      },
+      "equivalentOutputAmountByAverage(uint256,uint256,uint256,address,address)": {
+        "notice": "Finds amount of output token that has same value as the input amount of the input token"
+      },
+      "equivalentOutputAmountFromExchange(address,uint256,address,address)": {
+        "notice": "Finds amount of output token that has same value                                  as the input amount of the input token"
+      },
+      "equivalentOutputAmountFromOracle(uint256,uint256,uint256,address,address)": {
+        "notice": "Finds amount of output token that has equal value                                 as the input amount of the input token"
+      },
+      "exchangeConnector(address)": {
+        "notice": "Gives exchange connector address for an exchange router"
+      },
+      "exchangeRoutersList(uint256)": {
+        "notice": "Gives address of an exchange router from exchange routers list"
+      },
+      "getExchangeRoutersListLength()": {
+        "notice": "Getter for the length of exchange router list"
+      },
+      "removeExchangeConnector(uint256)": {
+        "notice": "Removes an exchange connector"
+      },
+      "setAcceptableDelay(uint256)": {
+        "notice": "Sets acceptable delay for oracle responses"
+      },
+      "setOracleNativeToken(address)": {
+        "notice": "Sets oracle native token address"
+      },
+      "setPriceProxy(address,address)": {
+        "notice": "Sets a USD price proxy for a token"
+      }
+    },
+    "version": 1
+  },
+  "storageLayout": {
+    "storage": [
+      {
+        "astId": 1853,
+        "contract": "contracts/oracle/PriceOracle.sol:PriceOracle",
+        "label": "_owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 16641,
+        "contract": "contracts/oracle/PriceOracle.sol:PriceOracle",
+        "label": "ChainlinkPriceProxy",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_mapping(t_address,t_address)"
+      },
+      {
+        "astId": 16646,
+        "contract": "contracts/oracle/PriceOracle.sol:PriceOracle",
+        "label": "exchangeConnector",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_mapping(t_address,t_address)"
+      },
+      {
+        "astId": 16650,
+        "contract": "contracts/oracle/PriceOracle.sol:PriceOracle",
+        "label": "exchangeRoutersList",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_array(t_address)dyn_storage"
+      },
+      {
+        "astId": 16653,
+        "contract": "contracts/oracle/PriceOracle.sol:PriceOracle",
+        "label": "acceptableDelay",
+        "offset": 0,
+        "slot": "4",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 16662,
+        "contract": "contracts/oracle/PriceOracle.sol:PriceOracle",
+        "label": "oracleNativeToken",
+        "offset": 0,
+        "slot": "5",
+        "type": "t_address"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_array(t_address)dyn_storage": {
+        "base": "t_address",
+        "encoding": "dynamic_array",
+        "label": "address[]",
+        "numberOfBytes": "32"
+      },
+      "t_mapping(t_address,t_address)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => address)",
+        "numberOfBytes": "32",
+        "value": "t_address"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      }
+    }
+  }
+}

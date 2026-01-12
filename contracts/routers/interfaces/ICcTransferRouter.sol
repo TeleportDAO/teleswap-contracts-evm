@@ -1,48 +1,70 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.0 <0.8.4;
+pragma solidity >=0.8.0 <=0.8.4;
 
 interface ICcTransferRouter {
+
+	// Structures
+
+	/// @notice                    Structure for recording cross-chain transfer requests
+	/// @param inputAmount         Amount of locked BTC on source chain
+	/// @param recipientAddress    Address of transfer recipient
+	/// @param fee                 Amount of fee that is paid to Teleporter (tx, relayer and teleporter fees)
+	/// @param speed               Speed of the request (normal or instant)
+	/// @param isUsed              Whether the tx is used or not
+	struct ccTransferRequest {
+		uint inputAmount;
+		address recipientAddress;
+		uint fee;
+		uint256 speed;
+		bool isUsed;
+	}
+
+	/// @notice Structure for passing tx and its inclusion proof
+    /// @param version of the transaction containing the user request
+    /// @param vin Inputs of the transaction containing the user request
+    /// @param vout Outputs of the transaction containing the user request
+    /// @param locktime of the transaction containing the user request
+    /// @param blockNumber Height of the block containing the user request
+    /// @param intermediateNodes Merkle inclusion proof for transaction containing the user request
+    /// @param index of transaction containing the user request in the block
+    struct TxAndProof {
+        bytes4 version;
+        bytes vin;
+        bytes vout;
+        bytes4 locktime;
+        uint256 blockNumber;
+        bytes intermediateNodes;
+        uint index;
+    }
 
 	// Events
 
 	/// @notice                    	Emits when a cc transfer request gets done
+	/// @param bitcoinTxId                	The transaction ID of request on Bitcoin 
 	/// @param lockerLockingScript  Locking script of the locker on bitcoin network
-	/// @param lockerScriptType     Script type of the locker locking script
 	/// @param lockerTargetAddress  Address of the locker on EVM based target chain
 	/// @param user                	Address of teleBTC recipient
-	/// @param inputAmount         	Amount of tokens that user locked on source chain
-	/// @param receivedAmount      	Amount of tokens that user receives
-	/// @param speed               	Speed of the request (normal or instant)
 	/// @param teleporter          	Address of teleporter who submitted the request
-	/// @param teleporterFee       	Amount of fee that is paid to Teleporter (tx, relayer and teleporter fees)
-	/// @param relayFee       	   	Amount of fee that is paid to relay contract
-	/// @param protocolFee         	Amount of fee that is paid to the protocol
-	/// @param bitcoinTxId         	Address of teleporter who submitted the request
-	event CCTransfer(
+	/// @param amounts             	[inputAmount, teleBTCAmount]
+	/// @param fees                	[network fee, locker fee, protocol fee, third party fee]
+	/// @param thirdPartyId        	Id of third party
+	/// @param destinationChainId  	Id of the destination chain
+	event NewWrap(
+		bytes32 bitcoinTxId,
 		bytes indexed lockerLockingScript,
-		uint lockerScriptType,
 		address lockerTargetAddress,
 		address indexed user,
-		uint inputAmount,
-		uint receivedAmount,
-		uint indexed speed,
 		address teleporter,
-		uint teleporterFee,
-		uint relayFee,
-		uint protocolFee,
-		bytes32 bitcoinTxId
+		uint[2] amounts,
+		uint[4] fees,
+		uint thirdPartyId,
+		uint destinationChainId
 	);
 
 	/// @notice                     Emits when changes made to relay address
     event NewRelay (
         address oldRelay, 
         address newRelay
-    );
-
-    /// @notice                     Emits when changes made to InstantRouter address
-    event NewInstantRouter (
-        address oldInstantRouter, 
-        address newInstantRouter
     );
 
     /// @notice                     Emits when changes made to Lockers address
@@ -69,9 +91,40 @@ interface ICcTransferRouter {
         address newTreasury
     );
 
+	/// @notice                     Emits when changes made to third party address
+	event NewThirdPartyAddress(
+		uint thirdPartyId,
+		address oldThirdPartyAddress, 
+		address newThirdPartyAddress
+	);
+
+	/// @notice                     Emits when changes made to third party fee
+	event NewThirdPartyFee(
+		uint thirdPartyId,
+		uint oldThirdPartyFee, 
+		uint newThirdPartyFee
+	);
+
 	// Read-only functions
 
 	function isRequestUsed(bytes32 _txId) external view returns (bool);
+	
+	function startingBlockNumber() external view returns (uint);
+	
+	function protocolPercentageFee() external view returns (uint);
+	
+	function chainId() external view returns (uint);
+
+	function appId() external view returns (uint);
+
+	function relay() external view returns (address);
+
+
+	function lockers() external view returns (address);
+
+	function teleBTC() external view returns (address);
+
+	function treasury() external view returns (address);
 
 	// State-changing functions
 
@@ -79,7 +132,7 @@ interface ICcTransferRouter {
 
 	function setRelay(address _relay) external;
 
-	function setInstantRouter(address _instantRouter) external;
+	function setTeleporter(address _teleporter, bool _isTeleporter) external;
 
 	function setLockers(address _lockers) external;
 
@@ -89,17 +142,16 @@ interface ICcTransferRouter {
 
 	function setProtocolPercentageFee(uint _protocolPercentageFee) external;
 
-	function ccTransfer(
-		// Bitcoin tx
-		bytes4 _version,
-		bytes memory _vin,
-		bytes calldata _vout,
-		bytes4 _locktime,
-		// Bitcoin block number
-		uint256 _blockNumber,
-		// Merkle proof
-		bytes calldata _intermediateNodes,
-		uint _index,
+	function setLockerPercentageFee(uint256 _lockerPercentageFee) external;
+
+	function setThirdPartyAddress(uint _thirdPartyId, address _thirdPartyAddress) external;
+
+	function setThirdPartyFee(uint _thirdPartyId, uint _thirdPartyFee) external;
+
+	function setRewardDistributor(address _rewardDistributor) external;
+
+	function wrap(
+		TxAndProof memory _txAndProof,
 		bytes calldata _lockerLockingScript
 	) external payable returns (bool);
 }

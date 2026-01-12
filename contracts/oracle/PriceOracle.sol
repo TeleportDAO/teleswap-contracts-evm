@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.0 <0.8.4;
+pragma solidity >=0.8.0 <=0.8.4;
 
 import "./interfaces/IPriceOracle.sol";
-import "../connectors/interfaces/IExchangeConnector.sol";
+import "../dex_connectors/interfaces/IDexConnector.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
@@ -268,24 +268,24 @@ contract PriceOracle is IPriceOracle, Ownable {
     ) private view returns (bool _result, uint _outputAmount) {
         if (_inputToken == NATIVE_TOKEN) {
             // note: different exchanges may use different wrapped native token versions
-            address wrappedNativeToken = IExchangeConnector(exchangeConnector[_exchangeRouter]).wrappedNativeToken();
+            address wrappedNativeToken = IDexConnector(exchangeConnector[_exchangeRouter]).wrappedNativeToken();
 
-            (_result, _outputAmount) = IExchangeConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(
+            (_result, _outputAmount) = IDexConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(
                 _inputAmount,
                 wrappedNativeToken,
                 _outputToken
             );
         } else if (_outputToken == NATIVE_TOKEN) {
             // note: different exchanges may use different wrapped native token versions
-            address wrappedNativeToken = IExchangeConnector(exchangeConnector[_exchangeRouter]).wrappedNativeToken();
+            address wrappedNativeToken = IDexConnector(exchangeConnector[_exchangeRouter]).wrappedNativeToken();
 
-            (_result, _outputAmount) = IExchangeConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(
+            (_result, _outputAmount) = IDexConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(
                 _inputAmount,
                 _inputToken,
                 wrappedNativeToken
             );
         } else {
-            (_result, _outputAmount) = IExchangeConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(
+            (_result, _outputAmount) = IDexConnector(exchangeConnector[_exchangeRouter]).getOutputAmount(
                 _inputAmount,
                 _inputToken,
                 _outputToken

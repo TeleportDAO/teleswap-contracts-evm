@@ -1,0 +1,8 @@
+{
+	"proxy_admin": "0x4565aE5c90E52c058410fC7f05711fFed9b6e62a",
+	"polygon_teleBTC": "0x3BF668Fe1ec79a84cA8481CEAD5dbb30d61cC685",
+	"source_chain_id": 8453,
+	"target_chain_id": 137,
+	"wrapped_native_token": "0x4200000000000000000000000000000000000006",
+	"across": "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64"
+}

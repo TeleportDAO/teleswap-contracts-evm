@@ -1,5 +1,6 @@
 const CC_REQUESTS = require('./test_fixtures/ccTransferRequests.json');
 require('dotenv').config({path:"../../.env"});
+import "@nomicfoundation/hardhat-chai-matchers";
 
 import { expect } from "chai";
 import { deployments, ethers } from "hardhat";
@@ -11,21 +12,24 @@ import { Address } from "hardhat-deploy/types";
 import { CcTransferRouterProxy__factory } from "../src/types/factories/CcTransferRouterProxy__factory";
 import { CcTransferRouterLogic__factory } from "../src/types/factories/CcTransferRouterLogic__factory";
 
-import { LockersProxy__factory } from "../src/types/factories/LockersProxy__factory";
-import { LockersLogic__factory } from "../src/types/factories/LockersLogic__factory";
-import { LockersLogicLibraryAddresses } from "../src/types/factories/LockersLogic__factory";
+import { LockersManagerProxy__factory } from "../src/types/factories/LockersManagerProxy__factory";
+import { LockersManagerLogic__factory } from "../src/types/factories/LockersManagerLogic__factory";
+import { LockersManagerLogicLibraryAddresses } from "../src/types/factories/LockersManagerLogic__factory";
 
-import { LockersLib } from "../src/types/LockersLib";
-import { LockersLib__factory } from "../src/types/factories/LockersLib__factory";
+import { LockersManagerLib } from "../src/types/LockersManagerLib";
+import { LockersManagerLib__factory } from "../src/types/factories/LockersManagerLib__factory";
 
-import { TeleBTC } from "../src/types/TeleBTC";
-import { TeleBTC__factory } from "../src/types/factories/TeleBTC__factory";
+import { TeleBTCLogic } from "../src/types/TeleBTCLogic";
+import { TeleBTCLogic__factory } from "../src/types/factories/TeleBTCLogic__factory";
+import { TeleBTCProxy } from "../src/types/TeleBTCProxy";
+import { TeleBTCProxy__factory } from "../src/types/factories/TeleBTCProxy__factory";
 import { ERC20 } from "../src/types/ERC20";
 import { Erc20__factory } from "../src/types/factories/Erc20__factory";
 
 import { takeSnapshot, revertProvider } from "./block_utils";
 
-describe("CcTransferRouter", async () => {
+describe("CcTransferRouter", async function() {
+    this.bail(true); // Stop on first failure
 
     // Constants
     let ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -38,6 +42,12 @@ describe("CcTransferRouter", async () => {
     const PRICE_WITH_DISCOUNT_RATIO = 9500; // Means %95
     const STARTING_BLOCK_NUMBER = 1;
     const TREASURY = "0x0000000000000000000000000000000000000002";
+    const NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001"
+    const NATIVE_TOKEN_DECIMAL = 18;
+    const ONE_HOUNDRED_PERCENT = 10000;
+
+    let THIRD_PARTY_PERCENTAGE_FEE = 10 // means 0.1%
+    let THIRD_PARTY_ADDRESS = "0x0000000000000000000000000000000000000200"
 
     let LOCKER1_LOCKING_SCRIPT = '0xa9144062c8aeed4f81c2d73ff854a2957021191e20b687';
 
@@ -60,14 +70,13 @@ describe("CcTransferRouter", async () => {
 
     // Contracts
     let ccTransferRouter: Contract;
-    let teleBTC: TeleBTC;
+    let teleBTC: TeleBTCLogic;
     let teleportDAOToken: ERC20;
-    let lockersLib: LockersLib;
+    let lockersLib: LockersManagerLib;
     let lockers: Contract;
 
     // Mock contracts
     let mockBitcoinRelay: MockContract;
-    let mockInstantRouter: MockContract;
     let mockPriceOracle: MockContract;
 
     let beginning: any;
@@ -120,6 +129,7 @@ describe("CcTransferRouter", async () => {
         await ccTransferRouter.initialize(
             STARTING_BLOCK_NUMBER,
             PROTOCOL_PERCENTAGE_FEE,
+            LOCKER_PERCENTAGE_FEE,
             CHAIN_ID,
             APP_ID,
             mockBitcoinRelay.address,
@@ -128,9 +138,22 @@ describe("CcTransferRouter", async () => {
             TREASURY
         );
 
-        // Deploys teleBTC contract
-        const teleBTCFactory = new TeleBTC__factory(deployer);
-        teleBTC = await teleBTCFactory.deploy(
+        // Deploys contracts
+        const teleBTCLogicFactory = new TeleBTCLogic__factory(deployer);
+        const teleBTCLogic = await teleBTCLogicFactory.deploy();
+
+        const teleBTCProxyFactory = new TeleBTCProxy__factory(deployer);
+        const teleBTCProxy = await teleBTCProxyFactory.deploy(
+            teleBTCLogic.address,    
+            proxyAdminAddress,
+            "0x"
+        );
+        
+        teleBTC = await teleBTCLogic.attach(
+            teleBTCProxy.address
+        );
+
+        await teleBTC.initialize(
             "TeleportDAO-BTC",
             "teleBTC"
         );
@@ -148,17 +171,17 @@ describe("CcTransferRouter", async () => {
         await teleBTC.addBurner(lockers.address)
 
         await ccTransferRouter.setLockers(lockers.address)
-        await ccTransferRouter.setInstantRouter(deployerAddress)
+        await ccTransferRouter.setSpecialTeleporter(deployerAddress)
     });
 
-    const deployLockersLib = async (
+    const deployLockersManagerLib = async (
         _signer?: Signer
-    ): Promise<LockersLib> => {
-        const LockersLibFactory = new LockersLib__factory(
+    ): Promise<LockersManagerLib> => {
+        const LockersManagerLibFactory = new LockersManagerLib__factory(
             _signer || deployer
         );
 
-        const lockersLib = await LockersLibFactory.deploy(
+        const lockersLib = await LockersManagerLibFactory.deploy(
         );
 
         return lockersLib;
@@ -168,16 +191,16 @@ describe("CcTransferRouter", async () => {
         _signer?: Signer
     ): Promise<Contract> => {
 
-        lockersLib = await deployLockersLib()
+        lockersLib = await deployLockersManagerLib()
 
-        let linkLibraryAddresses: LockersLogicLibraryAddresses;
+        let linkLibraryAddresses: LockersManagerLogicLibraryAddresses;
 
         linkLibraryAddresses = {
-            "contracts/libraries/LockersLib.sol:LockersLib": lockersLib.address,
+            "contracts/lockersManager/LockersManagerLib.sol:LockersManagerLib": lockersLib.address,
         };
 
         // Deploys lockers logic
-        const lockersLogicFactory = new LockersLogic__factory(
+        const lockersLogicFactory = new LockersManagerLogic__factory(
             linkLibraryAddresses,
             _signer || deployer
         );
@@ -185,7 +208,7 @@ describe("CcTransferRouter", async () => {
         const lockersLogic = await lockersLogicFactory.deploy();
 
         // Deploys lockers proxy
-        const lockersProxyFactory = new LockersProxy__factory(
+        const lockersProxyFactory = new LockersManagerProxy__factory(
             _signer || deployer
         );
         const lockersProxy = await lockersProxyFactory.deploy(
@@ -201,17 +224,16 @@ describe("CcTransferRouter", async () => {
         // Initializes lockers proxy
         await lockers.initialize(
             teleBTC.address,
-            teleportDAOToken.address,
-            ONE_ADDRESS,
             mockPriceOracle.address,
             ONE_ADDRESS,
             0,
-            minRequiredTNTLockedAmount,
             collateralRatio,
             liquidationRatio,
             LOCKER_PERCENTAGE_FEE,
             PRICE_WITH_DISCOUNT_RATIO
         )
+
+        await lockers.setTST(teleportDAOToken.address)
 
         return lockers;
     };
@@ -225,7 +247,7 @@ describe("CcTransferRouter", async () => {
 
         const teleportDAOToken = await erc20Factory.deploy(
             "TelePortDAOToken",
-            "TDT",
+            "TST",
             teleportTokenInitialSupply
         );
 
@@ -238,21 +260,20 @@ describe("CcTransferRouter", async () => {
     }
 
     async function addLockerToLockers(): Promise<void> {
+        let lockerlocker = lockers.connect(locker);
 
-        let lockerLocker = lockers.connect(locker)
-
-        await lockerLocker.requestToBecomeLocker(
-            // LOCKER1, // Public key of locker
-            LOCKER1_LOCKING_SCRIPT, // Public key hash of locker
+        await lockers.addCollateralToken(NATIVE_TOKEN_ADDRESS, NATIVE_TOKEN_DECIMAL)
+        await lockerlocker.requestToBecomeLocker(
+            LOCKER1_LOCKING_SCRIPT,
+            NATIVE_TOKEN_ADDRESS,
             0,
             minRequiredTNTLockedAmount,
             LOCKER_RESCUE_SCRIPT_P2PKH_TYPE,
             LOCKER_RESCUE_SCRIPT_P2PKH,
-            {value: minRequiredTNTLockedAmount}
-        )
+            { value: minRequiredTNTLockedAmount }
+        );
 
-        // Deployer (owner of lockers) adds locker to lockers
-        await lockers.addLocker(lockerAddress)
+        await lockers.addLocker(lockerAddress, ONE_HOUNDRED_PERCENT);
     }
 
     async function checkFees(
@@ -322,29 +343,28 @@ describe("CcTransferRouter", async () => {
 
             // Checks that ccTransfer is executed successfully
             await expect(
-                await ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer.version,
-                    CC_REQUESTS.normalCCTransfer.vin,
-                    CC_REQUESTS.normalCCTransfer.vout,
-                    CC_REQUESTS.normalCCTransfer.locktime,
-                    CC_REQUESTS.normalCCTransfer.blockNumber,
-                    CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer.index,
+                await ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
                     LOCKER1_LOCKING_SCRIPT,
                 )
-            ).to.emit(ccTransferRouter, "CCTransfer").withArgs(
+            ).to.emit(ccTransferRouter, "NewWrap").withArgs(
+                CC_REQUESTS.normalCCTransfer.txId,
                 LOCKER1_LOCKING_SCRIPT,
-                0,
                 lockerAddress,
                 CC_REQUESTS.normalCCTransfer.recipientAddress,
-                CC_REQUESTS.normalCCTransfer.bitcoinAmount,
-                receivedAmount,
-                CC_REQUESTS.normalCCTransfer.speed,
                 deployerAddress,
-                teleporterFee,
+                [CC_REQUESTS.normalCCTransfer.bitcoinAmount, receivedAmount],
+                [teleporterFee, lockerFee, protocolFee, 0],
                 0,
-                protocolFee,
-                CC_REQUESTS.normalCCTransfer.txId
+                CC_REQUESTS.normalCCTransfer.chainId
             );
 
             await checkFees(
@@ -388,33 +408,32 @@ describe("CcTransferRouter", async () => {
 
             // Checks that ccTransfer is executed successfully
 
-            let tx = await ccTransferRouter.ccTransfer(
-                CC_REQUESTS.normalCCTransfer.version,
-                CC_REQUESTS.normalCCTransfer.vin,
-                CC_REQUESTS.normalCCTransfer.vout,
-                CC_REQUESTS.normalCCTransfer.locktime,
-                CC_REQUESTS.normalCCTransfer.blockNumber,
-                CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                CC_REQUESTS.normalCCTransfer.index,
+            let tx = await ccTransferRouter.wrap(
+                {
+                    version: CC_REQUESTS.normalCCTransfer.version,
+                    vin: CC_REQUESTS.normalCCTransfer.vin,
+                    vout: CC_REQUESTS.normalCCTransfer.vout,
+                    locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                    blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                    intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                    index: CC_REQUESTS.normalCCTransfer.index
+                },
                 LOCKER1_LOCKING_SCRIPT,
                 {value: msgValue}
             );
 
             await expect(
                 tx
-            ).to.emit(ccTransferRouter, 'CCTransfer').withArgs(
+            ).to.emit(ccTransferRouter, "NewWrap").withArgs(
+                CC_REQUESTS.normalCCTransfer.txId,
                 LOCKER1_LOCKING_SCRIPT,
-                0,
                 lockerAddress,
                 CC_REQUESTS.normalCCTransfer.recipientAddress,
-                CC_REQUESTS.normalCCTransfer.bitcoinAmount,
-                receivedAmount,
-                CC_REQUESTS.normalCCTransfer.speed,
                 deployerAddress,
-                teleporterFee,
+                [CC_REQUESTS.normalCCTransfer.bitcoinAmount, receivedAmount],
+                [teleporterFee, lockerFee, protocolFee, 0],
                 0,
-                protocolFee,
-                CC_REQUESTS.normalCCTransfer.txId
+                CC_REQUESTS.normalCCTransfer.chainId
             );
 
             // Finds tx cost
@@ -463,29 +482,28 @@ describe("CcTransferRouter", async () => {
 
             // Checks that ccTransfer is executed successfully
             await expect(
-                await ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer_zeroFee.version,
-                    CC_REQUESTS.normalCCTransfer_zeroFee.vin,
-                    CC_REQUESTS.normalCCTransfer_zeroFee.vout,
-                    CC_REQUESTS.normalCCTransfer_zeroFee.locktime,
-                    CC_REQUESTS.normalCCTransfer_zeroFee.blockNumber,
-                    CC_REQUESTS.normalCCTransfer_zeroFee.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer_zeroFee.index,
+                await ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_zeroFee.version,
+                        vin: CC_REQUESTS.normalCCTransfer_zeroFee.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_zeroFee.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_zeroFee.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_zeroFee.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_zeroFee.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_zeroFee.index
+                    },
                     LOCKER1_LOCKING_SCRIPT,
                 )
-            ).to.emit(ccTransferRouter, 'CCTransfer').withArgs(
+            ).to.emit(ccTransferRouter, "NewWrap").withArgs(
+                CC_REQUESTS.normalCCTransfer_zeroFee.txId,
                 LOCKER1_LOCKING_SCRIPT,
-                0,
                 lockerAddress,
                 CC_REQUESTS.normalCCTransfer_zeroFee.recipientAddress,
-                CC_REQUESTS.normalCCTransfer_zeroFee.bitcoinAmount,
-                receivedAmount,
-                CC_REQUESTS.normalCCTransfer_zeroFee.speed,
                 deployerAddress,
-                teleporterFee,
+                [CC_REQUESTS.normalCCTransfer_zeroFee.bitcoinAmount, receivedAmount],
+                [teleporterFee, lockerFee, protocolFee, 0],
                 0,
-                protocolFee,
-                CC_REQUESTS.normalCCTransfer_zeroFee.txId
+                CC_REQUESTS.normalCCTransfer_zeroFee.chainId
             );
 
             await checkFees(
@@ -522,29 +540,28 @@ describe("CcTransferRouter", async () => {
 
             // Checks that ccTransfer is executed successfully
             await expect(
-                await ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer.version,
-                    CC_REQUESTS.normalCCTransfer.vin,
-                    CC_REQUESTS.normalCCTransfer.vout,
-                    CC_REQUESTS.normalCCTransfer.locktime,
-                    CC_REQUESTS.normalCCTransfer.blockNumber,
-                    CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer.index,
+                await ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
                     LOCKER1_LOCKING_SCRIPT,
                 )
-            ).to.emit(ccTransferRouter, 'CCTransfer').withArgs(
+            ).to.emit(ccTransferRouter, "NewWrap").withArgs(
+                CC_REQUESTS.normalCCTransfer.txId,
                 LOCKER1_LOCKING_SCRIPT,
-                0,
                 lockerAddress,
                 CC_REQUESTS.normalCCTransfer.recipientAddress,
-                CC_REQUESTS.normalCCTransfer.bitcoinAmount,
-                receivedAmount,
-                CC_REQUESTS.normalCCTransfer.speed,
                 deployerAddress,
-                teleporterFee,
+                [CC_REQUESTS.normalCCTransfer.bitcoinAmount, receivedAmount],
+                [teleporterFee, lockerFee, protocolFee, 0],
                 0,
-                protocolFee,
-                CC_REQUESTS.normalCCTransfer.txId
+                CC_REQUESTS.normalCCTransfer.chainId
             );
 
             await checkFees(
@@ -560,14 +577,16 @@ describe("CcTransferRouter", async () => {
 
         it("Reverts since request belongs to an old block header", async function () {
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer.version,
-                    CC_REQUESTS.normalCCTransfer.vin,
-                    CC_REQUESTS.normalCCTransfer.vout,
-                    CC_REQUESTS.normalCCTransfer.locktime,
-                    STARTING_BLOCK_NUMBER - 1,
-                    CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: STARTING_BLOCK_NUMBER - 1,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: request is too old");
@@ -576,26 +595,30 @@ describe("CcTransferRouter", async () => {
         it("Reverts if the request has been used before", async function () {
             await setRelayReturn(true);
 
-            await ccTransferRouter.ccTransfer(
-                CC_REQUESTS.normalCCTransfer.version,
-                CC_REQUESTS.normalCCTransfer.vin,
-                CC_REQUESTS.normalCCTransfer.vout,
-                CC_REQUESTS.normalCCTransfer.locktime,
-                CC_REQUESTS.normalCCTransfer.blockNumber,
-                CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                CC_REQUESTS.normalCCTransfer.index,
+            await ccTransferRouter.wrap(
+                {
+                    version: CC_REQUESTS.normalCCTransfer.version,
+                    vin: CC_REQUESTS.normalCCTransfer.vin,
+                    vout: CC_REQUESTS.normalCCTransfer.vout,
+                    locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                    blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                    intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                    index: CC_REQUESTS.normalCCTransfer.index
+                },
                 LOCKER1_LOCKING_SCRIPT,
             );
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer.version,
-                    CC_REQUESTS.normalCCTransfer.vin,
-                    CC_REQUESTS.normalCCTransfer.vout,
-                    CC_REQUESTS.normalCCTransfer.locktime,
-                    CC_REQUESTS.normalCCTransfer.blockNumber,
-                    CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: request has been used before");
@@ -607,14 +630,16 @@ describe("CcTransferRouter", async () => {
             await setRelayReturn(false);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer.version,
-                    CC_REQUESTS.normalCCTransfer.vin,
-                    CC_REQUESTS.normalCCTransfer.vout,
-                    CC_REQUESTS.normalCCTransfer.locktime,
-                    CC_REQUESTS.normalCCTransfer.blockNumber,
-                    CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: transaction has not been finalized yet");
@@ -624,31 +649,35 @@ describe("CcTransferRouter", async () => {
             await setRelayReturn(true);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer_invalidFee.version,
-                    CC_REQUESTS.normalCCTransfer_invalidFee.vin,
-                    CC_REQUESTS.normalCCTransfer_invalidFee.vout,
-                    CC_REQUESTS.normalCCTransfer_invalidFee.locktime,
-                    CC_REQUESTS.normalCCTransfer_invalidFee.blockNumber,
-                    CC_REQUESTS.normalCCTransfer_invalidFee.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer_invalidFee.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidFee.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidFee.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidFee.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_invalidFee.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidFee.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidFee.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidFee.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
-            ).to.revertedWith("CCTransferRouter: percentage fee is out of range");
+            ).to.revertedWith("CCTransferRouter: wrong fee");
         })
 
         it("Reverts if chain id is invalid", async function () {
             await setRelayReturn(true);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer_invalidChainId.version,
-                    CC_REQUESTS.normalCCTransfer_invalidChainId.vin,
-                    CC_REQUESTS.normalCCTransfer_invalidChainId.vout,
-                    CC_REQUESTS.normalCCTransfer_invalidChainId.locktime,
-                    CC_REQUESTS.normalCCTransfer_invalidChainId.blockNumber,
-                    CC_REQUESTS.normalCCTransfer_invalidChainId.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer_invalidChainId.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidChainId.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidChainId.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidChainId.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_invalidChainId.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidChainId.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidChainId.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidChainId.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: chain id is not correct");
@@ -658,14 +687,16 @@ describe("CcTransferRouter", async () => {
             await setRelayReturn(true);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer_invalidAppId.version,
-                    CC_REQUESTS.normalCCTransfer_invalidAppId.vin,
-                    CC_REQUESTS.normalCCTransfer_invalidAppId.vout,
-                    CC_REQUESTS.normalCCTransfer_invalidAppId.locktime,
-                    CC_REQUESTS.normalCCTransfer_invalidAppId.blockNumber,
-                    CC_REQUESTS.normalCCTransfer_invalidAppId.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer_invalidAppId.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidAppId.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidAppId.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidAppId.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_invalidAppId.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidAppId.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidAppId.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidAppId.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: app id is not correct");
@@ -675,14 +706,16 @@ describe("CcTransferRouter", async () => {
             await setRelayReturn(true);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.version,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.vin,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.vout,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.locktime,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.blockNumber,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidLocker.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidLocker.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidLocker.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_invalidLocker.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidLocker.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidLocker.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidLocker.index
+                    },
                     CC_REQUESTS.normalCCTransfer_invalidLocker.desiredRecipient
                 )
             ).to.revertedWith("CCTransferRouter: no locker with the given locking script exists");
@@ -692,124 +725,116 @@ describe("CcTransferRouter", async () => {
             await setRelayReturn(true);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.version,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.vin,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.vout,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.locktime,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.blockNumber,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer_invalidLocker.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidLocker.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidLocker.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidLocker.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_invalidLocker.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidLocker.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidLocker.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidLocker.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: input amount is zero");
+        })
+
+        it("Reverts if data length is wrong", async function () {
+            await setRelayReturn(true);
+
+            await expect(
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidLength.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidLength.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidLength.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_invalidLength.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidLength.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidLength.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidLength.index
+                    },
+                    LOCKER1_LOCKING_SCRIPT
+                )
+            ).to.revertedWith("CCTransferRouter: invalid len");
         })
 
         it("Reverts if speed is wrong", async function () {
             await setRelayReturn(true);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer_invalidSpeed.version,
-                    CC_REQUESTS.normalCCTransfer_invalidSpeed.vin,
-                    CC_REQUESTS.normalCCTransfer_invalidSpeed.vout,
-                    CC_REQUESTS.normalCCTransfer_invalidSpeed.locktime,
-                    CC_REQUESTS.normalCCTransfer_invalidSpeed.blockNumber,
-                    CC_REQUESTS.normalCCTransfer_invalidSpeed.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer_invalidSpeed.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidSpeed.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidSpeed.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidSpeed.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_invalidSpeed.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidSpeed.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidSpeed.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidSpeed.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: speed is out of range");
         })
 
+        it("Reverts if locktime is not zero", async function () {
+            await setRelayReturn(true);
+
+            await expect(
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_invalidSpeed.version,
+                        vin: CC_REQUESTS.normalCCTransfer_invalidSpeed.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_invalidSpeed.vout,
+                        locktime: "0x10000000",
+                        blockNumber: CC_REQUESTS.normalCCTransfer_invalidSpeed.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_invalidSpeed.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_invalidSpeed.index
+                    },
+                    LOCKER1_LOCKING_SCRIPT
+                )
+            ).to.revertedWith("CCTransferRouter: lock time is non -zero");
+        })
+
+        it("only special teleporter can wrap", async function () {
+            await setRelayReturn(true);
+
+            await expect(
+                ccTransferRouter.connect(signer1).wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
+                    LOCKER1_LOCKING_SCRIPT
+                )
+            ).to.revertedWith("CCTransferRouter: invalid sender");
+        })
+
         it("Reverts if msg.value is lower than relay fee", async function () {
             await setRelayReturn(true);
             await mockBitcoinRelay.mock.getBlockHeaderFee.returns(1); // Sets fee of using relay
-
+            //TODO fix chain id
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer.version,
-                    CC_REQUESTS.normalCCTransfer.vin,
-                    CC_REQUESTS.normalCCTransfer.vout,
-                    CC_REQUESTS.normalCCTransfer.locktime,
-                    CC_REQUESTS.normalCCTransfer.blockNumber,
-                    CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: paid fee is not sufficient");
         })
-
-        // it("Mints teleBTC for instant cc transfer request", async function () {
-        //     let prevSupply = await teleBTC.totalSupply();
-        //     // Mocks relay to return true after checking tx proof
-        //     await setRelayReturn(true);
-
-        //     // Calculates fees
-        //     let lockerFee = Math.floor(
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount*LOCKER_PERCENTAGE_FEE/10000
-        //     );
-        //     let teleporterFee = Math.floor(
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount*CC_REQUESTS.normalCCTransfer.teleporterFee/10000
-        //     );
-        //     let protocolFee = Math.floor(
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount*PROTOCOL_PERCENTAGE_FEE/10000
-        //     );
-
-        //     let receivedAmount = CC_REQUESTS.instantCCTransfer.bitcoinAmount - lockerFee - teleporterFee - protocolFee;
-
-        //     await expect(
-        //         await ccTransferRouter.ccTransfer(
-        //             CC_REQUESTS.instantCCTransfer.version,
-        //             CC_REQUESTS.instantCCTransfer.vin,
-        //             CC_REQUESTS.instantCCTransfer.vout,
-        //             CC_REQUESTS.instantCCTransfer.locktime,
-        //             CC_REQUESTS.instantCCTransfer.blockNumber,
-        //             CC_REQUESTS.instantCCTransfer.intermediateNodes,
-        //             CC_REQUESTS.instantCCTransfer.index,
-        //             LOCKER1_LOCKING_SCRIPT
-        //         )
-        //     ).to.emit(ccTransferRouter, 'CCTransfer').withArgs(
-        //         LOCKER1_LOCKING_SCRIPT,
-        //         0,
-        //         lockerAddress,
-        //         CC_REQUESTS.instantCCTransfer.recipientAddress,
-        //         CC_REQUESTS.instantCCTransfer.bitcoinAmount,
-        //         receivedAmount,
-        //         CC_REQUESTS.instantCCTransfer.speed,
-        //         deployerAddress,
-        //         teleporterFee,
-        //         0,
-        //         protocolFee,
-        //         CC_REQUESTS.instantCCTransfer.txId
-        //     );
-
-        //     // Checks that enough teleBTC allowance has been given to instant router
-        //     expect(
-        //         await teleBTC.allowance(ccTransferRouter.address, mockInstantRouter.address)
-        //     ).to.equal(receivedAmount);
-
-        //     // Checks that enough teleBTC has been minted for teleporter
-        //     expect(
-        //         await teleBTC.balanceOf(await deployer.getAddress())
-        //     ).to.equal(teleporterFee);
-
-        //     // Checks that correct amount of teleBTC has been minted for protocol
-        //     expect(
-        //         await teleBTC.balanceOf(TREASURY)
-        //     ).to.equal(protocolFee);
-
-        //     // Checks that correct amount of teleBTC has been minted for locker
-        //     expect(
-        //         await teleBTC.balanceOf(lockerAddress)
-        //     ).to.equal(lockerFee);
-
-        //     // Checks that correct amount of teleBTC has been minted in total
-        //     expect(
-        //         await teleBTC.totalSupply()
-        //     ).to.equal(prevSupply + CC_REQUESTS.instantCCTransfer.bitcoinAmount)
-        // })
-
     });
 
     describe("#isRequestUsed", async () => {
@@ -831,14 +856,16 @@ describe("CcTransferRouter", async () => {
         it("Reverts since the request has been executed before", async function () {
             await setRelayReturn(true);
             await addLockerToLockers();
-            await ccTransferRouter.ccTransfer(
-                CC_REQUESTS.normalCCTransfer.version,
-                CC_REQUESTS.normalCCTransfer.vin,
-                CC_REQUESTS.normalCCTransfer.vout,
-                CC_REQUESTS.normalCCTransfer.locktime,
-                CC_REQUESTS.normalCCTransfer.blockNumber,
-                CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                CC_REQUESTS.normalCCTransfer.index,
+            await ccTransferRouter.wrap(
+                {
+                    version: CC_REQUESTS.normalCCTransfer.version,
+                    vin: CC_REQUESTS.normalCCTransfer.vin,
+                    vout: CC_REQUESTS.normalCCTransfer.vout,
+                    locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                    blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                    intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                    index: CC_REQUESTS.normalCCTransfer.index
+                },
                 LOCKER1_LOCKING_SCRIPT
             );
 
@@ -847,14 +874,16 @@ describe("CcTransferRouter", async () => {
             ).to.equal(true);
 
             await expect(
-                ccTransferRouter.ccTransfer(
-                    CC_REQUESTS.normalCCTransfer.version,
-                    CC_REQUESTS.normalCCTransfer.vin,
-                    CC_REQUESTS.normalCCTransfer.vout,
-                    CC_REQUESTS.normalCCTransfer.locktime,
-                    CC_REQUESTS.normalCCTransfer.blockNumber,
-                    CC_REQUESTS.normalCCTransfer.intermediateNodes,
-                    CC_REQUESTS.normalCCTransfer.index,
+                ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer.version,
+                        vin: CC_REQUESTS.normalCCTransfer.vin,
+                        vout: CC_REQUESTS.normalCCTransfer.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer.index
+                    },
                     LOCKER1_LOCKING_SCRIPT
                 )
             ).to.revertedWith("CCTransferRouter: request has been used before");
@@ -897,7 +926,7 @@ describe("CcTransferRouter", async () => {
             ).to.revertedWith("CCTransferRouter: protocol fee is out of range");
         })
 
-        it("Sets relay, lockers, instant router, teleBTC and treasury", async function () {
+        it("Sets relay, lockers, special teleporter, teleBTC and treasury", async function () {
             await expect(
                 await ccTransferRouter.setRelay(ONE_ADDRESS)
             ).to.emit(
@@ -924,17 +953,17 @@ describe("CcTransferRouter", async () => {
             ).to.be.revertedWith("Ownable: caller is not the owner")
 
             await expect(
-                await ccTransferRouter.setInstantRouter(ONE_ADDRESS)
+                await ccTransferRouter.setSpecialTeleporter(ONE_ADDRESS)
             ).to.emit(
-                ccTransferRouter, "NewInstantRouter"
+                ccTransferRouter, "NewSpecialTeleporter"
             ).withArgs(deployerAddress, ONE_ADDRESS);
 
             expect(
-                await ccTransferRouter.instantRouter()
+                await ccTransferRouter.specialTeleporter()
             ).to.equal(ONE_ADDRESS);
 
             await expect(
-                ccTransferRouter.connect(signer1).setInstantRouter(ONE_ADDRESS)
+                ccTransferRouter.connect(signer1).setSpecialTeleporter(ONE_ADDRESS)
             ).to.be.revertedWith("Ownable: caller is not the owner")
 
             await expect(
@@ -977,23 +1006,248 @@ describe("CcTransferRouter", async () => {
         it("Reverts since given address is zero", async function () {
             await expect(
                 ccTransferRouter.setRelay(ZERO_ADDRESS)
-            ).to.revertedWith("CCTransferRouter: address is zero");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
                 ccTransferRouter.setLockers(ZERO_ADDRESS)
-            ).to.revertedWith("CCTransferRouter: address is zero");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
-                ccTransferRouter.setInstantRouter(ZERO_ADDRESS)
-            ).to.revertedWith("CCTransferRouter: address is zero");
+                ccTransferRouter.setSpecialTeleporter(ZERO_ADDRESS)
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
                 ccTransferRouter.setTeleBTC(ZERO_ADDRESS)
-            ).to.revertedWith("CCTransferRouter: address is zero");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
 
             await expect(
                 ccTransferRouter.setTreasury(ZERO_ADDRESS)
-            ).to.revertedWith("CCTransferRouter: address is zero");
+            ).to.revertedWithCustomError(ccTransferRouter, "ZeroAddress");
+        })
+
+        
+        it("Reverts since new starting block number is less than what is set before", async function () {
+            await expect(
+                ccTransferRouter.setStartingBlockNumber(STARTING_BLOCK_NUMBER - 1)
+            ).to.revertedWith("CCTransferRouter: low startingBlockNumber");
+        })
+
+        it("Only owner can set functions", async function () {
+            await expect(
+                ccTransferRouter.connect(signer1).setStartingBlockNumber(1)
+            ).to.be.revertedWith("Ownable: caller is not the owner")
+
+            await expect(
+                ccTransferRouter.connect(signer1).setProtocolPercentageFee(1)
+            ).to.be.revertedWith("Ownable: caller is not the owner")
+
+            await expect(
+                ccTransferRouter.connect(signer1).setRelay(ONE_ADDRESS)
+            ).to.be.revertedWith("Ownable: caller is not the owner")
+
+        })
+    });
+
+    describe("#third party", async () => {
+
+        beforeEach(async () => {
+            beginning = await takeSnapshot(signer1.provider);
+            await ccTransferRouter.setThirdPartyAddress(1, THIRD_PARTY_ADDRESS)
+            await ccTransferRouter.setThirdPartyFee(1, THIRD_PARTY_PERCENTAGE_FEE)
+            await addLockerToLockers();
+        });
+
+        afterEach(async () => {
+            await revertProvider(signer1.provider, beginning);
+        });
+
+        it("Third party gets its fee", async function () {
+            let prevSupply = await teleBTC.totalSupply();
+            // Mocks relay to return true after checking tx proof
+            await setRelayReturn(true);
+
+            // Calculates fees
+            let lockerFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*LOCKER_PERCENTAGE_FEE/10000
+            );
+            let teleporterFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*CC_REQUESTS.normalCCTransfer_withThirdParty.teleporterFee/10000
+            );
+            let protocolFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*PROTOCOL_PERCENTAGE_FEE/10000
+            );
+            let thirdPartyFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*THIRD_PARTY_PERCENTAGE_FEE/10000
+            );   
+
+            // Calculates amount that user should have received
+            let receivedAmount = CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount - lockerFee - teleporterFee - protocolFee - thirdPartyFee;
+
+            await expect(
+                await teleBTC.balanceOf(THIRD_PARTY_ADDRESS)
+            ).to.equal(0)
+
+            // Checks that ccTransfer is executed successfully
+            await expect(
+                await ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_withThirdParty.version,
+                        vin: CC_REQUESTS.normalCCTransfer_withThirdParty.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_withThirdParty.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_withThirdParty.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_withThirdParty.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_withThirdParty.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_withThirdParty.index
+                    },
+                    LOCKER1_LOCKING_SCRIPT,
+                )
+            ).to.emit(ccTransferRouter, "NewWrap").withArgs(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.txId,
+                LOCKER1_LOCKING_SCRIPT,
+                lockerAddress,
+                CC_REQUESTS.normalCCTransfer_withThirdParty.recipientAddress,
+                deployerAddress,
+                [CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount, receivedAmount],
+                [teleporterFee, lockerFee, protocolFee, thirdPartyFee],
+                1,
+                CC_REQUESTS.normalCCTransfer_withThirdParty.chainId
+            );
+
+            await expect(
+                await teleBTC.balanceOf(THIRD_PARTY_ADDRESS)
+            ).to.equal(thirdPartyFee)
+        })
+
+        it("can change third party address", async function () {
+            let NEW_THIRD_PARTY_ADDRESS = "0x0000000000000000000000000000000000000201"
+            await ccTransferRouter.setThirdPartyAddress(1, NEW_THIRD_PARTY_ADDRESS)
+
+            let prevSupply = await teleBTC.totalSupply();
+            // Mocks relay to return true after checking tx proof
+            await setRelayReturn(true);
+
+            // Calculates fees
+            let lockerFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*LOCKER_PERCENTAGE_FEE/10000
+            );
+            let teleporterFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*CC_REQUESTS.normalCCTransfer_withThirdParty.teleporterFee/10000
+            );
+            let protocolFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*PROTOCOL_PERCENTAGE_FEE/10000
+            );
+            let thirdPartyFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*THIRD_PARTY_PERCENTAGE_FEE/10000
+            );   
+
+            // Calculates amount that user should have received
+            let receivedAmount = CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount - lockerFee - teleporterFee - protocolFee - thirdPartyFee;
+
+            await expect(
+                await teleBTC.balanceOf(NEW_THIRD_PARTY_ADDRESS)
+            ).to.equal(0)
+
+            // Checks that ccTransfer is executed successfully
+            await expect(
+                await ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_withThirdParty.version,
+                        vin: CC_REQUESTS.normalCCTransfer_withThirdParty.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_withThirdParty.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_withThirdParty.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_withThirdParty.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_withThirdParty.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_withThirdParty.index
+                    },
+                    LOCKER1_LOCKING_SCRIPT,
+                )
+            ).to.emit(ccTransferRouter, "NewWrap").withArgs(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.txId,
+                LOCKER1_LOCKING_SCRIPT,
+                lockerAddress,
+                CC_REQUESTS.normalCCTransfer_withThirdParty.recipientAddress,
+                deployerAddress,
+                [CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount, receivedAmount],
+                [teleporterFee, lockerFee, protocolFee, thirdPartyFee],
+                1,
+                CC_REQUESTS.normalCCTransfer_withThirdParty.chainId
+            );
+
+            await expect(
+                await teleBTC.balanceOf(NEW_THIRD_PARTY_ADDRESS)
+            ).to.equal(thirdPartyFee)
+        })
+
+        it("can change third party fee", async function () {
+            let NEW_THIRD_PARTY_PERCENTAGE_FEE = 50
+            await ccTransferRouter.setThirdPartyFee(1, NEW_THIRD_PARTY_PERCENTAGE_FEE)
+
+            let prevSupply = await teleBTC.totalSupply();
+            // Mocks relay to return true after checking tx proof
+            await setRelayReturn(true);
+
+            // Calculates fees
+            let lockerFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*LOCKER_PERCENTAGE_FEE/10000
+            );
+            let teleporterFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*CC_REQUESTS.normalCCTransfer_withThirdParty.teleporterFee/10000
+            );
+            let protocolFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*PROTOCOL_PERCENTAGE_FEE/10000
+            );
+            let thirdPartyFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount*NEW_THIRD_PARTY_PERCENTAGE_FEE/10000
+            );   
+
+            // Calculates amount that user should have received
+            let receivedAmount = CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount - lockerFee - teleporterFee - protocolFee - thirdPartyFee;
+
+            await expect(
+                await teleBTC.balanceOf(THIRD_PARTY_ADDRESS)
+            ).to.equal(0)
+
+            // Checks that ccTransfer is executed successfully
+            await expect(
+                await ccTransferRouter.wrap(
+                    {
+                        version: CC_REQUESTS.normalCCTransfer_withThirdParty.version,
+                        vin: CC_REQUESTS.normalCCTransfer_withThirdParty.vin,
+                        vout: CC_REQUESTS.normalCCTransfer_withThirdParty.vout,
+                        locktime: CC_REQUESTS.normalCCTransfer_withThirdParty.locktime,
+                        blockNumber: CC_REQUESTS.normalCCTransfer_withThirdParty.blockNumber,
+                        intermediateNodes: CC_REQUESTS.normalCCTransfer_withThirdParty.intermediateNodes,
+                        index: CC_REQUESTS.normalCCTransfer_withThirdParty.index
+                    },
+                    LOCKER1_LOCKING_SCRIPT,
+                )
+            ).to.emit(ccTransferRouter, "NewWrap").withArgs(
+                CC_REQUESTS.normalCCTransfer_withThirdParty.txId,
+                LOCKER1_LOCKING_SCRIPT,
+                lockerAddress,
+                CC_REQUESTS.normalCCTransfer_withThirdParty.recipientAddress,
+                deployerAddress,
+                [CC_REQUESTS.normalCCTransfer_withThirdParty.bitcoinAmount, receivedAmount],
+                [teleporterFee, lockerFee, protocolFee, thirdPartyFee],
+                1,
+                CC_REQUESTS.normalCCTransfer_withThirdParty.chainId
+            );
+
+            await expect(
+                await teleBTC.balanceOf(THIRD_PARTY_ADDRESS)
+            ).to.equal(thirdPartyFee)
+        })
+
+        it("only owner can set third party address", async function () {
+            await expect(
+                ccTransferRouter.connect(signer1).setThirdPartyAddress(1, THIRD_PARTY_ADDRESS)
+            ).to.be.revertedWith("Ownable: caller is not the owner")
+        })
+
+        it("only owner can set third party fee", async function () {
+            await expect(
+                ccTransferRouter.connect(signer1).setThirdPartyFee(1, THIRD_PARTY_PERCENTAGE_FEE)
+            ).to.be.revertedWith("Ownable: caller is not the owner")
         })
 
     });

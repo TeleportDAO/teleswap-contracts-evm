@@ -1,11 +1,12 @@
 import { expect } from "chai";
-import { deployments, ethers } from "hardhat";
-import { Signer, BigNumber } from "ethers";
+import { ethers } from "hardhat";
+import { Signer } from "ethers";
 import { Address } from "hardhat-deploy/types";
-import {TeleBTC} from "../src/types/TeleBTC";
-import {TeleBTC__factory} from "../src/types/factories/TeleBTC__factory";
+import { TeleBTCLogic } from "../src/types/TeleBTCLogic";
+import { TeleBTCLogic__factory } from "../src/types/factories/TeleBTCLogic__factory";
+import { TeleBTCProxy } from "../src/types/TeleBTCProxy";
+import { TeleBTCProxy__factory } from "../src/types/factories/TeleBTCProxy__factory";
 import { network } from "hardhat"
-
 
 describe("TeleBTC", async () => {
 
@@ -19,27 +20,43 @@ describe("TeleBTC", async () => {
     let deployer: Signer;
     let signer1: Signer;
     let signer2: Signer;
+    let proxyAdmin: Signer;
     let deployerAddress: Address;
     let signer1Address: Address;
     let signer2Address: Address;
+    let proxyAdminAddress: Address;
 
     // Contracts
-    let teleBTC: TeleBTC;
+    let teleBTC: TeleBTCLogic;
 
 
     before(async () => {
         // Sets accounts
-        [deployer, signer1, signer2] = await ethers.getSigners();
+        [deployer, signer1, signer2, proxyAdmin] = await ethers.getSigners();
         deployerAddress = await deployer.getAddress();
         signer1Address = await signer1.getAddress();
         signer2Address = await signer2.getAddress();
+        proxyAdminAddress = await proxyAdmin.getAddress();
 
-        const teleBTCFactory = new TeleBTC__factory(deployer);
-        teleBTC = await teleBTCFactory.deploy(
-            "teleBTC",
-            "TBTC"
+        // Deploys teleBTC contract
+        const teleBTCLogicFactory = new TeleBTCLogic__factory(deployer);
+        const teleBTCLogic = await teleBTCLogicFactory.deploy();
+
+        const teleBTCProxyFactory = new TeleBTCProxy__factory(deployer);
+        const teleBTCProxy = await teleBTCProxyFactory.deploy(
+            teleBTCLogic.address,    
+            proxyAdminAddress,
+            "0x"
+        );
+        
+        teleBTC = await teleBTCLogic.attach(
+            teleBTCProxy.address
         );
 
+        await teleBTC.initialize(
+            "TeleportDAO-BTC",
+            "teleBTC"
+        );
 
         await teleBTC.addMinter(signer2Address)
     });
@@ -156,7 +173,7 @@ describe("TeleBTC", async () => {
             await expect(
                 teleBTC.addMinter(ZERO_ADDRESS)
             ).to.be.revertedWith(
-                "TeleBTC: account is the zero address"
+                "TeleBTC: zero address"
             )
         })
 
@@ -164,7 +181,7 @@ describe("TeleBTC", async () => {
             await expect(
                 teleBTC.addMinter(ONE_ADDRESS)
             ).to.be.revertedWith(
-                "TeleBTC: account already has role"
+                "TeleBTC: already has role"
             )
         })
 
@@ -192,7 +209,7 @@ describe("TeleBTC", async () => {
             await expect(
                 teleBTC.addBurner(ZERO_ADDRESS)
             ).to.be.revertedWith(
-                "TeleBTC: account is the zero address"
+                "TeleBTC: zero address"
             )
         })
 
@@ -200,7 +217,7 @@ describe("TeleBTC", async () => {
             await expect(
                 teleBTC.addBurner(ONE_ADDRESS)
             ).to.be.revertedWith(
-                "TeleBTC: account already has role"
+                "TeleBTC: already has role"
             )
         })
 

@@ -1,41 +1,48 @@
 {
-  "proxy_admin": "0x4565aE5c90E52c058410fC7f05711fFed9b6e62a",
-  "bitcoin_network": "mainnet",
-  "bitcoin_relay": "0xFcd688999c25D5493571543137cEeb4fbDb44D02",
-  "starting_block_height": "819636",
-  "uniswap_v2_router_02": "0x10ED43C718714eb63d5aA57B78B54704E256024E",
-  "uniswap_v2_factory": "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73",
-  "wrapped_native_token": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
-  "usdt_token": "0x55d398326f99059fF775485246999027B3197955",
-  "usdc_token": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
-  "acceptable_delay": 177,
-  "chain_id": 56,
-  "treasury": "0x24004f4f6d2e75b039d528e82b100355d8b1d4fb",
-  "chain_link_oracles": {
-    "native_token_usd": "0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE",
-    "btc_usd": "0x264990fbd0A4796A3E3d8E37C4d5F87a3aCa5Ebf",
-    "usdt_usd": "0xB97Ad0E74fa7d920791E90258A6E2085088b4320",
-    "usdc_usd": "0x51597f405303C4377E36123cBc172b13269EA163"
+	"proxy_admin": "0x4565aE5c90E52c058410fC7f05711fFed9b6e62a",
+	"TST": "0x93AD6C8B3a273E0B4aeeBd6CF03422C885217D3B",
+	"bitcoin_network": "mainnet",
+	"bitcoin_relay": "0xFcd688999c25D5493571543137cEeb4fbDb44D02",
+	"starting_block_height": "819636",
+	"uniswap_v2_router_02": "0x10ED43C718714eb63d5aA57B78B54704E256024E",
+	"uniswap_v2_factory": "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73",
+	"uniswap_v3_swap_router": "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
+	"uniswap_v3_quoter": "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997",
+	"wrapped_native_token": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+	"usdt_token": "0x55d398326f99059fF775485246999027B3197955",
+	"usdc_token": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+	"acceptable_delay": 177,
+	"chain_id": 56,
+	"treasury": "0x24004f4f6d2e75b039d528e82b100355d8b1d4fb",
+	"across": "0x4e8E101924eDE233C13e2D8622DC8aED2872d505",
+    "locker": "0x8Fc53b97ebe52AdCB30b2e0ec1813C7C92814FCC",
+    "lockerLockingScript": "0xa91440059ea01abcf5ead734dec719932b75f487691687",
+    "lockerScriptType": "3",
+    "teleporter": "0x5e994261eC94Ca332bCdee6720CcEad75b9Ec4a6",
+	"chain_link_oracles": {
+		"native_token_usd": "0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE",
+		"btc_usd": "0x264990fbd0A4796A3E3d8E37C4d5F87a3aCa5Ebf",
+		"usdt_usd": "0xB97Ad0E74fa7d920791E90258A6E2085088b4320",
+		"usdc_usd": "0x51597f405303C4377E36123cBc172b13269EA163"
   },
-  "cc_transfer": {
-    "app_id": 1,
-    "protocol_percentage_fee": 5
-  },
-  "cc_exchange": {
-    "app_id": 10,
-    "protocol_percentage_fee": 5
-  },
-  "cc_burn": {
-    "protocol_percentage_fee": 5,
-    "slasher_percentage_reward": 500,
-    "bitcoin_fee": 15000,
-    "transfer_deadLine": 720
-  },
-  "lockers_contract": {
-    "minimum_native_locked_amount": "10000000000000000000",
-    "collateral_ratio": 1000,
-    "liquidation_ratio": 500,
-    "locker_percentage_fee": 15,
-    "price_with_discount_ratio": 9000
-  }
+	"cc_transfer": {
+		"app_id": 1,
+		"protocol_percentage_fee": 5
+	},
+	"cc_exchange": {
+		"app_id": 10,
+		"protocol_percentage_fee": 5
+	},
+	"cc_burn": {
+		"protocol_percentage_fee": 5,
+		"slasher_percentage_reward": 500,
+		"bitcoin_fee": 15000,
+		"transfer_deadLine": 720
+	},
+	"lockers_contract": {
+		"collateral_ratio": 1000,
+		"liquidation_ratio": 500,
+		"locker_percentage_fee": 15,
+		"price_with_discount_ratio": 9000
+	}
 }

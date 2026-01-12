@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {_FullMath} from "./_FullMath.sol";
+import {_FixedPoint96} from "./_FixedPoint96.sol";
+import {_SafeCast} from "./_SafeCast.sol";
+
+/// @notice Provides functions for computing liquidity amounts from token amounts and prices
+library _LiquidityAmounts {
+    using _SafeCast for uint256;
+
+    /// @notice Computes the amount of liquidity received for a given amount of token0 and price range
+    /// @dev Calculates amount0 * (sqrt(upper) * sqrt(lower)) / (sqrt(upper) - sqrt(lower))
+    /// @param sqrtPriceAX96 A sqrt price representing the first tick boundary
+    /// @param sqrtPriceBX96 A sqrt price representing the second tick boundary
+    /// @param amount0 The amount0 being sent in
+    /// @return liquidity The amount of returned liquidity
+    function getLiquidityForAmount0(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint256 amount0)
+        internal
+        pure
+        returns (uint128 liquidity)
+    {
+        unchecked {
+            if (sqrtPriceAX96 > sqrtPriceBX96) (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+            uint256 intermediate = _FullMath.mulDiv(sqrtPriceAX96, sqrtPriceBX96, _FixedPoint96.Q96);
+            return _FullMath.mulDiv(amount0, intermediate, sqrtPriceBX96 - sqrtPriceAX96).toUint128();
+        }
+    }
+
+    /// @notice Computes the amount of liquidity received for a given amount of token1 and price range
+    /// @dev Calculates amount1 / (sqrt(upper) - sqrt(lower)).
+    /// @param sqrtPriceAX96 A sqrt price representing the first tick boundary
+    /// @param sqrtPriceBX96 A sqrt price representing the second tick boundary
+    /// @param amount1 The amount1 being sent in
+    /// @return liquidity The amount of returned liquidity
+    function getLiquidityForAmount1(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint256 amount1)
+        internal
+        pure
+        returns (uint128 liquidity)
+    {
+        unchecked {
+            if (sqrtPriceAX96 > sqrtPriceBX96) (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+            return _FullMath.mulDiv(amount1, _FixedPoint96.Q96, sqrtPriceBX96 - sqrtPriceAX96).toUint128();
+        }
+    }
+
+    /// @notice Computes the maximum amount of liquidity received for a given amount of token0, token1, the current
+    /// pool prices and the prices at the tick boundaries
+    /// @param sqrtPriceX96 A sqrt price representing the current pool prices
+    /// @param sqrtPriceAX96 A sqrt price representing the first tick boundary
+    /// @param sqrtPriceBX96 A sqrt price representing the second tick boundary
+    /// @param amount0 The amount of token0 being sent in
+    /// @param amount1 The amount of token1 being sent in
+    /// @return liquidity The maximum amount of liquidity received
+    function getLiquidityForAmounts(
+        uint160 sqrtPriceX96,
+        uint160 sqrtPriceAX96,
+        uint160 sqrtPriceBX96,
+        uint256 amount0,
+        uint256 amount1
+    ) internal pure returns (uint128 liquidity) {
+        if (sqrtPriceAX96 > sqrtPriceBX96) (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+
+        if (sqrtPriceX96 <= sqrtPriceAX96) {
+            liquidity = getLiquidityForAmount0(sqrtPriceAX96, sqrtPriceBX96, amount0);
+        } else if (sqrtPriceX96 < sqrtPriceBX96) {
+            uint128 liquidity0 = getLiquidityForAmount0(sqrtPriceX96, sqrtPriceBX96, amount0);
+            uint128 liquidity1 = getLiquidityForAmount1(sqrtPriceAX96, sqrtPriceX96, amount1);
+
+            liquidity = liquidity0 < liquidity1 ? liquidity0 : liquidity1;
+        } else {
+            liquidity = getLiquidityForAmount1(sqrtPriceAX96, sqrtPriceBX96, amount1);
+        }
+    }
+
+    /// @notice Computes the token0 and token1 amounts for a given amount of liquidity, the current
+    /// pool prices and the prices at the tick boundaries
+    /// @param sqrtPriceX96 A sqrt price representing the current pool prices
+    /// @param sqrtPriceAX96 A sqrt price representing the first tick boundary
+    /// @param sqrtPriceBX96 A sqrt price representing the second tick boundary
+    /// @param liquidity The liquidity being valued in terms of amount0 and amount1
+    /// @return amount0 The amount of token0
+    /// @return amount1 The amount of token1
+    function getAmountsForLiquidity(
+        uint160 sqrtPriceX96,
+        uint160 sqrtPriceAX96,
+        uint160 sqrtPriceBX96,
+        uint128 liquidity
+    ) internal pure returns (uint256 amount0, uint256 amount1) {
+        if (sqrtPriceAX96 > sqrtPriceBX96) (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+
+        if (sqrtPriceX96 <= sqrtPriceAX96) {
+            amount0 = getAmount0ForLiquidity(sqrtPriceAX96, sqrtPriceBX96, liquidity);
+        } else if (sqrtPriceX96 < sqrtPriceBX96) {
+            amount0 = getAmount0ForLiquidity(sqrtPriceX96, sqrtPriceBX96, liquidity);
+            amount1 = getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceX96, liquidity);
+        } else {
+            amount1 = getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceBX96, liquidity);
+        }
+    }
+
+    /// @notice Computes the amount of token0 for a given amount of liquidity and a price range
+    /// @param sqrtPriceAX96 A sqrt price representing the first tick boundary
+    /// @param sqrtPriceBX96 A sqrt price representing the second tick boundary
+    /// @param liquidity The liquidity being valued in terms of amount0
+    /// @return amount0 The amount of token0
+    function getAmount0ForLiquidity(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint128 liquidity)
+        internal
+        pure
+        returns (uint256 amount0)
+    {
+        unchecked {
+            if (sqrtPriceAX96 > sqrtPriceBX96) (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+            return _FullMath.mulDiv(uint256(liquidity) << _FixedPoint96.RESOLUTION, sqrtPriceBX96 - sqrtPriceAX96, sqrtPriceBX96) / sqrtPriceAX96;
+        }
+    }
+
+    /// @notice Computes the amount of token1 for a given amount of liquidity and a price range
+    /// @param sqrtPriceAX96 A sqrt price representing the first tick boundary
+    /// @param sqrtPriceBX96 A sqrt price representing the second tick boundary
+    /// @param liquidity The liquidity being valued in terms of amount1
+    /// @return amount1 The amount of token1
+    function getAmount1ForLiquidity(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint128 liquidity)
+        internal
+        pure
+        returns (uint256 amount1)
+    {
+        unchecked {
+            if (sqrtPriceAX96 > sqrtPriceBX96) (sqrtPriceAX96, sqrtPriceBX96) = (sqrtPriceBX96, sqrtPriceAX96);
+            return _FullMath.mulDiv(liquidity, sqrtPriceBX96 - sqrtPriceAX96, _FixedPoint96.Q96);
+        }
+    }
+}

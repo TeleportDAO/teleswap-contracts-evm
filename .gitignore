@@ -8,7 +8,6 @@ typechain
 cache
 artifacts
 
-
 contracts.json
 coverage*
 deployments/localhost
@@ -27,3 +26,9 @@ build
 vendor
 
 yarn-error.log
+deployments/optimism/.DS_Store
+deployments/ethereum/.DS_Store
+deployments/bsc/.DS_Store
+deployments/arbitrum/.DS_Store
+deployments/.DS_Store
+deployments/base/.DS_Store
