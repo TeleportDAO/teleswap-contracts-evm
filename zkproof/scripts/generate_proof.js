@@ -81,42 +81,59 @@ function doubleSha256(data) {
 
 /**
  * Generate sample input for testing
+ *
+ * Circuit expects:
+ * - voutData[512]: 512 bits (64 bytes) - PUBLIC
+ * - txHash: single value - PUBLIC
+ * - transaction[1536]: 1536 bits (192 bytes) - PRIVATE
+ *
+ * Constraint: voutData must match transaction at bit offset 560 (byte 70)
  */
 function generateSampleInput() {
     log("\nGenerating sample test input...", 'yellow');
 
-    // Sample Bitcoin transaction (simplified)
-    const sampleTx = Buffer.alloc(256);
-    sampleTx.write("0100000001", 'hex'); // version + input count
+    // Sample Bitcoin transaction (192 bytes = 1536 bits)
+    const sampleTx = Buffer.alloc(192);
 
-    // Sample vout data (64 bytes)
+    // Fill first 70 bytes with version + vin data
+    sampleTx.write("01000000", 'hex');  // version (4 bytes)
+    // Bytes 4-69: vin data (filled with placeholder)
+    for (let i = 4; i < 70; i++) {
+        sampleTx[i] = i % 256;
+    }
+
+    // Sample vout data at bytes 70-133 (64 bytes = 512 bits)
+    // This is what the circuit will verify matches
     const sampleVout = Buffer.alloc(64);
-    sampleVout.write("00e1f50500000000", 'hex'); // value: 1 BTC in satoshis
+    sampleVout.write("00e1f50500000000", 'hex'); // value: 1 BTC in satoshis (8 bytes)
+    sampleVout.write("1976a914", 8, 'hex');      // script prefix (4 bytes)
+    for (let i = 12; i < 64; i++) {
+        sampleVout[i] = (i * 7) % 256;  // Fill rest with pattern
+    }
 
-    // Calculate hashes
+    // Copy vout into transaction at byte 70 (bit 560)
+    sampleVout.copy(sampleTx, 70);
+
+    // Fill remaining bytes 134-191
+    for (let i = 134; i < 192; i++) {
+        sampleTx[i] = (i * 3) % 256;
+    }
+
+    // Calculate tx hash (for reference, not verified in this simplified circuit)
     const txHash = doubleSha256(sampleTx);
-    const voutHash = sha256(sampleVout);
+    const txHashBigInt = BigInt('0x' + txHash.toString('hex'));
 
-    // Sample Merkle root (would come from Bitcoin block header)
-    const merkleRoot = Buffer.from("a".repeat(64), 'hex');
-
-    // Sample Merkle siblings (12 levels for POC)
-    const merkleSiblings = Array(12).fill(0).map(() =>
-        Buffer.from("b".repeat(64), 'hex')
-    );
+    // Convert to bit arrays (big-endian as expected by circuit)
+    const transactionBits = hexToBits(sampleTx.toString('hex'));
+    const voutBits = hexToBits(sampleVout.toString('hex'));
 
     return {
         // Public inputs
-        merkleRoot: BigInt('0x' + merkleRoot.toString('hex')),
-        voutHash: BigInt('0x' + voutHash.toString('hex')),
-        blockNumber: 800000,
+        voutData: voutBits,           // 512 bits
+        txHash: txHashBigInt,         // Pre-computed hash
 
         // Private inputs
-        transaction: padBits(bytesToBitsLE(sampleTx), 2048),
-        voutData: padBits(bytesToBitsLE(sampleVout), 512),
-        voutOffset: 42,
-        merkleSiblings: merkleSiblings.map(s => BigInt('0x' + s.toString('hex'))),
-        merkleIndex: 42
+        transaction: transactionBits  // 1536 bits
     };
 }
 
@@ -124,7 +141,7 @@ function generateSampleInput() {
  * Generate ZK proof
  */
 async function generateProof(input, outputDir = 'zkproof/build') {
-    const wasmPath = path.join(outputDir, 'main.wasm');
+    const wasmPath = path.join(outputDir, 'main_js', 'main.wasm');
     const zkeyPath = path.join(outputDir, 'circuit_final.zkey');
 
     log("\n================================================", 'cyan');
@@ -145,10 +162,9 @@ async function generateProof(input, outputDir = 'zkproof/build') {
     }
 
     log("Input summary:", 'yellow');
-    log(`  Merkle Root: ${input.merkleRoot.toString(16)}`, 'reset');
-    log(`  Vout Hash: ${input.voutHash.toString(16)}`, 'reset');
-    log(`  Block Number: ${input.blockNumber}`, 'reset');
-    log(`  Merkle Index: ${input.merkleIndex}`, 'reset');
+    log(`  Transaction bits: ${input.transaction.length}`, 'reset');
+    log(`  Vout bits: ${input.voutData.length}`, 'reset');
+    log(`  Tx Hash: ${input.txHash.toString(16).substring(0, 32)}...`, 'reset');
     log("", 'reset');
 
     try {

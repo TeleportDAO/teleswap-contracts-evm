@@ -27,8 +27,8 @@ echo -e "${GREEN}✓ snarkjs found: $(snarkjs --version)${NC}"
 echo ""
 
 # Paths (work from circuits directory or project root)
-if [ -d "src" ]; then
-    # Called from circuits directory
+if [ -f "src/main.circom" ]; then
+    # Called from circuits directory (check for actual circom file, not just src/)
     BUILD_DIR="../zkproof/build"
 else
     # Called from project root
@@ -218,7 +218,7 @@ echo "================================================"
 echo ""
 
 echo -e "${YELLOW}Step 3.1: Generating Solidity verifier contract...${NC}"
-if [ -d "src" ]; then
+if [ -f "src/main.circom" ]; then
     VERIFIER_PATH="../contracts/zk/Groth16Verifier.sol"
 else
     VERIFIER_PATH="contracts/zk/Groth16Verifier.sol"

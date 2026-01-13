@@ -3,8 +3,10 @@
 /**
  * Generate Circuit Input from Bitcoin Transaction
  *
+ * MINIMAL MVP VERSION
+ *
  * This script converts the real Bitcoin transaction data into the format
- * required by the ZK circuit for proof generation.
+ * required by the simplified ZK circuit for proof generation.
  */
 
 const fs = require('fs');
@@ -124,11 +126,12 @@ function parseVout(voutHex, index) {
 
 /**
  * Generate circuit input for a specific vout
+ * MINIMAL MVP VERSION - for simplified circuit without SHA256/Merkle
  * @param {number} voutIndex - Which output to prove (0 or 1)
  * @returns {object} Circuit input data
  */
 function generateCircuitInput(voutIndex = 0) {
-  const { transaction, voutDetails, merkleProof, blockNumber, blockHeader } = sampleData;
+  const { transaction, voutDetails, blockHeader } = sampleData;
 
   // Build complete raw transaction
   const rawTx = transaction.version + transaction.vin + transaction.vout + transaction.locktime;
@@ -142,53 +145,56 @@ function generateCircuitInput(voutIndex = 0) {
   console.log(`   Vout size: ${voutParsed.size} bytes`);
   console.log(`   Vout value: ${voutDetails.outputs[voutIndex].valueSatoshis}`);
 
-  // Calculate vout offset in full transaction (in bits)
-  const voutOffsetBytes = transaction.version.length / 2 + transaction.vin.length / 2 + voutParsed.startOffset;
+  // Calculate vout offset in full transaction (in bytes and bits)
+  // version (4) + vin (67) + vout_count (1) + vout[0] position
+  const versionLen = transaction.version.length / 2;
+  const vinLen = transaction.vin.length / 2;
+  const voutOffsetBytes = versionLen + vinLen + voutParsed.startOffset;
   const voutOffsetBits = voutOffsetBytes * 8;
+
   console.log(`   Vout offset: ${voutOffsetBytes} bytes (${voutOffsetBits} bits)`);
+  console.log(`   Circuit expects offset: 70 bytes (560 bits)`);
 
-  // Convert transaction to bit array (padded to 2048 bits for circuit)
-  const transactionBits = hexToBits(rawTx, 2048);
+  if (voutIndex === 0 && voutOffsetBytes === 72) {
+    console.log(`   ✅ Offset matches circuit's fixed offset!`);
+  } else if (voutIndex !== 0) {
+    console.log(`   ⚠️  Warning: MVP circuit only supports vout[0] at offset 72`);
+    console.log(`      For vout[${voutIndex}], actual offset is ${voutOffsetBytes}`);
+  }
 
-  // Convert vout to bit array (padded to 512 bits for circuit)
+  // Convert transaction to bit array (padded to 1536 bits = 192 bytes for MVP circuit)
+  const transactionBits = hexToBits(rawTx, 1536);
+
+  // Convert vout to bit array (padded to 512 bits = 64 bytes for circuit)
   const voutDataBits = hexToBits(voutParsed.data.toString('hex'), 512);
 
-  // Extract Merkle root from block header
-  // Block header structure: version(4) + prevBlock(32) + merkleRoot(32) + time(4) + bits(4) + nonce(4)
-  const blockHeaderBytes = Buffer.from(blockHeader, 'hex');
-  const merkleRootBytes = blockHeaderBytes.slice(36, 68); // Bytes 36-67
-  const merkleRootHex = merkleRootBytes.toString('hex');
-  const merkleRootField = hexToFieldElement(merkleRootHex);
-
-  console.log(`   Merkle root: ${merkleRootHex}`);
-
-  // Convert Merkle siblings to field elements
-  const merkleSiblingsFields = merkleProof.siblings.map(s => hexToFieldElement(s));
-
-  // Verify transaction hash
+  // Calculate transaction hash (for reference - circuit uses this as public input)
   const txHash = doubleSHA256(rawTxBytes);
-  const txHashHex = txHash.reverse().toString('hex'); // Reverse for little-endian
-  console.log(`   Calculated txid: ${txHashHex.toUpperCase()}`);
+  // Use raw hash bytes for the field element (big-endian number)
+  const txHashHex = txHash.toString('hex');
+  const txHashField = hexToFieldElement(txHashHex);
+
+  // Bitcoin displays txids in little-endian (byte-reversed), so reverse for display comparison
+  const txHashDisplayHex = Buffer.from(txHash).reverse().toString('hex').toUpperCase();
+
+  console.log(`   Calculated txid: ${txHashDisplayHex}`);
   console.log(`   Expected txid:   ${transaction.txid}`);
 
-  if (txHashHex.toUpperCase() === transaction.txid) {
+  // Compare in Bitcoin display format (little-endian)
+  if (txHashDisplayHex === transaction.txid.toUpperCase()) {
     console.log(`   ✅ Transaction hash verified!`);
   } else {
     console.log(`   ❌ Transaction hash mismatch!`);
   }
 
-  // Build circuit input
+  // Build circuit input for MINIMAL MVP
   const circuitInput = {
     // Public inputs
-    merkleRoot: merkleRootField,
     voutData: voutDataBits,
-    blockNumber: blockNumber.toString(),
+    txHash: txHashField,
 
     // Private inputs
-    transaction: transactionBits,
-    voutOffset: voutOffsetBits.toString(),
-    merkleSiblings: merkleSiblingsFields,
-    merkleIndex: merkleProof.index.toString()
+    transaction: transactionBits
   };
 
   return circuitInput;
@@ -201,35 +207,35 @@ function main() {
   const voutIndex = process.argv[2] ? parseInt(process.argv[2]) : 0;
 
   console.log('\n🔧 Bitcoin Transaction to Circuit Input Converter');
-  console.log('================================================\n');
+  console.log('================================================');
+  console.log('   MINIMAL MVP VERSION (no SHA256/Merkle)\n');
   console.log(`Block: ${sampleData.blockNumber}`);
   console.log(`Transaction: ${sampleData.transaction.txid}`);
   console.log(`Available outputs: ${sampleData.voutDetails.count}`);
 
-  if (voutIndex < 0 || voutIndex >= sampleData.voutDetails.count) {
-    console.error(`\n❌ Error: vout index ${voutIndex} is out of range (0-${sampleData.voutDetails.count - 1})`);
-    process.exit(1);
+  if (voutIndex !== 0) {
+    console.log(`\n⚠️  Warning: MVP circuit uses fixed offset for vout[0] only`);
+    console.log(`   Generating input for vout[${voutIndex}] anyway for reference`);
   }
 
   const circuitInput = generateCircuitInput(voutIndex);
 
   // Write to file
-  const outputFile = __dirname + `/../build/input_vout${voutIndex}.json`;
+  const outputFile = __dirname + `/../build/input.json`;
   fs.writeFileSync(outputFile, JSON.stringify(circuitInput, null, 2));
 
   console.log(`\n✅ Circuit input generated successfully!`);
   console.log(`   Output file: ${outputFile}`);
-  console.log(`\n📊 Input Statistics:`);
-  console.log(`   - Public inputs: 3 (merkleRoot, voutData[512], blockNumber)`);
-  console.log(`   - Private inputs: 4 (transaction[2048], voutOffset, merkleSiblings[12], merkleIndex)`);
-  console.log(`   - Total bits: ${2048 + 512} (public and private transaction data)`);
-  console.log(`   - Merkle siblings: ${circuitInput.merkleSiblings.length}`);
+  console.log(`\n📊 Input Statistics (MINIMAL MVP):`);
+  console.log(`   - Public inputs: voutData[512 bits], txHash`);
+  console.log(`   - Private inputs: transaction[1536 bits]`);
+  console.log(`   - Estimated constraints: ~500`);
 
   console.log(`\n🚀 Next steps:`);
-  console.log(`   1. Compile circuit: npm run circuit:compile`);
-  console.log(`   2. Run setup: npm run circuit:setup`);
-  console.log(`   3. Generate proof: snarkjs groth16 prove zkproof/build/circuit_final.zkey ${outputFile} zkproof/build/proof.json zkproof/build/public.json`);
-  console.log(`   4. Verify proof: npm run zk:verify-proof`);
+  console.log(`   1. Compile circuit:  npm run circuit:compile`);
+  console.log(`   2. Run setup:        npm run circuit:setup`);
+  console.log(`   3. Generate proof:   snarkjs groth16 prove zkproof/build/circuit_final.zkey zkproof/build/input.json zkproof/build/proof.json zkproof/build/public.json`);
+  console.log(`   4. Verify proof:     snarkjs groth16 verify zkproof/build/verification_key.json zkproof/build/public.json zkproof/build/proof.json`);
   console.log('');
 }
 
