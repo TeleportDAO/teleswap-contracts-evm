@@ -1,57 +1,31 @@
 #!/usr/bin/env node
 
 /**
- * Generate Circuit Input from Bitcoin Transaction
+ * Generate Circuit Input for Private Transfer
  *
- * MINIMAL MVP VERSION
+ * This script generates test input data for the Private Transfer ZK circuit.
+ * It creates a sample Bitcoin transaction with a commitment in OP_RETURN.
  *
- * This script converts the real Bitcoin transaction data into the format
- * required by the simplified ZK circuit for proof generation.
+ * See: PRIVATE_TRANSFER.md and PRIVATE_TRANSFER_PLAN.md
  */
 
 const fs = require('fs');
 const crypto = require('crypto');
+const path = require('path');
 
-// Load the sample transaction data
-const sampleData = JSON.parse(
-  fs.readFileSync(__dirname + '/bitcoin-tx-sample.json', 'utf8')
-);
-
-/**
- * Convert hex string to bit array (LSB first for each byte)
- * @param {string} hexString - Hex string (without 0x prefix)
- * @param {number} targetBits - Desired bit array length (will pad with zeros)
- * @returns {number[]} Array of bits
- */
-function hexToBits(hexString, targetBits = null) {
-  const bytes = Buffer.from(hexString, 'hex');
-  const bits = [];
-
-  for (let i = 0; i < bytes.length; i++) {
-    const byte = bytes[i];
-    // Convert each byte to 8 bits (LSB first)
-    for (let j = 0; j < 8; j++) {
-      bits.push((byte >> j) & 1);
-    }
-  }
-
-  // Pad with zeros if target length specified
-  if (targetBits && bits.length < targetBits) {
-    while (bits.length < targetBits) {
-      bits.push(0);
-    }
-  }
-
-  return bits;
-}
+// Circuit constants
+const MAX_TX_BYTES = 1024;
+const MAX_TX_BITS = MAX_TX_BYTES * 8;
+const LOCKER_SCRIPT_BITS = 520;  // 65 bytes max
+const MERKLE_DEPTH = 12;
 
 /**
- * Convert hex string to field element (big integer)
- * @param {string} hexString - Hex string
- * @returns {string} Field element as string
+ * SHA256 hash
+ * @param {Buffer} data - Input data
+ * @returns {Buffer} Hash result
  */
-function hexToFieldElement(hexString) {
-  return BigInt('0x' + hexString).toString();
+function sha256(data) {
+    return crypto.createHash('sha256').update(data).digest();
 }
 
 /**
@@ -59,189 +33,322 @@ function hexToFieldElement(hexString) {
  * @param {Buffer} data - Input data
  * @returns {Buffer} Hash result
  */
-function doubleSHA256(data) {
-  return crypto.createHash('sha256')
-    .update(crypto.createHash('sha256').update(data).digest())
-    .digest();
+function doubleSha256(data) {
+    return sha256(sha256(data));
 }
 
 /**
- * Parse vout to extract a specific output
- * @param {string} voutHex - Hex string of vout section
- * @param {number} index - Output index (0, 1, 2, ...)
- * @returns {object} Output data and offset
+ * Convert hex string to bit array (big-endian, MSB first)
+ * This matches how SHA256 expects input in circom
+ * @param {string} hexString - Hex string (without 0x prefix)
+ * @returns {number[]} Array of bits
  */
-function parseVout(voutHex, index) {
-  const voutBytes = Buffer.from(voutHex, 'hex');
-  let offset = 0;
+function hexToBitsBE(hexString) {
+    const bytes = Buffer.from(hexString, 'hex');
+    const bits = [];
 
-  // Read number of outputs (varint)
-  const outputCount = voutBytes[offset];
-  offset += 1;
+    for (let i = 0; i < bytes.length; i++) {
+        for (let j = 7; j >= 0; j--) {
+            bits.push((bytes[i] >> j) & 1);
+        }
+    }
 
-  // Skip to desired output
-  for (let i = 0; i < index; i++) {
-    // Skip 8-byte value
-    offset += 8;
-
-    // Read script length (varint, simplified for single byte)
-    const scriptLen = voutBytes[offset];
-    offset += 1;
-
-    // Skip script
-    offset += scriptLen;
-  }
-
-  // Read the target output
-  const startOffset = offset;
-
-  // Value (8 bytes)
-  const value = voutBytes.slice(offset, offset + 8);
-  offset += 8;
-
-  // Script length
-  const scriptLen = voutBytes[offset];
-  offset += 1;
-
-  // Script
-  const script = voutBytes.slice(offset, offset + scriptLen);
-  offset += scriptLen;
-
-  const endOffset = offset;
-
-  // Combine value + script length + script
-  const outputData = Buffer.concat([
-    value,
-    Buffer.from([scriptLen]),
-    script
-  ]);
-
-  return {
-    data: outputData,
-    startOffset: startOffset,
-    endOffset: endOffset,
-    size: endOffset - startOffset
-  };
+    return bits;
 }
 
 /**
- * Generate circuit input for a specific vout
- * MINIMAL MVP VERSION - for simplified circuit without SHA256/Merkle
- * @param {number} voutIndex - Which output to prove (0 or 1)
- * @returns {object} Circuit input data
+ * Convert Buffer to bit array (big-endian)
+ * @param {Buffer} buffer - Input buffer
+ * @returns {number[]} Array of bits
  */
-function generateCircuitInput(voutIndex = 0) {
-  const { transaction, voutDetails, blockHeader } = sampleData;
+function bufferToBitsBE(buffer) {
+    return hexToBitsBE(buffer.toString('hex'));
+}
 
-  // Build complete raw transaction
-  const rawTx = transaction.version + transaction.vin + transaction.vout + transaction.locktime;
-  const rawTxBytes = Buffer.from(rawTx, 'hex');
+/**
+ * Pad bit array to target length
+ * @param {number[]} bits - Input bits
+ * @param {number} targetLength - Target length
+ * @returns {number[]} Padded bits
+ */
+function padBits(bits, targetLength) {
+    const padded = [...bits];
+    while (padded.length < targetLength) {
+        padded.push(0);
+    }
+    return padded.slice(0, targetLength);
+}
 
-  console.log(`\n📝 Generating circuit input for vout[${voutIndex}]`);
-  console.log(`   Transaction size: ${rawTxBytes.length} bytes`);
+/**
+ * Convert bits to BigInt (big-endian)
+ * @param {number[]} bits - Array of bits (MSB first)
+ * @returns {BigInt} Result
+ */
+function bitsToBigInt(bits) {
+    let result = BigInt(0);
+    for (let i = 0; i < bits.length; i++) {
+        result = (result << BigInt(1)) | BigInt(bits[i]);
+    }
+    return result;
+}
 
-  // Parse the specific vout
-  const voutParsed = parseVout(transaction.vout, voutIndex);
-  console.log(`   Vout size: ${voutParsed.size} bytes`);
-  console.log(`   Vout value: ${voutDetails.outputs[voutIndex].valueSatoshis}`);
+/**
+ * Generate test input for the Private Transfer circuit
+ *
+ * Creates:
+ * - A random secret
+ * - Commitment = SHA256(secret || amount || chainId)
+ * - Nullifier = SHA256(secret || 0x01)
+ * - A mock Bitcoin transaction with the commitment in OP_RETURN
+ * - A mock locker script
+ */
+function generateTestInput() {
+    console.log('\n🔧 Private Transfer Circuit Input Generator');
+    console.log('=============================================\n');
 
-  // Calculate vout offset in full transaction (in bytes and bits)
-  // version (4) + vin (67) + vout_count (1) + vout[0] position
-  const versionLen = transaction.version.length / 2;
-  const vinLen = transaction.vin.length / 2;
-  const voutOffsetBytes = versionLen + vinLen + voutParsed.startOffset;
-  const voutOffsetBits = voutOffsetBytes * 8;
+    // ═══════════════════════════════════════════════════════════
+    // Step 1: Generate random secret
+    // ═══════════════════════════════════════════════════════════
+    const secretBytes = crypto.randomBytes(32);
+    const secretBits = bufferToBitsBE(secretBytes);
+    console.log(`✓ Generated secret: ${secretBytes.toString('hex').substring(0, 16)}...`);
 
-  console.log(`   Vout offset: ${voutOffsetBytes} bytes (${voutOffsetBits} bits)`);
-  console.log(`   Circuit expects offset: 70 bytes (560 bits)`);
+    // ═══════════════════════════════════════════════════════════
+    // Step 2: Define amount and chainId
+    // ═══════════════════════════════════════════════════════════
+    const amountSatoshis = BigInt(10000000);  // 0.1 BTC = 10,000,000 satoshis
+    const chainId = BigInt(1);  // Ethereum mainnet
 
-  if (voutIndex === 0 && voutOffsetBytes === 72) {
-    console.log(`   ✅ Offset matches circuit's fixed offset!`);
-  } else if (voutIndex !== 0) {
-    console.log(`   ⚠️  Warning: MVP circuit only supports vout[0] at offset 72`);
-    console.log(`      For vout[${voutIndex}], actual offset is ${voutOffsetBytes}`);
-  }
+    console.log(`✓ Amount: ${amountSatoshis} satoshis (${Number(amountSatoshis) / 100000000} BTC)`);
+    console.log(`✓ Chain ID: ${chainId}`);
 
-  // Convert transaction to bit array (padded to 1536 bits = 192 bytes for MVP circuit)
-  const transactionBits = hexToBits(rawTx, 1536);
+    // ═══════════════════════════════════════════════════════════
+    // Step 3: Compute commitment = SHA256(secret || amount || chainId)
+    // Total: 32 + 8 + 2 = 42 bytes
+    // ═══════════════════════════════════════════════════════════
+    const amountBuffer = Buffer.alloc(8);
+    amountBuffer.writeBigUInt64BE(amountSatoshis);
 
-  // Convert vout to bit array (padded to 512 bits = 64 bytes for circuit)
-  const voutDataBits = hexToBits(voutParsed.data.toString('hex'), 512);
+    const chainIdBuffer = Buffer.alloc(2);
+    chainIdBuffer.writeUInt16BE(Number(chainId));
 
-  // Calculate transaction hash (for reference - circuit uses this as public input)
-  const txHash = doubleSHA256(rawTxBytes);
-  // Use raw hash bytes for the field element (big-endian number)
-  const txHashHex = txHash.toString('hex');
-  const txHashField = hexToFieldElement(txHashHex);
+    const commitmentInput = Buffer.concat([secretBytes, amountBuffer, chainIdBuffer]);
+    const commitment = sha256(commitmentInput);
+    console.log(`✓ Commitment: ${commitment.toString('hex')}`);
 
-  // Bitcoin displays txids in little-endian (byte-reversed), so reverse for display comparison
-  const txHashDisplayHex = Buffer.from(txHash).reverse().toString('hex').toUpperCase();
+    // ═══════════════════════════════════════════════════════════
+    // Step 4: Compute nullifier = SHA256(secret || 0x01)
+    // ═══════════════════════════════════════════════════════════
+    const nullifierInput = Buffer.concat([secretBytes, Buffer.from([0x01])]);
+    const nullifierHash = sha256(nullifierInput);
+    const nullifierBits = bufferToBitsBE(nullifierHash);
+    // Take first 254 bits for field element (BN254 field size)
+    const nullifierValue = bitsToBigInt(nullifierBits.slice(0, 254));
+    console.log(`✓ Nullifier: ${nullifierHash.toString('hex').substring(0, 32)}...`);
 
-  console.log(`   Calculated txid: ${txHashDisplayHex}`);
-  console.log(`   Expected txid:   ${transaction.txid}`);
+    // ═══════════════════════════════════════════════════════════
+    // Step 5: Create mock locker script (P2PKH style)
+    // ═══════════════════════════════════════════════════════════
+    // OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+    const lockerPubKeyHash = crypto.randomBytes(20);
+    const lockerScriptBytes = Buffer.concat([
+        Buffer.from([0x76, 0xa9, 0x14]),  // OP_DUP OP_HASH160 PUSH(20)
+        lockerPubKeyHash,
+        Buffer.from([0x88, 0xac])  // OP_EQUALVERIFY OP_CHECKSIG
+    ]);
+    const lockerScriptBits = padBits(bufferToBitsBE(lockerScriptBytes), LOCKER_SCRIPT_BITS);
+    const lockerScriptLength = lockerScriptBytes.length;
 
-  // Compare in Bitcoin display format (little-endian)
-  if (txHashDisplayHex === transaction.txid.toUpperCase()) {
-    console.log(`   ✅ Transaction hash verified!`);
-  } else {
-    console.log(`   ❌ Transaction hash mismatch!`);
-  }
+    // Compute locker script hash
+    // IMPORTANT: Circuit hashes 520 bits (65 bytes) with zero-padding
+    // We must hash the PADDED version to match the circuit
+    const lockerScriptPadded = Buffer.alloc(65);  // 520 bits = 65 bytes
+    lockerScriptBytes.copy(lockerScriptPadded);   // Copy actual bytes, rest is zeros
+    const lockerHashBytes = sha256(lockerScriptPadded);
+    const lockerHashBits = bufferToBitsBE(lockerHashBytes);
+    const lockerScriptHash = bitsToBigInt(lockerHashBits.slice(0, 254));
+    console.log(`✓ Locker script: ${lockerScriptBytes.toString('hex')}`);
+    console.log(`✓ Locker script hash: ${lockerHashBytes.toString('hex').substring(0, 32)}...`);
 
-  // Build circuit input for MINIMAL MVP
-  const circuitInput = {
-    // Public inputs
-    voutData: voutDataBits,
-    txHash: txHashField,
+    // ═══════════════════════════════════════════════════════════
+    // Step 6: Build mock Bitcoin transaction
+    // ═══════════════════════════════════════════════════════════
 
-    // Private inputs
-    transaction: transactionBits
-  };
+    // Transaction structure:
+    // - Version: 4 bytes
+    // - Input count: 1 byte (varint)
+    // - Input: ~41 bytes (txid:32 + vout:4 + scriptSig:1+0 + sequence:4)
+    // - Output count: 1 byte (varint)
+    // - Output 0: value (8) + scriptLen (1) + script (25) = 34 bytes (locker output)
+    // - Output 1: value (8) + scriptLen (1) + OP_RETURN (1) + commitment (32) = 42 bytes
+    // - Locktime: 4 bytes
 
-  return circuitInput;
+    // Version
+    const version = Buffer.from([0x02, 0x00, 0x00, 0x00]);
+
+    // Input (simplified - 1 input)
+    const inputCount = Buffer.from([0x01]);
+    const prevTxId = crypto.randomBytes(32);
+    const prevVout = Buffer.from([0x00, 0x00, 0x00, 0x00]);
+    const scriptSigLen = Buffer.from([0x00]);  // Empty scriptSig for simplicity
+    const sequence = Buffer.from([0xff, 0xff, 0xff, 0xff]);
+    const input = Buffer.concat([prevTxId, prevVout, scriptSigLen, sequence]);
+
+    // Output count (2 outputs)
+    const outputCount = Buffer.from([0x02]);
+
+    // Output 0: Payment to locker
+    const output0Value = Buffer.alloc(8);
+    output0Value.writeBigUInt64LE(amountSatoshis);  // Bitcoin uses little-endian
+    const output0ScriptLen = Buffer.from([lockerScriptBytes.length]);
+    const output0 = Buffer.concat([output0Value, output0ScriptLen, lockerScriptBytes]);
+
+    // Output 1: OP_RETURN with commitment
+    const output1Value = Buffer.alloc(8);  // 0 satoshis for OP_RETURN
+    const opReturnScript = Buffer.concat([
+        Buffer.from([0x6a]),  // OP_RETURN
+        Buffer.from([0x20]),  // PUSH 32 bytes
+        commitment
+    ]);
+    const output1ScriptLen = Buffer.from([opReturnScript.length]);
+    const output1 = Buffer.concat([output1Value, output1ScriptLen, opReturnScript]);
+
+    // Locktime
+    const locktime = Buffer.from([0x00, 0x00, 0x00, 0x00]);
+
+    // Combine into full transaction
+    const rawTx = Buffer.concat([
+        version,
+        inputCount,
+        input,
+        outputCount,
+        output0,
+        output1,
+        locktime
+    ]);
+
+    // Calculate locker output offset (bit offset where output0 starts)
+    // Offset = version(4) + inputCount(1) + input(41) + outputCount(1) = 47 bytes = 376 bits
+    const lockerOutputOffsetBytes = version.length + inputCount.length + input.length + outputCount.length;
+    const lockerOutputOffset = lockerOutputOffsetBytes * 8;
+    console.log(`✓ Locker output offset: ${lockerOutputOffsetBytes} bytes = ${lockerOutputOffset} bits`);
+
+    console.log(`✓ Transaction size: ${rawTx.length} bytes`);
+
+    // Calculate commitment offset in transaction
+    // version(4) + inputCount(1) + input(41) + outputCount(1) + output0(34) + output1Value(8) + output1ScriptLen(1) + OP_RETURN(1) + PUSH(1) = 92 bytes
+    const commitmentOffset = version.length + inputCount.length + input.length +
+        outputCount.length + output0.length + output1Value.length + output1ScriptLen.length + 2;  // +2 for OP_RETURN and PUSH opcode
+
+    console.log(`✓ Commitment offset: ${commitmentOffset} bytes`);
+
+    // Pad transaction to MAX_TX_BITS
+    const txBits = padBits(bufferToBitsBE(rawTx), MAX_TX_BITS);
+
+    // Compute txId (double SHA256)
+    const txId = doubleSha256(rawTx);
+    console.log(`✓ TxId: ${Buffer.from(txId).reverse().toString('hex')}`);
+
+    // ═══════════════════════════════════════════════════════════
+    // Step 7: Create mock Merkle proof (placeholder for Phase 2)
+    // ═══════════════════════════════════════════════════════════
+    const merkleProof = [];
+    for (let i = 0; i < MERKLE_DEPTH; i++) {
+        const sibling = crypto.randomBytes(32);
+        merkleProof.push(bufferToBitsBE(sibling));
+    }
+    const merkleIndex = 0;  // Leaf position
+    const merkleRoot = BigInt(12345);  // Placeholder - not verified in Phase 1
+
+    // ═══════════════════════════════════════════════════════════
+    // Step 8: Define recipient address
+    // ═══════════════════════════════════════════════════════════
+    const recipientAddress = '0x' + crypto.randomBytes(20).toString('hex');
+    const recipient = BigInt(recipientAddress);
+    console.log(`✓ Recipient: ${recipientAddress}`);
+
+    // ═══════════════════════════════════════════════════════════
+    // Build circuit input object
+    // ═══════════════════════════════════════════════════════════
+
+    // Convert commitment to bits for circuit input
+    const commitmentBits = bufferToBitsBE(commitment);
+
+    const circuitInput = {
+        // PUBLIC INPUTS
+        merkleRoot: merkleRoot.toString(),
+        nullifier: nullifierValue.toString(),
+        amount: amountSatoshis.toString(),
+        chainId: chainId.toString(),
+        recipient: recipient.toString(),
+        lockerScriptHash: lockerScriptHash.toString(),
+
+        // PRIVATE INPUTS
+        secret: secretBits,
+        commitmentFromTx: commitmentBits,  // Commitment extracted from TX's OP_RETURN
+        transaction: txBits,
+        txLength: rawTx.length,
+        lockerScript: lockerScriptBits,
+        lockerScriptLength: lockerScriptLength,
+        lockerOutputIndex: 0,
+        lockerOutputOffset: lockerOutputOffset,  // Bit offset where locker output starts
+        merkleProof: merkleProof,
+        merkleIndex: merkleIndex
+    };
+
+    console.log('\n📊 Input Summary:');
+    console.log('─────────────────');
+    console.log('PUBLIC INPUTS:');
+    console.log(`  merkleRoot:       ${merkleRoot} (placeholder)`);
+    console.log(`  nullifier:        ${nullifierValue.toString().substring(0, 20)}...`);
+    console.log(`  amount:           ${amountSatoshis} satoshis`);
+    console.log(`  chainId:          ${chainId}`);
+    console.log(`  recipient:        ${recipientAddress}`);
+    console.log(`  lockerScriptHash: ${lockerScriptHash.toString().substring(0, 20)}...`);
+    console.log('\nPRIVATE INPUTS:');
+    console.log(`  secret:           ${secretBits.length} bits`);
+    console.log(`  commitmentFromTx: ${commitmentBits.length} bits`);
+    console.log(`  transaction:      ${txBits.length} bits (${rawTx.length} bytes actual)`);
+    console.log(`  lockerScript:     ${lockerScriptBits.length} bits (${lockerScriptLength} bytes actual)`);
+
+    return circuitInput;
 }
 
 /**
  * Main function
  */
 function main() {
-  const voutIndex = process.argv[2] ? parseInt(process.argv[2]) : 0;
+    try {
+        const circuitInput = generateTestInput();
 
-  console.log('\n🔧 Bitcoin Transaction to Circuit Input Converter');
-  console.log('================================================');
-  console.log('   MINIMAL MVP VERSION (no SHA256/Merkle)\n');
-  console.log(`Block: ${sampleData.blockNumber}`);
-  console.log(`Transaction: ${sampleData.transaction.txid}`);
-  console.log(`Available outputs: ${sampleData.voutDetails.count}`);
+        // Ensure build directory exists
+        const buildDir = path.join(__dirname, '..', 'build');
+        if (!fs.existsSync(buildDir)) {
+            fs.mkdirSync(buildDir, { recursive: true });
+        }
 
-  if (voutIndex !== 0) {
-    console.log(`\n⚠️  Warning: MVP circuit uses fixed offset for vout[0] only`);
-    console.log(`   Generating input for vout[${voutIndex}] anyway for reference`);
-  }
+        // Write to file
+        const outputFile = path.join(buildDir, 'input.json');
+        fs.writeFileSync(outputFile, JSON.stringify(circuitInput, null, 2));
 
-  const circuitInput = generateCircuitInput(voutIndex);
+        console.log(`\n✅ Circuit input saved to: ${outputFile}`);
+        console.log('\n🚀 Next steps:');
+        console.log('   1. Install circom: https://docs.circom.io/getting-started/installation/');
+        console.log('   2. Compile circuit:  npm run circuit:compile');
+        console.log('   3. Run setup:        npm run circuit:setup');
+        console.log('   4. Generate proof:   npm run zk:generate-proof');
+        console.log('   5. Verify proof:     npm run zk:verify-proof');
+        console.log('');
 
-  // Write to file
-  const outputFile = __dirname + `/../build/input.json`;
-  fs.writeFileSync(outputFile, JSON.stringify(circuitInput, null, 2));
-
-  console.log(`\n✅ Circuit input generated successfully!`);
-  console.log(`   Output file: ${outputFile}`);
-  console.log(`\n📊 Input Statistics (MINIMAL MVP):`);
-  console.log(`   - Public inputs: voutData[512 bits], txHash`);
-  console.log(`   - Private inputs: transaction[1536 bits]`);
-  console.log(`   - Estimated constraints: ~500`);
-
-  console.log(`\n🚀 Next steps:`);
-  console.log(`   1. Compile circuit:  npm run circuit:compile`);
-  console.log(`   2. Run setup:        npm run circuit:setup`);
-  console.log(`   3. Generate proof:   snarkjs groth16 prove zkproof/build/circuit_final.zkey zkproof/build/input.json zkproof/build/proof.json zkproof/build/public.json`);
-  console.log(`   4. Verify proof:     snarkjs groth16 verify zkproof/build/verification_key.json zkproof/build/public.json zkproof/build/proof.json`);
-  console.log('');
+    } catch (error) {
+        console.error(`\n❌ Error: ${error.message}`);
+        process.exit(1);
+    }
 }
 
 // Run if called directly
 if (require.main === module) {
-  main();
+    main();
 }
 
-module.exports = { generateCircuitInput, hexToBits, parseVout };
+module.exports = { generateTestInput, sha256, hexToBitsBE, bufferToBitsBE };

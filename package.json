@@ -72,6 +72,12 @@
 		"circuit:setup": "cd circuits && bash ../zkproof/scripts/setup.sh",
 		"circuit:test": "cd circuits && node test/main.test.js",
 		"zk:generate-proof": "node zkproof/scripts/generate_proof.js",
-		"zk:verify-proof": "node zkproof/scripts/verify_proof.js"
+		"zk:verify-proof": "node zkproof/scripts/verify_proof.js",
+		"zk:test-realistic": "node zkproof/test-data/test_real_btc_tx.js",
+		"zk:deploy-polygon": "npx hardhat run scripts/zk/deploy-polygon.ts --network polygon",
+		"zk:register-locker": "npx hardhat run scripts/zk/register-locker.ts",
+		"zk:create-deposit": "node scripts/zk/create-btc-deposit.js",
+		"zk:generate-claim": "node scripts/zk/generate-claim.js",
+		"zk:submit-claim": "npx hardhat run scripts/zk/submit-claim.ts"
 	}
 }

@@ -6,33 +6,12 @@ This repository contains the smart contracts for the TeleSwap protocol. The repo
 
 TeleSwap is a fully decentralized protocol for bridging and exchanging BTC between Bitcoin and EVM chains securely.
 
-## ZK Proof-of-Concept (Cost Optimization)
+## Private Transfer (ZK Privacy Feature)
 
-We've developed a zero-knowledge proof system to **reduce on-chain computation costs and improve scalability** for Bitcoin transaction verification. Instead of submitting full transaction data and Merkle proofs on-chain (1-4 KB), users submit the vout data (64 bytes) + a compact ZK proof (128 bytes) that verifies the transaction off-chain. The vout data is available as a public input for on-chain calculations.
+We're developing a privacy-preserving bridge using zero-knowledge proofs. See documentation:
 
-**Key Benefits:**
-- 📉 **80-94% reduction** in on-chain data storage (224 bytes vs 1-4 KB)
-- ⚡ **Fixed verification cost** regardless of transaction complexity
-- 🔄 **Better scalability** for high-volume bridge operations
-- 💰 **Merkle proof verification** done off-chain (saves ~384 bytes on-chain)
-- 📊 **Vout data available** as public input for on-chain calculations
-
-**Documentation:**
-- [ZK Proof-of-Concept Guide](./ZK_PROOF_OF_CONCEPT.md) - Complete technical documentation
-- [Installation Checklist](./INSTALLATION_CHECKLIST.md) - Setup and testing guide
-- [Implementation Summary](./ZK_POC_SUMMARY.md) - Architecture and deliverables
-- [Circuit Documentation](./circuits/README.md) - Circuit design details
-
-**Quick Start:**
-```bash
-# Install and test the ZK POC
-npm run circuit:compile  # Compile circuits
-npm run circuit:setup    # Trusted setup
-npm run zk:generate-proof # Generate proof
-npm run zk:verify-proof  # Verify proof
-```
-
-**Note:** This is a proof-of-concept for cost optimization and scalability. It demonstrates how ZK proofs can reduce on-chain data and computation, not for privacy purposes.
+- [PRIVATE_TRANSFER.md](./PRIVATE_TRANSFER.md) - What it is, how it works, benefits
+- [PRIVATE_TRANSFER_PLAN.md](./PRIVATE_TRANSFER_PLAN.md) - Implementation roadmap and checklist
 
 ## Documentation
 
