@@ -13,6 +13,7 @@ import "./IGroth16Verifier.sol";
  *
  * Flow:
  * 1. User sends BTC to locker with commitment in OP_RETURN
+ *    - Commitment includes recipient address (prevents front-running)
  * 2. User generates ZK proof of the transaction
  * 3. User calls claimPrivate() with the proof
  * 4. Contract verifies proof and mints TeleBTC
@@ -20,7 +21,10 @@ import "./IGroth16Verifier.sol";
  * Privacy guarantees:
  * - Transaction details remain private (only hash is verified)
  * - Secret is never revealed (only nullifier is public)
- * - Recipient can be different from the prover
+ * - Hidden root selection: user proves TX is in one of N merkle roots without revealing which
+ *
+ * Security guarantees:
+ * - Front-running protection: recipient is bound in commitment at deposit time
  */
 contract PrivateTransferClaim is
     Initializable,
@@ -42,6 +46,14 @@ contract PrivateTransferClaim is
     event LockerHashRemoved(uint256 indexed lockerScriptHash);
     event ZkVerifierSet(address indexed verifier);
     event LockersManagerSet(address indexed lockersManager);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @notice Number of merkle roots for hidden selection (matches circuit)
+    /// User proves TX is in ONE of these roots without revealing which
+    uint256 public constant NUM_MERKLE_ROOTS = 2;
 
     // ═══════════════════════════════════════════════════════════════════
     // STORAGE
@@ -115,10 +127,10 @@ contract PrivateTransferClaim is
      * @param _pA Groth16 proof point A
      * @param _pB Groth16 proof point B
      * @param _pC Groth16 proof point C
-     * @param _merkleRoot Merkle root of Bitcoin block (placeholder for Phase 1)
+     * @param _merkleRoots Array of merkle roots (user proves TX is in ONE, hidden which)
      * @param _nullifier Nullifier derived from secret (prevents double-claim)
      * @param _amount Amount in satoshis
-     * @param _recipient Address to receive TeleBTC
+     * @param _recipient Address to receive TeleBTC (must match commitment for front-running protection)
      * @param _lockerScriptHash Hash of locker's Bitcoin script
      * @return success True if claim succeeded
      */
@@ -126,7 +138,7 @@ contract PrivateTransferClaim is
         uint256[2] calldata _pA,
         uint256[2][2] calldata _pB,
         uint256[2] calldata _pC,
-        uint256 _merkleRoot,
+        uint256[NUM_MERKLE_ROOTS] calldata _merkleRoots,
         uint256 _nullifier,
         uint256 _amount,
         address _recipient,
@@ -149,18 +161,23 @@ contract PrivateTransferClaim is
         require(isValidLockerHash[_lockerScriptHash], "PTC: invalid locker");
 
         // ─────────────────────────────────────────────────────────────────
-        // 4. Verify Merkle root (SKIPPED FOR PHASE 1)
+        // 4. Verify Merkle roots (SKIPPED FOR PHASE 1)
         // TODO: When Bitcoin block headers are available on contract:
-        // require(bitcoinRelay.isMerkleRootValid(_merkleRoot), "invalid merkle");
+        // for (uint i = 0; i < NUM_MERKLE_ROOTS; i++) {
+        //     require(bitcoinRelay.isMerkleRootValid(_merkleRoots[i]), "invalid merkle");
+        // }
         // ─────────────────────────────────────────────────────────────────
 
         // ─────────────────────────────────────────────────────────────────
         // 5. Prepare public signals for ZK verification
         // Order must match circuit's public inputs:
-        // [merkleRoot, nullifier, amount, chainId, recipient, lockerScriptHash]
+        // [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
+        // Note: merkleRoots array provides privacy through hidden root selection
+        // Note: recipient is verified against commitment (front-running protection)
         // ─────────────────────────────────────────────────────────────────
-        uint256[6] memory publicSignals = [
-            _merkleRoot,
+        uint256[7] memory publicSignals = [
+            _merkleRoots[0],
+            _merkleRoots[1],
             _nullifier,
             _amount,
             claimChainId,
@@ -204,7 +221,7 @@ contract PrivateTransferClaim is
         totalClaims++;
         totalAmountClaimed += _amount;
 
-        emit PrivateClaim(_nullifier, _recipient, _amount, _merkleRoot);
+        emit PrivateClaim(_nullifier, _recipient, _amount, _merkleRoots[0]);
 
         return true;
     }

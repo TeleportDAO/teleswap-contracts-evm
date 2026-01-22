@@ -4,9 +4,10 @@ pragma circom 2.0.0;
  * Private Transfer Circuit for TeleSwap
  *
  * Proves knowledge of a Bitcoin transaction that:
- * 1. Contains a commitment derived from a secret
+ * 1. Contains a commitment derived from a secret (includes recipient for front-running protection)
  * 2. Sends BTC to a specific locker
  * 3. Amount matches the committed amount
+ * 4. TX is in one of N merkle roots (hidden which one for privacy)
  *
  * Without revealing the secret or the full transaction details.
  *
@@ -16,7 +17,9 @@ pragma circom 2.0.0;
 include "../../node_modules/circomlib/circuits/sha256/sha256.circom";
 include "../../node_modules/circomlib/circuits/bitify.circom";
 include "../../node_modules/circomlib/circuits/comparators.circom";
+include "../../node_modules/circomlib/circuits/mux1.circom";
 include "./tx_parser.circom";
+include "./sha256_variable.circom";
 
 /*
  * Main template for private transfer claims
@@ -26,14 +29,22 @@ include "./tx_parser.circom";
 template PrivateTransferClaim(maxTxBytes) {
     var maxTxBits = maxTxBytes * 8;
 
+    // Number of merkle roots for hidden selection (privacy enhancement)
+    // User proves TX is in ONE of these roots without revealing which
+    var NUM_MERKLE_ROOTS = 2;
+
+    // Max padded size for SHA256: ceil((maxTxBits + 65) / 512) * 512
+    var maxPaddedBits = ((maxTxBits + 64) \ 512 + 1) * 512;
+
     // ═══════════════════════════════════════════════════════════════════
-    // PUBLIC INPUTS (6 total)
+    // PUBLIC INPUTS (7 total)
     // These are visible on-chain and verified by the smart contract
     // ═══════════════════════════════════════════════════════════════════
 
-    // Merkle root from Bitcoin block header
-    // NOTE: Verification skipped for Phase 1, will be added when block headers on contract
-    signal input merkleRoot;
+    // Array of Merkle roots from Bitcoin block headers
+    // User proves TX is in ONE of these without revealing which (privacy enhancement)
+    // NOTE: Actual Merkle verification skipped for Phase 1
+    signal input merkleRoots[NUM_MERKLE_ROOTS];
 
     // Nullifier = SHA256(secret || 0x01)
     // Prevents double-claiming - contract tracks used nullifiers
@@ -46,6 +57,7 @@ template PrivateTransferClaim(maxTxBytes) {
     signal input chainId;
 
     // Recipient EVM address (as field element)
+    // IMPORTANT: Also included in commitment to prevent front-running attacks
     // This is where teleBTC will be minted
     signal input recipient;
 
@@ -61,16 +73,6 @@ template PrivateTransferClaim(maxTxBytes) {
     // User's secret - the key to claiming (256 bits)
     signal input secret[256];
 
-    // The commitment bits extracted from the Bitcoin TX's OP_RETURN
-    // This is provided by the prover and verified against computed commitment
-    signal input commitmentFromTx[256];
-
-    // Full Bitcoin transaction as bits
-    signal input transaction[maxTxBits];
-
-    // Actual transaction length in bytes (for variable-length TX support)
-    signal input txLength;
-
     // Locker's Bitcoin script (to verify against hash)
     // 520 bits = 65 bytes max (P2SH script)
     signal input lockerScript[520];
@@ -81,10 +83,17 @@ template PrivateTransferClaim(maxTxBytes) {
     // Index of the output that pays the locker (0, 1, 2, ...)
     signal input lockerOutputIndex;
 
-    // Bit offset where the locker output starts in the transaction
-    // This allows the circuit to extract value and script without full TX parsing
+    // BYTE offset where the locker output starts in the transaction
+    signal input lockerOutputByteOffset;
+
+    // BYTE offset where the commitment starts in OP_RETURN output
+    // This is after: OP_RETURN (0x6a) + PUSH_32 (0x20) = 2 bytes after output value+scriptlen
     // The prover calculates this by parsing the TX structure
-    signal input lockerOutputOffset;
+    signal input commitmentByteOffset;
+
+    // HIDDEN ROOT SELECTION: Which merkle root the TX is in (0 to NUM_MERKLE_ROOTS-1)
+    // This is PRIVATE - observers cannot determine which root was used (privacy enhancement)
+    signal input rootIndex;
 
     // Merkle proof data (kept as inputs for future Phase 2)
     // 12 levels for ~4000 transactions per block
@@ -92,11 +101,65 @@ template PrivateTransferClaim(maxTxBytes) {
     signal input merkleIndex;
 
     // ═══════════════════════════════════════════════════════════════════
-    // CONSTRAINT 1: Compute commitment and verify it matches TX commitment
-    // commitment = SHA256(secret || amount || chainId)
+    // SINGLE TRANSACTION INPUT (paddedTransaction)
     //
-    // This ensures the user knows the secret that created the commitment
-    // visible on the Bitcoin blockchain.
+    // SECURITY FIX: We use ONLY paddedTransaction for all operations.
+    // This ensures the same transaction is used for:
+    // - Output verification (amount/script)
+    // - Commitment verification (OP_RETURN extraction)
+    // - TxId computation (double SHA256)
+    //
+    // Structure: [raw_tx_bytes][0x80][zeros...][64-bit length]
+    // The raw transaction data is at indices [0, txLength*8)
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Pre-padded transaction for SHA256 computation
+    // Prover computes correct SHA256 padding based on actual TX length
+    signal input paddedTransaction[maxPaddedBits];
+
+    // Number of 512-bit blocks in the padded transaction
+    // numBlocks = ceil((txLength * 8 + 65) / 512)
+    signal input numBlocks;
+
+    // Transaction ID = SHA256(SHA256(stripped_transaction))
+    // This is PRIVATE to preserve user privacy
+    // Will be used in Phase 2B for Merkle proof verification
+    signal input txId[256];
+
+    // ═══════════════════════════════════════════════════════════════════
+    // BINARY CONSTRAINTS FOR BIT ARRAY INPUTS
+    //
+    // Ensure all bit array inputs are actually binary (0 or 1).
+    // This prevents attacks using non-binary field elements.
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Constrain secret bits to be binary
+    for (var i = 0; i < 256; i++) {
+        secret[i] * (secret[i] - 1) === 0;
+    }
+
+    // Constrain locker script bits to be binary
+    for (var i = 0; i < 520; i++) {
+        lockerScript[i] * (lockerScript[i] - 1) === 0;
+    }
+
+    // Constrain txId bits to be binary
+    for (var i = 0; i < 256; i++) {
+        txId[i] * (txId[i] - 1) === 0;
+    }
+
+    // Constrain paddedTransaction bits to be binary
+    for (var i = 0; i < maxPaddedBits; i++) {
+        paddedTransaction[i] * (paddedTransaction[i] - 1) === 0;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CONSTRAINT 1: Compute commitment and verify it matches TX commitment
+    // commitment = SHA256(secret || amount || chainId || recipient)
+    //
+    // SECURITY FIX: The commitment is EXTRACTED from paddedTransaction
+    // at commitmentByteOffset, not provided as a separate input.
+    // This ensures the commitment is actually in the Bitcoin transaction.
     // ═══════════════════════════════════════════════════════════════════
 
     // Convert amount to bits (64 bits for satoshis)
@@ -108,9 +171,13 @@ template PrivateTransferClaim(maxTxBytes) {
     component chainIdBits = Num2Bits(16);
     chainIdBits.in <== chainId;
 
-    // Compute commitment: SHA256(secret[256] || amount[64] || chainId[16])
-    // Total: 336 bits = 42 bytes
-    component commitmentHasher = Sha256(336);
+    // Convert recipient to bits (160 bits for EVM address)
+    component recipientBits = Num2Bits(160);
+    recipientBits.in <== recipient;
+
+    // Compute expected commitment: SHA256(secret[256] || amount[64] || chainId[16] || recipient[160])
+    // Total: 496 bits = 62 bytes
+    component commitmentHasher = Sha256(496);
 
     // Wire secret (256 bits) - already in big-endian bit order
     for (var i = 0; i < 256; i++) {
@@ -127,11 +194,24 @@ template PrivateTransferClaim(maxTxBytes) {
         commitmentHasher.in[320 + i] <== chainIdBits.out[15 - i];
     }
 
+    // Wire recipient (160 bits) - convert from little-endian to big-endian
+    // This binds the recipient to the commitment, preventing front-running
+    for (var i = 0; i < 160; i++) {
+        commitmentHasher.in[336 + i] <== recipientBits.out[159 - i];
+    }
+
+    // Extract commitment from transaction at commitmentByteOffset
+    // The commitment is 32 bytes (256 bits) in the OP_RETURN output
+    component commitmentExtractor = ExtractBitsAtByteOffset(maxTxBytes, 256);
+    for (var i = 0; i < maxTxBits; i++) {
+        commitmentExtractor.bits[i] <== paddedTransaction[i];
+    }
+    commitmentExtractor.byteOffset <== commitmentByteOffset;
+
     // Verify computed commitment matches the commitment extracted from TX
-    // The prover provides commitmentFromTx (extracted from OP_RETURN)
-    // We verify it equals SHA256(secret || amount || chainId)
+    // This ensures the prover knows the secret that created the on-chain commitment
     for (var i = 0; i < 256; i++) {
-        commitmentHasher.out[i] === commitmentFromTx[i];
+        commitmentHasher.out[i] === commitmentExtractor.out[i];
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -194,34 +274,27 @@ template PrivateTransferClaim(maxTxBytes) {
     // ═══════════════════════════════════════════════════════════════════
     // CONSTRAINT 4: Verify TX output sends `amount` to `lockerScript`
     //
-    // Phase 1.5 Implementation:
-    // - Prover provides lockerOutputOffset (bit offset in TX)
-    // - Extract value at that offset (8 bytes, little-endian)
-    // - Extract script at that offset (after value + 1 byte length)
-    // - Verify value == amount
-    // - Verify script == lockerScript
+    // SECURITY FIX: Uses paddedTransaction (not separate transaction input)
+    // to ensure the same TX is used for output verification and txId.
     //
-    // Note: Full varint parsing and output navigation deferred to Phase 2
+    // Uses selector-based extraction (tx_parser.circom) to properly
+    // constrain that extracted data comes from the TX at the claimed offset.
     // ═══════════════════════════════════════════════════════════════════
-
-    // Use txLength to create a constraint (prevents unused signal warning)
-    signal txLengthCheck;
-    txLengthCheck <== txLength * txLength;
 
     // Use lockerOutputIndex (for future navigation verification)
     signal lockerOutputIndexCheck;
     lockerOutputIndexCheck <== lockerOutputIndex * lockerOutputIndex;
 
     // Verify TX output using VerifyTxOutput template
-    component txOutputVerifier = VerifyTxOutput(maxTxBits, 520);
+    component txOutputVerifier = VerifyTxOutput(maxTxBytes, 520);
 
-    // Wire transaction bits
+    // Wire transaction bits from paddedTransaction (first maxTxBits are raw TX)
     for (var i = 0; i < maxTxBits; i++) {
-        txOutputVerifier.txBits[i] <== transaction[i];
+        txOutputVerifier.txBits[i] <== paddedTransaction[i];
     }
 
-    // Wire output offset (prover-provided)
-    txOutputVerifier.outputOffset <== lockerOutputOffset;
+    // Wire output byte offset (prover-provided, in bytes not bits)
+    txOutputVerifier.outputByteOffset <== lockerOutputByteOffset;
 
     // Wire expected amount
     txOutputVerifier.expectedAmount <== amount;
@@ -238,51 +311,84 @@ template PrivateTransferClaim(maxTxBytes) {
     txOutputVerifier.isValid === 1;
 
     // ═══════════════════════════════════════════════════════════════════
-    // CONSTRAINT 5: Compute txId (SKIPPED FOR PHASE 1)
+    // CONSTRAINT 5: Verify txId = SHA256(SHA256(paddedTransaction))
     //
-    // Will be implemented in Phase 2 along with Merkle verification.
-    // txId = SHA256(SHA256(transaction)) - Bitcoin's double hash
+    // Bitcoin transaction ID is the double SHA256 of the stripped transaction.
+    // The paddedTransaction contains the stripped TX with SHA256 padding.
     //
-    // Skipping this saves ~500,000 constraints (the most expensive part)
+    // SECURITY: Using the same paddedTransaction for output verification
+    // and txId computation ensures consistency.
     // ═══════════════════════════════════════════════════════════════════
 
+    component txIdVerifier = VerifyTxId(maxTxBits);
+
+    // Wire padded transaction bits
+    for (var i = 0; i < maxPaddedBits; i++) {
+        txIdVerifier.paddedTransaction[i] <== paddedTransaction[i];
+    }
+
+    // Wire number of blocks
+    txIdVerifier.numBlocks <== numBlocks;
+
+    // Wire expected txId
+    for (var i = 0; i < 256; i++) {
+        txIdVerifier.expectedTxId[i] <== txId[i];
+    }
+
     // ═══════════════════════════════════════════════════════════════════
-    // CONSTRAINT 6: Merkle proof verification (SKIPPED FOR PHASE 1)
+    // CONSTRAINT 6: Hidden root selection (PRIVACY ENHANCEMENT)
+    //
+    // User proves TX is in ONE of merkleRoots[N] without revealing which.
+    // This expands the anonymity set to all deposits across N blocks.
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Verify rootIndex is valid (0 or 1 for N=2)
+    component rootIndexValid = LessThan(8);
+    rootIndexValid.in[0] <== rootIndex;
+    rootIndexValid.in[1] <== NUM_MERKLE_ROOTS;
+    rootIndexValid.out === 1;
+
+    // Select the actual merkle root based on private rootIndex
+    // Using Mux1 for N=2 selection
+    component rootSelector = Mux1();
+    rootSelector.c[0] <== merkleRoots[0];
+    rootSelector.c[1] <== merkleRoots[1];
+    rootSelector.s <== rootIndex;
+
+    signal selectedMerkleRoot;
+    selectedMerkleRoot <== rootSelector.out;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CONSTRAINT 7: Merkle proof verification (SKIPPED FOR PHASE 1)
     //
     // Will be implemented when block headers are available on contract.
-    // For now, merkleRoot and merkleProof are inputs but not verified.
+    // For now, merkleProof inputs are kept but not verified.
     //
     // Future implementation will verify:
     // - txId is a leaf in the Merkle tree
-    // - The tree root matches merkleRoot
-    // - Contract verifies merkleRoot against Bitcoin relay
+    // - The tree root matches selectedMerkleRoot
+    // - Contract verifies all merkleRoots against Bitcoin relay
     // ═══════════════════════════════════════════════════════════════════
 
     // Dummy constraints to use merkle inputs (prevents unused signal errors)
     signal merkleRootSquared;
-    merkleRootSquared <== merkleRoot * merkleRoot;
+    merkleRootSquared <== selectedMerkleRoot * selectedMerkleRoot;
 
     signal merkleIndexSquared;
     merkleIndexSquared <== merkleIndex * merkleIndex;
 
-    // Use merkleProof signals
+    // Use merkleProof signals with proper constraints
     signal merkleProofSum[12];
     for (var i = 0; i < 12; i++) {
         var sum = 0;
         for (var j = 0; j < 256; j++) {
             sum += merkleProof[i][j];
         }
-        merkleProofSum[i] <-- sum;
+        merkleProofSum[i] <== sum;
     }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // Use recipient signal (it's a public input, verified by contract)
-    // ═══════════════════════════════════════════════════════════════════
-    signal recipientSquared;
-    recipientSquared <== recipient * recipient;
 }
 
 // Main component instantiation
 // - maxTxBytes = 1024 (1KB max transaction size)
-// - Public inputs: merkleRoot, nullifier, amount, chainId, recipient, lockerScriptHash
-component main {public [merkleRoot, nullifier, amount, chainId, recipient, lockerScriptHash]} = PrivateTransferClaim(1024);
+// - Public inputs: merkleRoots[2], nullifier, amount, chainId, recipient, lockerScriptHash
+component main {public [merkleRoots, nullifier, amount, chainId, recipient, lockerScriptHash]} = PrivateTransferClaim(1024);

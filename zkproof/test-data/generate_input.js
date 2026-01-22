@@ -19,6 +19,21 @@ const MAX_TX_BITS = MAX_TX_BYTES * 8;
 const LOCKER_SCRIPT_BITS = 520;  // 65 bytes max
 const MERKLE_DEPTH = 12;
 
+// Max padded transaction size: ceil((MAX_TX_BITS + 65) / 512) * 512 = 8704 bits
+const MAX_PADDED_BITS = Math.ceil((MAX_TX_BITS + 65) / 512) * 512;
+
+// Default locker address (P2PKH) - use environment variable or this default
+// This should match the locker registered on the contract
+const DEFAULT_LOCKER_ADDRESS = process.env.BTC_LOCKER_ADDRESS || '1NtQASBBziad6x5dST3jgoFqWv1eMAAnWY';
+
+// Try to load bitcoinjs-lib for real address decoding
+let bitcoin;
+try {
+    bitcoin = require('bitcoinjs-lib');
+} catch (e) {
+    bitcoin = null;
+}
+
 /**
  * SHA256 hash
  * @param {Buffer} data - Input data
@@ -93,6 +108,67 @@ function bitsToBigInt(bits) {
 }
 
 /**
+ * Apply correct SHA256 padding to a message
+ *
+ * SHA256 padding: [message][0x80][zeros...][64-bit length]
+ * Length field goes at the end of the padded blocks (multiple of 512 bits)
+ *
+ * @param {Buffer} message - Original message
+ * @returns {Buffer} Correctly padded message
+ */
+function sha256Pad(message) {
+    const messageBits = message.length * 8;
+
+    // Calculate padded size: ceil((messageBits + 65) / 512) * 512
+    const paddedBits = Math.ceil((messageBits + 65) / 512) * 512;
+    const paddedBytes = paddedBits / 8;
+
+    const padded = Buffer.alloc(paddedBytes);
+
+    // Copy message
+    message.copy(padded);
+
+    // Add 0x80 byte after message
+    padded[message.length] = 0x80;
+
+    // Zeros fill the middle (Buffer.alloc already fills with zeros)
+
+    // Add 64-bit big-endian length at the END of the padded message
+    const bitLength = BigInt(messageBits);
+    padded.writeBigUInt64BE(bitLength, paddedBytes - 8);
+
+    return padded;
+}
+
+/**
+ * Apply SHA256 padding and extend to target size for circuit
+ *
+ * @param {Buffer} message - Original message
+ * @param {number} targetBits - Target size in bits (must be multiple of 512)
+ * @returns {{padded: Buffer, numBlocks: number}} Padded buffer and actual block count
+ */
+function sha256PadForCircuit(message, targetBits) {
+    // First, apply correct SHA256 padding
+    const correctlyPadded = sha256Pad(message);
+    const numBlocks = correctlyPadded.length * 8 / 512;
+
+    // Verify target is large enough
+    if (targetBits < correctlyPadded.length * 8) {
+        throw new Error(`Target ${targetBits} bits too small for padded message of ${correctlyPadded.length * 8} bits`);
+    }
+    if (targetBits % 512 !== 0) {
+        throw new Error(`Target ${targetBits} bits must be multiple of 512`);
+    }
+
+    // Zero-extend to target size for circuit input array
+    const targetBytes = targetBits / 8;
+    const extended = Buffer.alloc(targetBytes);
+    correctlyPadded.copy(extended);
+
+    return { padded: extended, numBlocks };
+}
+
+/**
  * Generate test input for the Private Transfer circuit
  *
  * Creates:
@@ -114,17 +190,23 @@ function generateTestInput() {
     console.log(`✓ Generated secret: ${secretBytes.toString('hex').substring(0, 16)}...`);
 
     // ═══════════════════════════════════════════════════════════
-    // Step 2: Define amount and chainId
+    // Step 2: Define amount, chainId, and recipient
+    // NOTE: Recipient is defined here because it's part of commitment
     // ═══════════════════════════════════════════════════════════
     const amountSatoshis = BigInt(10000000);  // 0.1 BTC = 10,000,000 satoshis
     const chainId = BigInt(1);  // Ethereum mainnet
+    const recipientBytes = crypto.randomBytes(20);
+    const recipientAddress = '0x' + recipientBytes.toString('hex');
+    const recipient = BigInt(recipientAddress);
 
     console.log(`✓ Amount: ${amountSatoshis} satoshis (${Number(amountSatoshis) / 100000000} BTC)`);
     console.log(`✓ Chain ID: ${chainId}`);
+    console.log(`✓ Recipient: ${recipientAddress}`);
 
     // ═══════════════════════════════════════════════════════════
-    // Step 3: Compute commitment = SHA256(secret || amount || chainId)
-    // Total: 32 + 8 + 2 = 42 bytes
+    // Step 3: Compute commitment = SHA256(secret || amount || chainId || recipient)
+    // Total: 32 + 8 + 2 + 20 = 62 bytes (496 bits)
+    // This matches the circuit's commitment calculation
     // ═══════════════════════════════════════════════════════════
     const amountBuffer = Buffer.alloc(8);
     amountBuffer.writeBigUInt64BE(amountSatoshis);
@@ -132,7 +214,7 @@ function generateTestInput() {
     const chainIdBuffer = Buffer.alloc(2);
     chainIdBuffer.writeUInt16BE(Number(chainId));
 
-    const commitmentInput = Buffer.concat([secretBytes, amountBuffer, chainIdBuffer]);
+    const commitmentInput = Buffer.concat([secretBytes, amountBuffer, chainIdBuffer, recipientBytes]);
     const commitment = sha256(commitmentInput);
     console.log(`✓ Commitment: ${commitment.toString('hex')}`);
 
@@ -147,15 +229,27 @@ function generateTestInput() {
     console.log(`✓ Nullifier: ${nullifierHash.toString('hex').substring(0, 32)}...`);
 
     // ═══════════════════════════════════════════════════════════
-    // Step 5: Create mock locker script (P2PKH style)
+    // Step 5: Create locker script from registered address (P2PKH)
     // ═══════════════════════════════════════════════════════════
-    // OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
-    const lockerPubKeyHash = crypto.randomBytes(20);
-    const lockerScriptBytes = Buffer.concat([
-        Buffer.from([0x76, 0xa9, 0x14]),  // OP_DUP OP_HASH160 PUSH(20)
-        lockerPubKeyHash,
-        Buffer.from([0x88, 0xac])  // OP_EQUALVERIFY OP_CHECKSIG
-    ]);
+    // Uses the registered locker address to ensure hash matches contract
+    let lockerScriptBytes;
+
+    if (bitcoin) {
+        // Use real address conversion via bitcoinjs-lib
+        try {
+            lockerScriptBytes = bitcoin.address.toOutputScript(DEFAULT_LOCKER_ADDRESS, bitcoin.networks.bitcoin);
+            console.log(`✓ Using registered locker address: ${DEFAULT_LOCKER_ADDRESS}`);
+        } catch (e) {
+            console.log(`⚠ Failed to decode address, using hardcoded script: ${e.message}`);
+            // Fallback: hardcoded script for 1NtQASBBziad6x5dST3jgoFqWv1eMAAnWY
+            lockerScriptBytes = Buffer.from('76a914f01330d32d8f0df50b52966d735832ad0ab0df1c88ac', 'hex');
+        }
+    } else {
+        // Fallback: hardcoded script for 1NtQASBBziad6x5dST3jgoFqWv1eMAAnWY
+        // This is OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+        console.log(`⚠ bitcoinjs-lib not available, using hardcoded script for ${DEFAULT_LOCKER_ADDRESS}`);
+        lockerScriptBytes = Buffer.from('76a914f01330d32d8f0df50b52966d735832ad0ab0df1c88ac', 'hex');
+    }
     const lockerScriptBits = padBits(bufferToBitsBE(lockerScriptBytes), LOCKER_SCRIPT_BITS);
     const lockerScriptLength = lockerScriptBytes.length;
 
@@ -227,30 +321,45 @@ function generateTestInput() {
         locktime
     ]);
 
-    // Calculate locker output offset (bit offset where output0 starts)
-    // Offset = version(4) + inputCount(1) + input(41) + outputCount(1) = 47 bytes = 376 bits
-    const lockerOutputOffsetBytes = version.length + inputCount.length + input.length + outputCount.length;
-    const lockerOutputOffset = lockerOutputOffsetBytes * 8;
-    console.log(`✓ Locker output offset: ${lockerOutputOffsetBytes} bytes = ${lockerOutputOffset} bits`);
+    // Calculate locker output byte offset (where output0 starts)
+    // Offset = version(4) + inputCount(1) + input(41) + outputCount(1) = 47 bytes
+    const lockerOutputByteOffset = version.length + inputCount.length + input.length + outputCount.length;
+    console.log(`✓ Locker output byte offset: ${lockerOutputByteOffset} bytes`);
 
     console.log(`✓ Transaction size: ${rawTx.length} bytes`);
 
-    // Calculate commitment offset in transaction
+    // Calculate commitment BYTE offset in transaction (where the 32-byte commitment starts)
     // version(4) + inputCount(1) + input(41) + outputCount(1) + output0(34) + output1Value(8) + output1ScriptLen(1) + OP_RETURN(1) + PUSH(1) = 92 bytes
-    const commitmentOffset = version.length + inputCount.length + input.length +
+    const commitmentByteOffset = version.length + inputCount.length + input.length +
         outputCount.length + output0.length + output1Value.length + output1ScriptLen.length + 2;  // +2 for OP_RETURN and PUSH opcode
 
-    console.log(`✓ Commitment offset: ${commitmentOffset} bytes`);
+    console.log(`✓ Commitment byte offset: ${commitmentByteOffset} bytes`);
 
-    // Pad transaction to MAX_TX_BITS
-    const txBits = padBits(bufferToBitsBE(rawTx), MAX_TX_BITS);
+    // ═══════════════════════════════════════════════════════════
+    // Step 6b: Compute txId and SHA256-padded transaction
+    // txId = SHA256(SHA256(transaction))
+    //
+    // The prover provides paddedTransaction with correct SHA256 padding.
+    // The circuit verifies that hash(paddedTransaction) == txId.
+    // ═══════════════════════════════════════════════════════════
+
+    // Apply SHA256 padding to transaction
+    // Padding is correct for actual length, then zero-extended to MAX_PADDED_BITS
+    const { padded: paddedTx, numBlocks } = sha256PadForCircuit(rawTx, MAX_PADDED_BITS);
+    const paddedTxBits = bufferToBitsBE(paddedTx);
+
+    console.log(`✓ TX length: ${rawTx.length} bytes -> ${numBlocks} SHA256 blocks`);
 
     // Compute txId (double SHA256)
-    const txId = doubleSha256(rawTx);
-    console.log(`✓ TxId: ${Buffer.from(txId).reverse().toString('hex')}`);
+    const txIdBytes = doubleSha256(rawTx);
+    const txIdBits = bufferToBitsBE(txIdBytes);
+
+    // Display txId in Bitcoin's reversed format (little-endian display)
+    console.log(`✓ TxId: ${Buffer.from(txIdBytes).reverse().toString('hex')}`);
 
     // ═══════════════════════════════════════════════════════════
     // Step 7: Create mock Merkle proof (placeholder for Phase 2)
+    // Circuit expects NUM_MERKLE_ROOTS = 2 for hidden root selection
     // ═══════════════════════════════════════════════════════════
     const merkleProof = [];
     for (let i = 0; i < MERKLE_DEPTH; i++) {
@@ -258,25 +367,28 @@ function generateTestInput() {
         merkleProof.push(bufferToBitsBE(sibling));
     }
     const merkleIndex = 0;  // Leaf position
-    const merkleRoot = BigInt(12345);  // Placeholder - not verified in Phase 1
 
-    // ═══════════════════════════════════════════════════════════
-    // Step 8: Define recipient address
-    // ═══════════════════════════════════════════════════════════
-    const recipientAddress = '0x' + crypto.randomBytes(20).toString('hex');
-    const recipient = BigInt(recipientAddress);
-    console.log(`✓ Recipient: ${recipientAddress}`);
+    // Circuit uses merkleRoots[2] for privacy (hidden root selection)
+    // User proves TX is in ONE of these without revealing which
+    const merkleRoots = [
+        BigInt(12345).toString(),  // Placeholder root 0
+        BigInt(67890).toString()   // Placeholder root 1
+    ];
+    const rootIndex = 0;  // Which root the TX is in (private input)
+    console.log(`✓ Merkle roots: [${merkleRoots[0]}, ${merkleRoots[1]}] (placeholders)`);
+    console.log(`✓ Root index: ${rootIndex} (private)`);
 
     // ═══════════════════════════════════════════════════════════
     // Build circuit input object
+    //
+    // SECURITY FIX: We now use ONLY paddedTransaction for all operations.
+    // The circuit extracts commitment from paddedTransaction at commitmentByteOffset.
+    // This ensures the commitment is actually in the transaction.
     // ═══════════════════════════════════════════════════════════
 
-    // Convert commitment to bits for circuit input
-    const commitmentBits = bufferToBitsBE(commitment);
-
     const circuitInput = {
-        // PUBLIC INPUTS
-        merkleRoot: merkleRoot.toString(),
+        // PUBLIC INPUTS (7 total: merkleRoots[2] counts as 2)
+        merkleRoots: merkleRoots,  // Array of 2 roots for hidden selection
         nullifier: nullifierValue.toString(),
         amount: amountSatoshis.toString(),
         chainId: chainId.toString(),
@@ -285,21 +397,25 @@ function generateTestInput() {
 
         // PRIVATE INPUTS
         secret: secretBits,
-        commitmentFromTx: commitmentBits,  // Commitment extracted from TX's OP_RETURN
-        transaction: txBits,
-        txLength: rawTx.length,
         lockerScript: lockerScriptBits,
         lockerScriptLength: lockerScriptLength,
         lockerOutputIndex: 0,
-        lockerOutputOffset: lockerOutputOffset,  // Bit offset where locker output starts
+        lockerOutputByteOffset: lockerOutputByteOffset,  // Byte offset where locker output starts
+        commitmentByteOffset: commitmentByteOffset,      // Byte offset where commitment starts in OP_RETURN
+        rootIndex: rootIndex,  // Which merkle root the TX is in (private)
         merkleProof: merkleProof,
-        merkleIndex: merkleIndex
+        merkleIndex: merkleIndex,
+
+        // SINGLE TRANSACTION INPUT (used for everything)
+        paddedTransaction: paddedTxBits,  // Transaction with SHA256 padding
+        numBlocks: numBlocks,             // Number of 512-bit blocks to process
+        txId: txIdBits,                   // Expected SHA256(SHA256(transaction)) - 256 bits
     };
 
     console.log('\n📊 Input Summary:');
     console.log('─────────────────');
     console.log('PUBLIC INPUTS:');
-    console.log(`  merkleRoot:       ${merkleRoot} (placeholder)`);
+    console.log(`  merkleRoots:      [${merkleRoots[0]}, ${merkleRoots[1]}] (placeholders)`);
     console.log(`  nullifier:        ${nullifierValue.toString().substring(0, 20)}...`);
     console.log(`  amount:           ${amountSatoshis} satoshis`);
     console.log(`  chainId:          ${chainId}`);
@@ -307,9 +423,13 @@ function generateTestInput() {
     console.log(`  lockerScriptHash: ${lockerScriptHash.toString().substring(0, 20)}...`);
     console.log('\nPRIVATE INPUTS:');
     console.log(`  secret:           ${secretBits.length} bits`);
-    console.log(`  commitmentFromTx: ${commitmentBits.length} bits`);
-    console.log(`  transaction:      ${txBits.length} bits (${rawTx.length} bytes actual)`);
+    console.log(`  paddedTransaction:${paddedTxBits.length} bits (${rawTx.length} bytes actual TX)`);
+    console.log(`  numBlocks:        ${numBlocks}`);
+    console.log(`  txId:             ${txIdBits.length} bits (circuit verifies hash)`);
     console.log(`  lockerScript:     ${lockerScriptBits.length} bits (${lockerScriptLength} bytes actual)`);
+    console.log(`  lockerOutputByteOffset: ${lockerOutputByteOffset} bytes`);
+    console.log(`  commitmentByteOffset:   ${commitmentByteOffset} bytes`);
+    console.log(`  rootIndex:        ${rootIndex}`);
 
     return circuitInput;
 }

@@ -194,14 +194,18 @@ async function main() {
     const secret = crypto.randomBytes(32);
     console.log(`  Secret: ${secret.toString('hex')}`);
 
-    // commitment = SHA256(secret || amount || chainId)
+    // commitment = SHA256(secret || amount || chainId || recipient)
+    // Total: 32 + 8 + 2 + 20 = 62 bytes (496 bits) - matches circuit
     const amountBuffer = Buffer.alloc(8);
     amountBuffer.writeBigUInt64BE(BigInt(CONFIG.amountSats));
 
     const chainIdBuffer = Buffer.alloc(2);
     chainIdBuffer.writeUInt16BE(CONFIG.chainId);
 
-    const commitmentInput = Buffer.concat([secret, amountBuffer, chainIdBuffer]);
+    // Convert recipient address to bytes (remove 0x prefix)
+    const recipientBytes = Buffer.from(CONFIG.recipient.slice(2), 'hex');
+
+    const commitmentInput = Buffer.concat([secret, amountBuffer, chainIdBuffer, recipientBytes]);
     const commitment = sha256(commitmentInput);
     console.log(`  Commitment: ${commitment.toString('hex')}`);
 
@@ -220,10 +224,12 @@ async function main() {
     console.log('─────────────────────────────────────────────────────────────');
 
     const keyPair = ECPair.fromWIF(CONFIG.privateKeyWIF, CONFIG.network);
-    const { address: senderAddress } = bitcoin.payments.p2pkh({
+    // Use P2WPKH (native SegWit) for bc1 addresses
+    const p2wpkh = bitcoin.payments.p2wpkh({
         pubkey: keyPair.publicKey,
         network: CONFIG.network,
     });
+    const senderAddress = p2wpkh.address;
     console.log(`  Sender Address: ${senderAddress}`);
 
     // ═══════════════════════════════════════════════════════════════════
@@ -269,16 +275,14 @@ async function main() {
     // Add inputs
     let inputTotal = 0;
     for (const utxo of utxos) {
-        // Fetch raw transaction for non-witness UTXO
-        const fetch = (await import('node-fetch')).default;
-        const rawTxUrl = `https://mempool.space/api/tx/${utxo.txid}/hex`;
-        const rawTxResponse = await fetch(rawTxUrl);
-        const rawTxHex = await rawTxResponse.text();
-
+        // For SegWit (P2WPKH) inputs, use witnessUtxo
         psbt.addInput({
             hash: utxo.txid,
             index: utxo.vout,
-            nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
+            witnessUtxo: {
+                script: p2wpkh.output,
+                value: utxo.value,
+            },
         });
 
         inputTotal += utxo.value;

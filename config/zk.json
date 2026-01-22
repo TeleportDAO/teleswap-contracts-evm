@@ -1,0 +1,36 @@
+{
+    "circuit": {
+        "build_path": "zkproof/build",
+        "wasm_path": "zkproof/build/main_js/main.wasm",
+        "zkey_path": "zkproof/build/circuit_final.zkey",
+        "verification_key_path": "zkproof/build/verification_key.json"
+    },
+    "deposits_path": "zkproof/deposits",
+    "claims_path": "zkproof/claims",
+    "supported_networks": {
+        "polygon": {
+            "enabled": true,
+            "block_explorer": "https://polygonscan.com"
+        },
+        "ethereum": {
+            "enabled": false,
+            "block_explorer": "https://etherscan.io"
+        },
+        "arbitrum": {
+            "enabled": false,
+            "block_explorer": "https://arbiscan.io"
+        },
+        "base": {
+            "enabled": false,
+            "block_explorer": "https://basescan.org"
+        }
+    },
+    "bitcoin": {
+        "network": "mainnet",
+        "mempool_api": "https://mempool.space/api",
+        "confirmation_blocks": 6
+    },
+    "defaults": {
+        "locker_script_type": "p2pkh"
+    }
+}

@@ -11,13 +11,14 @@ interface IGroth16Verifier {
      * @param _pA Proof point A (2 elements)
      * @param _pB Proof point B (2x2 elements)
      * @param _pC Proof point C (2 elements)
-     * @param _pubSignals Public signals (6 elements for PrivateTransfer)
+     * @param _pubSignals Public signals (7 elements for PrivateTransfer v1.5)
+     *        Order: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
      * @return True if the proof is valid
      */
     function verifyProof(
         uint256[2] calldata _pA,
         uint256[2][2] calldata _pB,
         uint256[2] calldata _pC,
-        uint256[6] calldata _pubSignals
+        uint256[7] calldata _pubSignals
     ) external view returns (bool);
 }

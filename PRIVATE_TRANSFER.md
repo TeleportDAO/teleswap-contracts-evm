@@ -42,7 +42,7 @@ This creates a **permanent, public link** between a user's Bitcoin and EVM ident
 STEP 1: USER GENERATES SECRET (locally, never shared)
 ────────────────────────────────────────────────────
 secret = random 256 bits
-commitment = SHA256(secret || amount || chainId)
+commitment = SHA256(secret || amount || chainId || recipient)  ← includes recipient!
 nullifier = SHA256(secret || 0x01)  ← save for claiming later
 
 STEP 2: BITCOIN DEPOSIT
@@ -57,14 +57,14 @@ STEP 3: PRIVATE CLAIM (user calls contract directly)
 User generates ZK proof locally, then calls claimPrivate() with:
 ├── ZK Proof
 ├── Nullifier
-├── Recipient address
+├── Recipient address (must match commitment!)
 ├── Amount
 ├── Locker script (public - for verification)
-└── Merkle root + proof data
+└── Merkle roots array + proof data
 
 Contract verifies:
 ├── ZK proof is valid
-├── Merkle root is valid (via Bitcoin relay - future)
+├── Merkle roots are valid (via Bitcoin relay - future)
 ├── Nullifier not used before
 └── Mints teleBTC to recipient
 ```
@@ -73,6 +73,8 @@ Contract verifies:
 - OP_RETURN is just the commitment (32 bytes)
 - Locker script is PUBLIC - circuit verifies TX sent BTC to this locker
 - Amount in commitment MUST match actual BTC sent to locker
+- **Recipient in commitment** - prevents front-running attacks
+- **Hidden root selection** - user proves tx is in ONE of N roots, without revealing which
 - No registration step - user claims directly
 
 ---
@@ -89,7 +91,9 @@ The ZK proof proves ALL of the following:
 | 4 | Amount in TX matches amount in commitment | Amount manipulation | ✓ Implemented |
 | 5 | Nullifier correctly derived from secret | Double-claim attacks | ✓ Implemented |
 | 6 | Locker script hash matches public input | Fake locker attacks | ✓ Implemented |
-| 7 | TX is in Merkle tree | Fake transaction attacks | Phase 2 |
+| 7 | **Recipient matches commitment** | **Front-running attacks** | ✓ Implemented |
+| 8 | **TX in one of N merkle roots (hidden which)** | **Transaction-claim linkage** | ✓ Implemented |
+| 9 | TX is in Merkle tree | Fake transaction attacks | Phase 2 |
 
 ---
 
@@ -118,6 +122,49 @@ The ZK proof proves ALL of the following:
 
 ---
 
+## Security Enhancements
+
+### 1. Hidden Root Selection (Privacy)
+
+**Problem:** If the merkle root is public, observers can identify which Bitcoin block the transaction is in. If there's only one deposit in that block to the locker, the link between Bitcoin TX and EVM claim is trivially broken.
+
+**Solution:** Instead of a single merkle root, the circuit accepts an array of N merkle roots (currently N=2). The prover selects which root their TX is in using a **private** index.
+
+```
+PUBLIC INPUTS:
+- merkleRoots[2]    ← Array of valid merkle roots (e.g., from 2 blocks)
+
+PRIVATE INPUTS:
+- rootIndex         ← Which root the TX is in (0 or 1)
+
+CIRCUIT PROVES:
+- TX is in merkleRoots[rootIndex] without revealing rootIndex
+```
+
+**Result:** Observers see the claim and 2 possible merkle roots. They cannot determine which root (and thus which Bitcoin block/transaction) was actually used. The anonymity set is the union of all transactions to the locker in ALL the provided blocks.
+
+### 2. Front-Running Protection
+
+**Problem:** If the recipient address is not in the commitment, a malicious node could:
+1. See a user's claim transaction in the mempool
+2. Extract the secret/proof from it
+3. Front-run with the same proof but a different recipient address
+4. Steal the tokens
+
+**Solution:** Include the recipient address in the commitment:
+
+```
+BEFORE (vulnerable):
+commitment = SHA256(secret || amount || chainId)
+
+AFTER (secure):
+commitment = SHA256(secret || amount || chainId || recipient)
+```
+
+The circuit verifies that the `recipient` public input matches what's in the commitment. Only the address specified at deposit time can claim - no one else can use the proof.
+
+---
+
 ## Security: Why Only YOU Can Claim
 
 **Question:** If someone sees my commitment on Bitcoin, can they steal my tokens?
@@ -125,7 +172,7 @@ The ZK proof proves ALL of the following:
 **Answer: NO.** Here's why:
 
 ```
-commitment = SHA256(secret || amount || chainId)
+commitment = SHA256(secret || amount || chainId || recipient)
 nullifier = SHA256(secret || 0x01)
 ```
 
@@ -183,11 +230,13 @@ The locker script is public in the claim. This means observers know which locker
 
 | Component | Formula | Purpose |
 |-----------|---------|---------|
-| **Commitment** | `SHA256(secret \|\| amount \|\| chainId)` | Binds secret to amount and chain |
+| **Commitment** | `SHA256(secret \|\| amount \|\| chainId \|\| recipient)` | Binds secret to amount, chain, and recipient |
 | **Nullifier** | `SHA256(secret \|\| 0x01)` | Unique identifier, prevents double-claim |
 | **ZK Proof** | Groth16 SNARK | Proves all constraints without revealing secret |
 
 **Why nullifier instead of secret?** The contract must track "already claimed" to prevent double-minting. If we revealed the secret on-chain, anyone could compute the commitment and search Bitcoin for the matching OP_RETURN—breaking privacy. The nullifier is a one-way hash: it cannot be reversed to find the secret, so the link to the Bitcoin transaction stays hidden.
+
+**Why recipient in commitment?** Prevents front-running attacks. Without it, anyone who sees your claim TX in the mempool could extract the proof and use it with a different recipient address.
 
 ### OP_RETURN Format
 
@@ -197,7 +246,15 @@ OP_RETURN: [commitment]  (32 bytes)
 
 Everything else is embedded in the commitment:
 ```
-commitment = SHA256(secret || amount || chainId)
+commitment = SHA256(secret || amount || chainId || recipient)
+
+Where:
+- secret:    256 bits (32 bytes) - random, user keeps private
+- amount:    64 bits (8 bytes)   - satoshis sent to locker
+- chainId:   16 bits (2 bytes)   - target EVM chain ID
+- recipient: 160 bits (20 bytes) - EVM address to receive teleBTC
+
+Total input to SHA256: 62 bytes (496 bits)
 ```
 
 ### System Flow
@@ -208,13 +265,13 @@ commitment = SHA256(secret || amount || chainId)
 ├─────────────────────────────────────────────────────────────────┤
 │  User wallet generates:                                         │
 │  - secret (random 256 bits)                                     │
-│  - commitment = SHA256(secret || amount || chainId)             │
+│  - commitment = SHA256(secret || amount || chainId || recipient)│
 │                                                                 │
 │  Bitcoin TX:                                                    │
 │  - Output 0: Send `amount` BTC to locker                        │
 │  - Output 1: OP_RETURN with commitment                          │
 │                                                                 │
-│  User saves: secret, amount, chainId, lockerScript              │
+│  User saves: secret, amount, chainId, recipient, lockerScript   │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │  User waits for confirmations
@@ -226,11 +283,13 @@ commitment = SHA256(secret || amount || chainId)
 │  1. I know secret for commitment in TX's OP_RETURN              │
 │  2. TX sends `amount` BTC to `lockerScript`                     │
 │  3. Nullifier = SHA256(secret || 0x01)                          │
-│  4. TX is in Merkle tree (future)                               │
+│  4. Recipient matches what's in commitment                      │
+│  5. TX is in ONE of the provided merkle roots (hidden which)    │
+│  6. TX is in Merkle tree (future - actual verification)         │
 │                                                                 │
-│  Public inputs: merkleRoot, nullifier, amount,                  │
+│  Public inputs: merkleRoots[2], nullifier, amount,              │
 │                 chainId, recipient, lockerScriptHash            │
-│  Private inputs: secret, full TX, Merkle proof                  │
+│  Private inputs: secret, full TX, rootIndex, Merkle proof       │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               │  User submits ONE transaction
@@ -240,16 +299,16 @@ commitment = SHA256(secret || amount || chainId)
 ├─────────────────────────────────────────────────────────────────┤
 │  function claimPrivate(                                         │
 │      proof,              // ZK proof                            │
-│      merkleRoot,         // Bitcoin block's Merkle root         │
+│      merkleRoots[2],     // Array of valid Bitcoin merkle roots │
 │      nullifier,          // Prevents double-claim               │
-│      recipient,          // Where to send teleBTC               │
+│      recipient,          // Where to send teleBTC (in commitment)│
 │      amount,             // Amount to mint                      │
 │      lockerScriptHash    // Hash of locker's Bitcoin script     │
 │  )                                                              │
 │                                                                 │
 │  Contract verifies:                                             │
 │  1. ZK proof valid (via Groth16Verifier)                        │
-│  2. Merkle root valid (via Bitcoin relay - future)              │
+│  2. Merkle roots valid (via Bitcoin relay - future)             │
 │  3. Locker script hash is valid locker                          │
 │  4. Nullifier not used before                                   │
 │                                                                 │
@@ -416,4 +475,4 @@ See [PRIVATE_TRANSFER_PLAN.md](./PRIVATE_TRANSFER_PLAN.md) for detailed implemen
 
 ---
 
-*Last updated: 2026-01-16*
+*Last updated: 2026-01-20*

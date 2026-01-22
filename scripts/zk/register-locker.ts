@@ -4,14 +4,18 @@
  * Usage:
  *   npx hardhat run scripts/zk/register-locker.ts --network polygon
  *
+ *   Or with deploy command:
+ *   NETWORK=polygon TAG=zk npm run config
+ *
  * Environment Variables:
  *   BTC_LOCKER_ADDRESS - Bitcoin P2PKH address of the locker
  */
 
-import { ethers } from "hardhat";
+import { ethers, deployments } from "hardhat";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import zkConfig from "../../config/zk.json";
 
 // Check for bitcoinjs-lib
 let bitcoin: any;
@@ -23,10 +27,6 @@ try {
 }
 
 require("dotenv").config();
-
-interface DeploymentData {
-    claimContract: string;
-}
 
 function sha256(data: Buffer): Buffer {
     return crypto.createHash("sha256").update(data).digest();
@@ -77,16 +77,18 @@ async function main() {
 
     console.log(`Locker Script Hash: ${lockerScriptHash.toString()}`);
 
-    // Load deployment
-    const deploymentPath = path.join(__dirname, "../../deployments/zk/polygon.json");
-    if (!fs.existsSync(deploymentPath)) {
-        console.error(`❌ Deployment not found: ${deploymentPath}`);
-        console.error("   Run: npx hardhat run scripts/zk/deploy-polygon.ts --network polygon");
+    // Load deployment from hardhat-deploy
+    let claimContractAddress: string;
+    try {
+        const deployment = await deployments.get("PrivateTransferClaimTest");
+        claimContractAddress = deployment.address;
+    } catch (e) {
+        console.error(`❌ Deployment not found for PrivateTransferClaimTest`);
+        console.error("   Run: NETWORK=<network> TAG=zk npm run deploy");
         process.exit(1);
     }
 
-    const deployment: DeploymentData = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
-    console.log(`\nContract: ${deployment.claimContract}`);
+    console.log(`\nContract: ${claimContractAddress}`);
 
     // Get signer
     const [signer] = await ethers.getSigners();
@@ -95,7 +97,7 @@ async function main() {
     // Connect to contract
     const claimContract = await ethers.getContractAt(
         "PrivateTransferClaimTest",
-        deployment.claimContract,
+        claimContractAddress,
         signer
     );
 
@@ -127,16 +129,19 @@ async function main() {
         process.exit(1);
     }
 
-    // Save locker info
+    // Save locker info to zkproof/lockers directory
+    const network = await ethers.provider.getNetwork();
     const lockerInfo = {
         address: lockerAddress,
         script: lockerScript.toString("hex"),
         scriptHash: lockerScriptHash.toString(),
+        network: network.name,
+        chainId: network.chainId,
         registeredAt: new Date().toISOString(),
         txHash: tx.hash,
     };
 
-    const lockersDir = path.join(__dirname, "../../deployments/zk/lockers");
+    const lockersDir = path.join(__dirname, "../../zkproof/lockers");
     if (!fs.existsSync(lockersDir)) {
         fs.mkdirSync(lockersDir, { recursive: true });
     }

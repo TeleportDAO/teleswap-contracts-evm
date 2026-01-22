@@ -4,60 +4,96 @@ include "../../node_modules/circomlib/circuits/comparators.circom";
 include "../../node_modules/circomlib/circuits/bitify.circom";
 
 /**
- * Extract 8 bytes from bit array as little-endian uint64
- * Bitcoin stores values in little-endian format
+ * Selector for variable array indexing
+ * Creates a one-hot selector based on index
  *
- * @param offset - Bit offset where the 8 bytes start
+ * @param n - Array size
  */
-template ExtractUint64LE(maxBits) {
-    signal input bits[maxBits];
-    signal input offset;
-    signal output value;
+template Selector(n) {
+    signal input index;
+    signal output out[n];
 
-    // We need to extract 64 bits (8 bytes) starting at offset
-    // Bitcoin uses little-endian, so byte[0] is LSB
-
-    // For each of the 64 bit positions, select the correct bit
-    signal selectedBits[64];
-
-    // Use a selector approach - for each possible offset, calculate contribution
-    // This is expensive but necessary for variable offset
-
-    // Simplified: assume offset is byte-aligned and within bounds
-    // Extract 8 bytes = 64 bits
-
-    component bits2num = Bits2Num(64);
-
-    // For little-endian: byte 0 (bits 0-7) is least significant
-    // We need to reverse byte order for Bits2Num
-
-    // Extract each byte and reconstruct in correct order
-    signal bytes[8][8];
-
-    for (var byteIdx = 0; byteIdx < 8; byteIdx++) {
-        for (var bitIdx = 0; bitIdx < 8; bitIdx++) {
-            // Calculate bit position: offset + byteIdx * 8 + (7 - bitIdx)
-            // (7 - bitIdx) because bits within byte are big-endian in our representation
-            var bitPos = byteIdx * 8 + (7 - bitIdx);
-
-            // For variable offset, we need multiplexing
-            // Simplified: use constraint with offset
-            // This assumes offset is known and small enough
-
-            // Direct indexing (works for constant offset)
-            bytes[byteIdx][bitIdx] <-- bits[offset + bitPos];
-        }
+    // Create one-hot encoding: out[i] = 1 if index == i, else 0
+    component isEq[n];
+    for (var i = 0; i < n; i++) {
+        isEq[i] = IsEqual();
+        isEq[i].in[0] <== index;
+        isEq[i].in[1] <== i;
+        out[i] <== isEq[i].out;
     }
 
-    // Reconstruct value: byte[0] is LSB
-    // Bits2Num expects little-endian (LSB first)
-    for (var byteIdx = 0; byteIdx < 8; byteIdx++) {
-        for (var bitIdx = 0; bitIdx < 8; bitIdx++) {
-            bits2num.in[byteIdx * 8 + bitIdx] <== bytes[byteIdx][7 - bitIdx];
-        }
+    // Verify exactly one is selected (index in range)
+    signal sumCheck;
+    var sum = 0;
+    for (var i = 0; i < n; i++) {
+        sum += out[i];
     }
+    sumCheck <== sum;
+    sumCheck === 1;
+}
 
-    value <== bits2num.out;
+/**
+ * Extract a single bit from array at variable offset with proper constraints
+ *
+ * @param n - Array size in bits
+ */
+template ExtractBit(n) {
+    signal input bits[n];
+    signal input offset;  // Must be in range [0, n-1]
+    signal output out;
+
+    // Create selector for the offset
+    component selector = Selector(n);
+    selector.index <== offset;
+
+    // Compute weighted sum: out = sum(selector[i] * bits[i])
+    signal products[n];
+    var sum = 0;
+    for (var i = 0; i < n; i++) {
+        products[i] <== selector.out[i] * bits[i];
+        sum += products[i];
+    }
+    out <== sum;
+}
+
+/**
+ * Extract multiple consecutive bits from array at variable byte offset
+ * Uses selector-based extraction for soundness
+ *
+ * NOTE: Offset is in BYTES (not bits) to reduce selector size
+ *
+ * @param maxBytes - Maximum array size in bytes
+ * @param extractBits - Number of bits to extract
+ */
+template ExtractBitsAtByteOffset(maxBytes, extractBits) {
+    signal input bits[maxBytes * 8];
+    signal input byteOffset;  // Offset in bytes (must be in range [0, maxBytes - extractBits/8])
+    signal output out[extractBits];
+
+    // Create selector for byte offset
+    component selector = Selector(maxBytes);
+    selector.index <== byteOffset;
+
+    // Declare contributions as 2D array at template scope (circom requirement)
+    signal contributions[extractBits][maxBytes];
+
+    // For each bit to extract, compute weighted sum across all possible offsets
+    // out[j] = sum over all byte offsets i: selector[i] * bits[i*8 + j]
+    for (var j = 0; j < extractBits; j++) {
+        var sum = 0;
+        for (var i = 0; i < maxBytes; i++) {
+            // Bit position at byte offset i for extraction bit j
+            var bitPos = i * 8 + j;
+            // Only include if within bounds (should always be true for valid inputs)
+            if (bitPos < maxBytes * 8) {
+                contributions[j][i] <== selector.out[i] * bits[bitPos];
+            } else {
+                contributions[j][i] <== 0;
+            }
+            sum += contributions[j][i];
+        }
+        out[j] <== sum;
+    }
 }
 
 /**
@@ -87,40 +123,6 @@ template CompareBitArrays(n) {
 }
 
 /**
- * Extract script from transaction at given offset and compare to expected
- *
- * @param maxTxBits - Maximum transaction size in bits
- * @param scriptBits - Script size in bits
- */
-template VerifyScript(maxTxBits, scriptBits) {
-    signal input txBits[maxTxBits];
-    signal input scriptOffset;  // Bit offset where script starts
-    signal input scriptLength;  // Actual script length in bytes
-    signal input expectedScript[scriptBits];
-
-    signal output isMatch;
-
-    // Extract script bits from transaction
-    signal extractedScript[scriptBits];
-
-    for (var i = 0; i < scriptBits; i++) {
-        // Extract bit at scriptOffset + i
-        // For variable offset, this needs multiplexing
-        // Simplified: direct assignment (prover provides correct offset)
-        extractedScript[i] <-- txBits[scriptOffset + i];
-    }
-
-    // Compare extracted script with expected (up to scriptLength * 8 bits)
-    component compare = CompareBitArrays(scriptBits);
-    for (var i = 0; i < scriptBits; i++) {
-        compare.a[i] <== extractedScript[i];
-        compare.b[i] <== expectedScript[i];
-    }
-
-    isMatch <== compare.isEqual;
-}
-
-/**
  * Verify that a Bitcoin transaction output at a given offset:
  * 1. Has the expected value (amount in satoshis)
  * 2. Has the expected script (locker script)
@@ -130,26 +132,33 @@ template VerifyScript(maxTxBits, scriptBits) {
  * - Script length: varint (1-9 bytes, usually 1 for small scripts)
  * - Script: variable bytes
  *
- * @param maxTxBits - Maximum transaction size in bits
+ * SECURITY: Uses selector-based extraction to properly constrain that
+ * the extracted value/script actually come from the transaction at the
+ * claimed offset. This prevents a malicious prover from claiming arbitrary
+ * amounts.
+ *
+ * @param maxTxBytes - Maximum transaction size in bytes
  * @param maxScriptBits - Maximum script size in bits
  */
-template VerifyTxOutput(maxTxBits, maxScriptBits) {
-    signal input txBits[maxTxBits];
-    signal input outputOffset;      // Bit offset where output starts
-    signal input expectedAmount;    // Expected value in satoshis
+template VerifyTxOutput(maxTxBytes, maxScriptBits) {
+    signal input txBits[maxTxBytes * 8];
+    signal input outputByteOffset;      // Byte offset where output starts
+    signal input expectedAmount;        // Expected value in satoshis
     signal input expectedScript[maxScriptBits];
     signal input expectedScriptLength;  // In bytes
 
     signal output isValid;
 
     // ═══════════════════════════════════════════════════════════════════
-    // Step 1: Extract value (8 bytes = 64 bits) at outputOffset
+    // Step 1: Extract value (8 bytes = 64 bits) at outputByteOffset
+    // Uses constrained selector-based extraction
     // ═══════════════════════════════════════════════════════════════════
 
-    signal valueBits[64];
-    for (var i = 0; i < 64; i++) {
-        valueBits[i] <-- txBits[outputOffset + i];
+    component valueExtractor = ExtractBitsAtByteOffset(maxTxBytes, 64);
+    for (var i = 0; i < maxTxBytes * 8; i++) {
+        valueExtractor.bits[i] <== txBits[i];
     }
+    valueExtractor.byteOffset <== outputByteOffset;
 
     // Convert little-endian bytes to value
     // Bitcoin stores values as little-endian uint64
@@ -160,9 +169,6 @@ template VerifyTxOutput(maxTxBits, maxScriptBits) {
     // - Stored in TX as bytes: 80 96 98 00 00 00 00 00 (LE)
     // - Byte 0 (0x80) bits in our format: [1,0,0,0,0,0,0,0] (MSB first)
     // - For Bits2Num: need [0,0,0,0,0,0,0,1] (LSB first)
-    //
-    // So for byte i, bit j (0=MSB, 7=LSB in our format):
-    // - bits2num.in[i*8 + (7-j)] = valueBits[i*8 + j]
     component bits2num = Bits2Num(64);
 
     for (var byteIdx = 0; byteIdx < 8; byteIdx++) {
@@ -171,7 +177,7 @@ template VerifyTxOutput(maxTxBits, maxScriptBits) {
             // Dest bit: byteIdx*8 + (7-bitIdx) (LSB first within byte)
             var srcBit = byteIdx * 8 + bitIdx;
             var dstBit = byteIdx * 8 + (7 - bitIdx);
-            bits2num.in[dstBit] <== valueBits[srcBit];
+            bits2num.in[dstBit] <== valueExtractor.out[srcBit];
         }
     }
 
@@ -192,46 +198,54 @@ template VerifyTxOutput(maxTxBits, maxScriptBits) {
 
     // For simplicity, assume script length varint is 1 byte
     // (valid for scripts up to 252 bytes, which covers P2PKH, P2SH, P2WPKH)
-    // Script starts at outputOffset + 64 (value) + 8 (1 byte length)
+    // Script starts at outputByteOffset + 8 (value) + 1 (length) = +9 bytes
 
-    signal scriptOffset;
-    scriptOffset <== outputOffset + 72;  // 64 bits value + 8 bits length
+    signal scriptByteOffset;
+    scriptByteOffset <== outputByteOffset + 9;
 
-    // Extract and compare script
-    signal scriptBits[maxScriptBits];
-    for (var i = 0; i < maxScriptBits; i++) {
-        scriptBits[i] <-- txBits[scriptOffset + i];
+    // Extract script bits using constrained selector
+    // Compare up to 25 bytes (200 bits) - handles all standard script types
+    var MAX_SCRIPT_BITS = 200;  // 25 bytes
+
+    component scriptExtractor = ExtractBitsAtByteOffset(maxTxBytes, MAX_SCRIPT_BITS);
+    for (var i = 0; i < maxTxBytes * 8; i++) {
+        scriptExtractor.bits[i] <== txBits[i];
     }
+    scriptExtractor.byteOffset <== scriptByteOffset;
 
     // Compare with expected script using XOR
-    // Assumes standard P2PKH script: 25 bytes = 200 bits
-    // Format: OP_DUP OP_HASH160 <20-byte-pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG
-    //
-    // Only compare first 200 bits (25 bytes) - ignore padding
-    var STANDARD_SCRIPT_BITS = 200;  // 25 bytes for P2PKH
-
-    signal scriptXor[STANDARD_SCRIPT_BITS];
-    signal xorAccum[STANDARD_SCRIPT_BITS + 1];
+    signal scriptXor[MAX_SCRIPT_BITS];
+    signal xorAccum[MAX_SCRIPT_BITS + 1];
     xorAccum[0] <== 0;
 
-    for (var i = 0; i < STANDARD_SCRIPT_BITS; i++) {
-        // XOR = a + b - 2*a*b
-        scriptXor[i] <== scriptBits[i] + expectedScript[i] - 2 * scriptBits[i] * expectedScript[i];
+    for (var i = 0; i < MAX_SCRIPT_BITS; i++) {
+        // XOR = a + b - 2*a*b (0 if bits match)
+        scriptXor[i] <== scriptExtractor.out[i] + expectedScript[i] - 2 * scriptExtractor.out[i] * expectedScript[i];
         xorAccum[i + 1] <== xorAccum[i] + scriptXor[i];
     }
 
     // scriptMatch = 1 if all XORs are 0 (sum is 0)
     component scriptEqual = IsZero();
-    scriptEqual.in <== xorAccum[STANDARD_SCRIPT_BITS];
+    scriptEqual.in <== xorAccum[MAX_SCRIPT_BITS];
 
     signal scriptMatch;
     scriptMatch <== scriptEqual.out;
 
-    // Verify script length is 25 bytes (standard P2PKH)
-    // This ensures we're not accepting shorter/longer scripts
-    signal scriptLengthCheck;
-    scriptLengthCheck <== expectedScriptLength - 25;
-    scriptLengthCheck === 0;
+    // Verify script length is valid (22-25 bytes)
+    // - P2WPKH: 22 bytes
+    // - P2SH:   23 bytes
+    // - P2PKH:  25 bytes
+    component lengthMin = GreaterEqThan(8);
+    lengthMin.in[0] <== expectedScriptLength;
+    lengthMin.in[1] <== 22;
+
+    component lengthMax = LessEqThan(8);
+    lengthMax.in[0] <== expectedScriptLength;
+    lengthMax.in[1] <== 25;
+
+    signal scriptLengthValid;
+    scriptLengthValid <== lengthMin.out * lengthMax.out;
+    scriptLengthValid === 1;
 
     // ═══════════════════════════════════════════════════════════════════
     // Step 3: Both must match

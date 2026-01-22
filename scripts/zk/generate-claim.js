@@ -28,6 +28,9 @@ const MAX_TX_BITS = MAX_TX_BYTES * 8;
 const LOCKER_SCRIPT_BITS = 520;
 const MERKLE_DEPTH = 12;
 
+// Max padded transaction size: ceil((MAX_TX_BITS + 65) / 512) * 512 = 8704 bits
+const MAX_PADDED_BITS = Math.ceil((MAX_TX_BITS + 65) / 512) * 512;
+
 // Parse command line arguments
 const args = process.argv.slice(2).reduce((acc, arg) => {
     const [key, value] = arg.replace('--', '').split('=');
@@ -40,6 +43,67 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
  */
 function sha256(data) {
     return crypto.createHash('sha256').update(data).digest();
+}
+
+/**
+ * Double SHA256 hash (Bitcoin style)
+ */
+function doubleSha256(data) {
+    return sha256(sha256(data));
+}
+
+/**
+ * Apply correct SHA256 padding to a message
+ *
+ * SHA256 padding: [message][0x80][zeros...][64-bit length]
+ * Length field goes at the end of the padded blocks (multiple of 512 bits)
+ */
+function sha256Pad(message) {
+    const messageBits = message.length * 8;
+
+    // Calculate padded size: ceil((messageBits + 65) / 512) * 512
+    const paddedBits = Math.ceil((messageBits + 65) / 512) * 512;
+    const paddedBytes = paddedBits / 8;
+
+    const padded = Buffer.alloc(paddedBytes);
+
+    // Copy message
+    message.copy(padded);
+
+    // Add 0x80 byte after message
+    padded[message.length] = 0x80;
+
+    // Zeros fill the middle (Buffer.alloc already fills with zeros)
+
+    // Add 64-bit big-endian length at the END of the padded message
+    const bitLength = BigInt(messageBits);
+    padded.writeBigUInt64BE(bitLength, paddedBytes - 8);
+
+    return padded;
+}
+
+/**
+ * Apply SHA256 padding and extend to target size for circuit
+ */
+function sha256PadForCircuit(message, targetBits) {
+    // First, apply correct SHA256 padding
+    const correctlyPadded = sha256Pad(message);
+    const numBlocks = correctlyPadded.length * 8 / 512;
+
+    // Verify target is large enough
+    if (targetBits < correctlyPadded.length * 8) {
+        throw new Error(`Target ${targetBits} bits too small for padded message of ${correctlyPadded.length * 8} bits`);
+    }
+    if (targetBits % 512 !== 0) {
+        throw new Error(`Target ${targetBits} bits must be multiple of 512`);
+    }
+
+    // Zero-extend to target size for circuit input array
+    const targetBytes = targetBits / 8;
+    const extended = Buffer.alloc(targetBytes);
+    correctlyPadded.copy(extended);
+
+    return { padded: extended, numBlocks };
 }
 
 /**
@@ -113,13 +177,100 @@ async function fetchTransaction(txid) {
 }
 
 /**
+ * Strip witness data from a SegWit transaction
+ * Returns the stripped transaction: [version][inputs][outputs][locktime]
+ * This is what's used for txid calculation
+ */
+function stripWitnessData(rawTx) {
+    let offset = 0;
+
+    // Version (4 bytes)
+    const version = rawTx.slice(0, 4);
+    offset += 4;
+
+    // Check for witness marker (0x00 0x01)
+    let hasWitness = false;
+    if (rawTx[offset] === 0x00 && rawTx[offset + 1] === 0x01) {
+        hasWitness = true;
+        offset += 2;  // Skip marker and flag
+    }
+
+    // If no witness, return as-is
+    if (!hasWitness) {
+        return rawTx;
+    }
+
+    // Parse inputs
+    const inputCountStart = offset;
+    const { value: inputCount, size: inputCountSize } = readVarInt(rawTx, offset);
+    offset += inputCountSize;
+
+    // Skip input data (we'll copy it all at once later)
+    const inputsStart = inputCountStart;
+    for (let i = 0; i < inputCount; i++) {
+        offset += 32;  // Previous txid
+        offset += 4;   // Previous vout
+        const { value: scriptLen, size: scriptLenSize } = readVarInt(rawTx, offset);
+        offset += scriptLenSize;
+        offset += scriptLen;  // Script
+        offset += 4;   // Sequence
+    }
+    const inputsEnd = offset;
+
+    // Parse outputs
+    const outputsStart = offset;
+    const { value: outputCount, size: outputCountSize } = readVarInt(rawTx, offset);
+    offset += outputCountSize;
+
+    for (let i = 0; i < outputCount; i++) {
+        offset += 8;  // Value (8 bytes)
+        const { value: scriptLen, size: scriptLenSize } = readVarInt(rawTx, offset);
+        offset += scriptLenSize;
+        offset += scriptLen;  // Script
+    }
+    const outputsEnd = offset;
+
+    // Skip witness data (one stack per input)
+    for (let i = 0; i < inputCount; i++) {
+        const { value: stackItems, size: stackItemsSize } = readVarInt(rawTx, offset);
+        offset += stackItemsSize;
+        for (let j = 0; j < stackItems; j++) {
+            const { value: itemLen, size: itemLenSize } = readVarInt(rawTx, offset);
+            offset += itemLenSize;
+            offset += itemLen;
+        }
+    }
+
+    // Locktime (last 4 bytes)
+    const locktime = rawTx.slice(rawTx.length - 4);
+
+    // Build stripped transaction: version + inputs + outputs + locktime
+    const strippedTx = Buffer.concat([
+        version,
+        rawTx.slice(inputsStart, outputsEnd),
+        locktime
+    ]);
+
+    return strippedTx;
+}
+
+/**
  * Parse Bitcoin transaction to find locker output and commitment
+ * Returns stripped transaction (without witness data) for circuit
  */
 function parseTransaction(txHex, txData, lockerAddress) {
     console.log('\nParsing transaction...');
 
     const rawTx = Buffer.from(txHex, 'hex');
     console.log(`  Raw TX size: ${rawTx.length} bytes`);
+
+    // Strip witness data for txid calculation and circuit input
+    const strippedTx = stripWitnessData(rawTx);
+    const hasWitness = strippedTx.length !== rawTx.length;
+
+    if (hasWitness) {
+        console.log(`  SegWit TX detected - stripped to ${strippedTx.length} bytes`);
+    }
 
     // Find locker output
     let lockerOutputIndex = -1;
@@ -142,14 +293,17 @@ function parseTransaction(txHex, txData, lockerAddress) {
 
     // Find OP_RETURN output with commitment
     let commitmentHex = null;
+    let opReturnOutputIndex = -1;
 
-    for (const vout of txData.vout) {
+    for (let i = 0; i < txData.vout.length; i++) {
+        const vout = txData.vout[i];
         if (vout.scriptpubkey_type === 'op_return') {
             // OP_RETURN script: 6a 20 <32-byte-commitment>
             const script = vout.scriptpubkey;
             if (script.startsWith('6a20') && script.length === 68) {
                 commitmentHex = script.substring(4);  // Remove 6a20 prefix
-                console.log(`  Found commitment: ${commitmentHex}`);
+                opReturnOutputIndex = i;
+                console.log(`  Found commitment at output ${i}: ${commitmentHex}`);
             }
         }
     }
@@ -158,60 +312,66 @@ function parseTransaction(txHex, txData, lockerAddress) {
         throw new Error('Commitment not found in OP_RETURN output');
     }
 
-    // Calculate locker output offset
-    // We need to find the byte offset where the locker output starts in the raw TX
-    // This requires parsing the TX structure
-
+    // Calculate locker output offset in the STRIPPED transaction
+    // This is critical - offsets must be for the stripped TX that goes to circuit
     let offset = 0;
 
     // Version (4 bytes)
     offset += 4;
 
-    // Check for witness marker
-    let hasWitness = false;
-    if (rawTx[offset] === 0x00 && rawTx[offset + 1] === 0x01) {
-        hasWitness = true;
-        offset += 2;  // Skip marker and flag
-    }
-
-    // Input count (varint)
-    const { value: inputCount, size: inputCountSize } = readVarInt(rawTx, offset);
+    // Input count (varint) - no witness marker in stripped TX
+    const { value: inputCount, size: inputCountSize } = readVarInt(strippedTx, offset);
     offset += inputCountSize;
 
     // Skip inputs
     for (let i = 0; i < inputCount; i++) {
         offset += 32;  // Previous txid
         offset += 4;   // Previous vout
-        const { value: scriptLen, size: scriptLenSize } = readVarInt(rawTx, offset);
+        const { value: scriptLen, size: scriptLenSize } = readVarInt(strippedTx, offset);
         offset += scriptLenSize;
         offset += scriptLen;  // Script
         offset += 4;   // Sequence
     }
 
     // Output count (varint)
-    const { value: outputCount, size: outputCountSize } = readVarInt(rawTx, offset);
+    const { value: outputCount, size: outputCountSize } = readVarInt(strippedTx, offset);
     offset += outputCountSize;
 
-    // Find locker output offset
-    let lockerOutputOffset = 0;
+    // Find locker output offset and commitment offset (in BYTES, not bits)
+    let lockerOutputByteOffset = 0;
+    let commitmentByteOffset = 0;
+
     for (let i = 0; i < outputCount; i++) {
         if (i === lockerOutputIndex) {
-            lockerOutputOffset = offset * 8;  // Convert to bits
-            console.log(`  Locker output offset: ${offset} bytes = ${lockerOutputOffset} bits`);
+            lockerOutputByteOffset = offset;  // Keep as bytes
+            console.log(`  Locker output byte offset: ${offset} bytes`);
+        }
+
+        if (i === opReturnOutputIndex) {
+            // Commitment starts after: value(8) + scriptLen(1) + OP_RETURN(1) + PUSH_32(1) = +11 bytes
+            commitmentByteOffset = offset + 8 + 1 + 2;  // value + scriptLen varint + 6a20
+            console.log(`  Commitment byte offset: ${commitmentByteOffset} bytes`);
         }
 
         offset += 8;  // Value (8 bytes)
-        const { value: scriptLen, size: scriptLenSize } = readVarInt(rawTx, offset);
+        const { value: scriptLen, size: scriptLenSize } = readVarInt(strippedTx, offset);
         offset += scriptLenSize;
         offset += scriptLen;  // Script
     }
 
+    // Verify txid matches by computing it from stripped TX
+    const computedTxId = doubleSha256(strippedTx);
+    const computedTxIdHex = Buffer.from(computedTxId).reverse().toString('hex');
+    console.log(`  Computed TxId: ${computedTxIdHex}`);
+
     return {
         lockerOutputIndex,
-        lockerOutputOffset,
+        lockerOutputByteOffset,  // Now in bytes, not bits
+        commitmentByteOffset,    // Byte offset where 32-byte commitment starts
         amount: lockerOutput.value,
         commitment: Buffer.from(commitmentHex, 'hex'),
-        rawTx,
+        strippedTx,  // Use stripped TX for circuit
+        rawTx,       // Keep raw for reference
     };
 }
 
@@ -257,11 +417,34 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
     const nullifierBits = bufferToBitsBE(nullifierHash);
     const nullifier = bitsToBigInt(nullifierBits.slice(0, 254));
 
-    // Transaction bits
-    const txBits = padBits(bufferToBitsBE(txParseResult.rawTx), MAX_TX_BITS);
+    // Use STRIPPED transaction (without witness data) for circuit
+    const strippedTx = txParseResult.strippedTx;
 
-    // Commitment bits
-    const commitmentBits = bufferToBitsBE(txParseResult.commitment);
+    // Verify transaction fits in circuit
+    if (strippedTx.length > MAX_TX_BYTES) {
+        throw new Error(`Transaction too large: ${strippedTx.length} bytes > ${MAX_TX_BYTES} max`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SINGLE TRANSACTION INPUT (paddedTransaction)
+    //
+    // SECURITY FIX: We use ONLY paddedTransaction for all operations.
+    // The circuit extracts commitment from paddedTransaction at commitmentByteOffset.
+    // This ensures the commitment is actually in the transaction.
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Compute txId from stripped transaction (double SHA256)
+    const txIdBytes = doubleSha256(strippedTx);
+    const txIdBits = bufferToBitsBE(txIdBytes);
+
+    // Apply SHA256 padding for circuit
+    const { padded: paddedTx, numBlocks } = sha256PadForCircuit(strippedTx, MAX_PADDED_BITS);
+    const paddedTxBits = bufferToBitsBE(paddedTx);
+
+    // Display txId in Bitcoin's reversed format for verification
+    const txIdDisplay = Buffer.from(txIdBytes).reverse().toString('hex');
+    console.log(`  TxId (for verification): ${txIdDisplay}`);
+    console.log(`  Stripped TX: ${strippedTx.length} bytes -> ${numBlocks} SHA256 blocks`);
 
     // Merkle proof (placeholder)
     const merkleProof = [];
@@ -273,8 +456,8 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
     const recipientBigInt = BigInt(recipient);
 
     const circuitInput = {
-        // PUBLIC INPUTS
-        merkleRoot: "12345",  // Placeholder
+        // PUBLIC INPUTS (7 total: merkleRoots[2] counts as 2)
+        merkleRoots: ["12345", "67890"],  // Placeholder array for hidden root selection
         nullifier: nullifier.toString(),
         amount: txParseResult.amount.toString(),
         chainId: chainId.toString(),
@@ -283,24 +466,31 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
 
         // PRIVATE INPUTS
         secret: secretBits,
-        commitmentFromTx: commitmentBits,
-        transaction: txBits,
-        txLength: txParseResult.rawTx.length,
         lockerScript: lockerScriptBits,
         lockerScriptLength: lockerScript.length,
         lockerOutputIndex: txParseResult.lockerOutputIndex,
-        lockerOutputOffset: txParseResult.lockerOutputOffset,
+        lockerOutputByteOffset: txParseResult.lockerOutputByteOffset,
+        commitmentByteOffset: txParseResult.commitmentByteOffset,  // Where commitment starts in TX
+        rootIndex: 0,  // Which merkle root the TX is in (private)
         merkleProof: merkleProof,
         merkleIndex: 0,
+
+        // SINGLE TRANSACTION INPUT (used for everything)
+        paddedTransaction: paddedTxBits,   // Stripped transaction with SHA256 padding
+        numBlocks: numBlocks,              // Number of 512-bit blocks to process
+        txId: txIdBits,                    // Expected SHA256(SHA256(stripped_transaction)) - 256 bits
     };
 
     console.log('  Public inputs prepared:');
-    console.log(`    merkleRoot: 12345 (placeholder)`);
+    console.log(`    merkleRoots: [12345, 67890] (placeholders)`);
     console.log(`    nullifier: ${nullifier.toString().substring(0, 30)}...`);
     console.log(`    amount: ${txParseResult.amount} satoshis`);
     console.log(`    chainId: ${chainId}`);
     console.log(`    recipient: ${recipient}`);
     console.log(`    lockerScriptHash: ${lockerScriptHash.toString().substring(0, 30)}...`);
+    console.log('  Private inputs:');
+    console.log(`    lockerOutputByteOffset: ${txParseResult.lockerOutputByteOffset} bytes`);
+    console.log(`    commitmentByteOffset: ${txParseResult.commitmentByteOffset} bytes`);
 
     return circuitInput;
 }
@@ -464,7 +654,7 @@ async function main() {
         recipient: depositData.recipient,
         nullifier: circuitInput.nullifier,
         lockerScriptHash: circuitInput.lockerScriptHash,
-        merkleRoot: circuitInput.merkleRoot,
+        merkleRoots: circuitInput.merkleRoots,  // Array for hidden root selection
         calldata: calldata,
         proofPath: proofPath,
         publicPath: publicPath,

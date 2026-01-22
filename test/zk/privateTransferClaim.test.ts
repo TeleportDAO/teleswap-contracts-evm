@@ -67,8 +67,8 @@ describe("PrivateTransferClaim", function () {
         console.log("PrivateTransferClaim deployed to:", privateTransferClaim.address);
 
         // Register the locker hash from the proof
-        // Public signals order: [merkleRoot, nullifier, amount, chainId, recipient, lockerScriptHash]
-        const lockerScriptHash = publicSignals[5];
+        // Public signals order: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
+        const lockerScriptHash = publicSignals[6];
 
         // Get locker script from input (convert bits to bytes)
         const lockerScriptBits = input.lockerScript;
@@ -100,19 +100,19 @@ describe("PrivateTransferClaim", function () {
         });
 
         it("should have locker hash registered", async function () {
-            const lockerScriptHash = publicSignals[5];
+            const lockerScriptHash = publicSignals[6];
             expect(await privateTransferClaim.isValidLockerHash(lockerScriptHash)).to.be.true;
         });
     });
 
     describe("claimPrivate", function () {
         it("should verify and process a valid private claim", async function () {
-            // Public signals: [merkleRoot, nullifier, amount, chainId, recipient, lockerScriptHash]
-            const merkleRoot = publicSignals[0];
-            const nullifier = publicSignals[1];
-            const amount = publicSignals[2];
-            const recipientFromProof = publicSignals[4];
-            const lockerScriptHash = publicSignals[5];
+            // Public signals: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
+            const merkleRoots = [publicSignals[0], publicSignals[1]];
+            const nullifier = publicSignals[2];
+            const amount = publicSignals[3];
+            const recipientFromProof = publicSignals[5];
+            const lockerScriptHash = publicSignals[6];
 
             // Convert recipient from field element to address
             const recipientAddress = "0x" + BigInt(recipientFromProof).toString(16).padStart(40, "0");
@@ -134,7 +134,7 @@ describe("PrivateTransferClaim", function () {
                 pA,
                 pB,
                 pC,
-                merkleRoot,
+                merkleRoots,
                 nullifier,
                 amount,
                 recipientAddress,
@@ -161,11 +161,11 @@ describe("PrivateTransferClaim", function () {
         });
 
         it("should reject double-claim with same nullifier", async function () {
-            const merkleRoot = publicSignals[0];
-            const nullifier = publicSignals[1];
-            const amount = publicSignals[2];
-            const recipientFromProof = publicSignals[4];
-            const lockerScriptHash = publicSignals[5];
+            const merkleRoots = [publicSignals[0], publicSignals[1]];
+            const nullifier = publicSignals[2];
+            const amount = publicSignals[3];
+            const recipientFromProof = publicSignals[5];
+            const lockerScriptHash = publicSignals[6];
             const recipientAddress = "0x" + BigInt(recipientFromProof).toString(16).padStart(40, "0");
 
             const pA = [proof.pi_a[0], proof.pi_a[1]];
@@ -177,13 +177,13 @@ describe("PrivateTransferClaim", function () {
 
             // First claim should succeed
             await privateTransferClaim.connect(user).claimPrivate(
-                pA, pB, pC, merkleRoot, nullifier, amount, recipientAddress, lockerScriptHash
+                pA, pB, pC, merkleRoots, nullifier, amount, recipientAddress, lockerScriptHash
             );
 
             // Second claim with same nullifier should fail
             try {
                 await privateTransferClaim.connect(user).claimPrivate(
-                    pA, pB, pC, merkleRoot, nullifier, amount, recipientAddress, lockerScriptHash
+                    pA, pB, pC, merkleRoots, nullifier, amount, recipientAddress, lockerScriptHash
                 );
                 expect.fail("Should have reverted");
             } catch (error: any) {
@@ -194,10 +194,10 @@ describe("PrivateTransferClaim", function () {
         });
 
         it("should reject invalid locker hash", async function () {
-            const merkleRoot = publicSignals[0];
-            const nullifier = publicSignals[1];
-            const amount = publicSignals[2];
-            const recipientFromProof = publicSignals[4];
+            const merkleRoots = [publicSignals[0], publicSignals[1]];
+            const nullifier = publicSignals[2];
+            const amount = publicSignals[3];
+            const recipientFromProof = publicSignals[5];
             const recipientAddress = "0x" + BigInt(recipientFromProof).toString(16).padStart(40, "0");
 
             const pA = [proof.pi_a[0], proof.pi_a[1]];
@@ -212,7 +212,7 @@ describe("PrivateTransferClaim", function () {
 
             try {
                 await privateTransferClaim.connect(user).claimPrivate(
-                    pA, pB, pC, merkleRoot, nullifier, amount, recipientAddress, invalidLockerHash
+                    pA, pB, pC, merkleRoots, nullifier, amount, recipientAddress, invalidLockerHash
                 );
                 expect.fail("Should have reverted");
             } catch (error: any) {
@@ -223,11 +223,11 @@ describe("PrivateTransferClaim", function () {
         });
 
         it("should reject invalid proof", async function () {
-            const merkleRoot = publicSignals[0];
-            const nullifier = publicSignals[1];
-            const amount = publicSignals[2];
-            const recipientFromProof = publicSignals[4];
-            const lockerScriptHash = publicSignals[5];
+            const merkleRoots = [publicSignals[0], publicSignals[1]];
+            const nullifier = publicSignals[2];
+            const amount = publicSignals[3];
+            const recipientFromProof = publicSignals[5];
+            const lockerScriptHash = publicSignals[6];
             const recipientAddress = "0x" + BigInt(recipientFromProof).toString(16).padStart(40, "0");
 
             // Tampered proof (invalid pA)
@@ -240,7 +240,7 @@ describe("PrivateTransferClaim", function () {
 
             try {
                 await privateTransferClaim.connect(user).claimPrivate(
-                    pA, pB, pC, merkleRoot, nullifier, amount, recipientAddress, lockerScriptHash
+                    pA, pB, pC, merkleRoots, nullifier, amount, recipientAddress, lockerScriptHash
                 );
                 expect.fail("Should have reverted");
             } catch (error: any) {
@@ -252,11 +252,11 @@ describe("PrivateTransferClaim", function () {
         });
 
         it("should reject mismatched amount", async function () {
-            const merkleRoot = publicSignals[0];
-            const nullifier = publicSignals[1];
+            const merkleRoots = [publicSignals[0], publicSignals[1]];
+            const nullifier = publicSignals[2];
             const wrongAmount = "999999999"; // Different from proof
-            const recipientFromProof = publicSignals[4];
-            const lockerScriptHash = publicSignals[5];
+            const recipientFromProof = publicSignals[5];
+            const lockerScriptHash = publicSignals[6];
             const recipientAddress = "0x" + BigInt(recipientFromProof).toString(16).padStart(40, "0");
 
             const pA = [proof.pi_a[0], proof.pi_a[1]];
@@ -268,7 +268,7 @@ describe("PrivateTransferClaim", function () {
 
             try {
                 await privateTransferClaim.connect(user).claimPrivate(
-                    pA, pB, pC, merkleRoot, nullifier, wrongAmount, recipientAddress, lockerScriptHash
+                    pA, pB, pC, merkleRoots, nullifier, wrongAmount, recipientAddress, lockerScriptHash
                 );
                 expect.fail("Should have reverted");
             } catch (error: any) {
@@ -291,7 +291,7 @@ describe("PrivateTransferClaim", function () {
         });
 
         it("should allow owner to remove locker hash", async function () {
-            const lockerScriptHash = publicSignals[5];
+            const lockerScriptHash = publicSignals[6];
 
             await privateTransferClaim.connect(owner).removeLockerHash(lockerScriptHash);
 

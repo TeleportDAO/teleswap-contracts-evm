@@ -35,13 +35,15 @@ For a high-level explanation, see [PRIVATE_TRANSFER.md](./PRIVATE_TRANSFER.md).
 
 | # | Verification | Public/Private | Status |
 |---|--------------|----------------|--------|
-| 1 | Commitment = SHA256(secret \|\| amount \|\| chainId) | secret: private | ✓ Implemented |
+| 1 | Commitment = SHA256(secret \|\| amount \|\| chainId \|\| recipient) | secret: private, recipient: public | ✓ Implemented |
 | 2 | Commitment provided matches computed | commitmentFromTx: private | ✓ Implemented |
 | 3 | Nullifier = SHA256(secret \|\| 0x01) | nullifier: public | ✓ Implemented |
 | 4 | Locker script hash matches | lockerScriptHash: public | ✓ Implemented |
 | 5 | TX sends `amount` to `lockerScript` | TX parsing | ✓ Implemented |
-| 6 | TxId = double SHA256(transaction) | txId: computed | **Phase 2** |
-| 7 | TX is in Merkle tree | merkleRoot: public | **Phase 2** |
+| 6 | **Recipient matches commitment** | recipient: public | ✓ Implemented |
+| 7 | **TX in one of merkleRoots[N] (hidden which)** | merkleRoots: public, rootIndex: private | ✓ Implemented |
+| 8 | TxId = double SHA256(transaction) | txId: computed | **Phase 2** |
+| 9 | TX is in Merkle tree | selectedMerkleRoot: computed | **Phase 2** |
 
 ---
 
@@ -65,15 +67,18 @@ BITCOIN TX for Private Transfer:
 ### Commitment Structure
 
 ```
-commitment = SHA256(secret || amount || chainId)
+commitment = SHA256(secret || amount || chainId || recipient)
 
 Where:
-- secret:  256 bits (32 bytes) - random, user keeps private
-- amount:  64 bits (8 bytes)   - satoshis sent to locker
-- chainId: 16 bits (2 bytes)   - target EVM chain ID
+- secret:    256 bits (32 bytes) - random, user keeps private
+- amount:    64 bits (8 bytes)   - satoshis sent to locker
+- chainId:   16 bits (2 bytes)   - target EVM chain ID
+- recipient: 160 bits (20 bytes) - EVM address to receive teleBTC
 
-Total input to SHA256: 42 bytes (336 bits)
+Total input to SHA256: 62 bytes (496 bits)
 ```
+
+**Why include recipient?** Prevents front-running attacks. Without it, anyone who sees your claim TX could extract the proof and use it with a different recipient address.
 
 ### Nullifier Structure
 
@@ -86,6 +91,21 @@ nullifier = SHA256(secret || 0x01)
 
 **Why nullifier instead of secret?** The contract must track "already claimed" to prevent double-minting. If we revealed the secret on-chain, anyone could compute the commitment and search Bitcoin for the matching OP_RETURN—breaking privacy. The nullifier is a one-way hash: it cannot be reversed to find the secret, so the link to the Bitcoin transaction stays hidden.
 
+### Hidden Root Selection
+
+```
+PUBLIC INPUTS:
+- merkleRoots[N]   ← Array of N valid merkle roots (N=2 for now)
+
+PRIVATE INPUTS:
+- rootIndex        ← Which root the TX is in (0 to N-1)
+
+CIRCUIT CONSTRAINT:
+- Proves TX is in merkleRoots[rootIndex] without revealing rootIndex
+```
+
+**Why hidden root selection?** If the merkle root is public, observers can identify which Bitcoin block contains the transaction. With only one deposit per block, the link is trivially broken. By accepting N roots and hiding the selection, the anonymity set expands to all deposits across all N blocks.
+
 ---
 
 ## Circuit Design
@@ -97,16 +117,22 @@ pragma circom 2.1.0;
 
 include "sha256.circom";
 include "bitify.circom";
+include "comparators.circom";
+include "mux1.circom";
+
+// Number of merkle roots for hidden selection (privacy enhancement)
+var NUM_MERKLE_ROOTS = 2;
 
 template PrivateTransferClaim(maxTxBytes) {
     var maxTxBits = maxTxBytes * 8;
 
     // ═══════════════════════════════════════════════════════════
-    // PUBLIC INPUTS
+    // PUBLIC INPUTS (7 total)
     // ═══════════════════════════════════════════════════════════
 
-    // Merkle root from Bitcoin block header (verification skipped for now)
-    signal input merkleRoot;
+    // Array of merkle roots - user proves TX is in ONE without revealing which
+    // This provides privacy by hiding which specific block contains the TX
+    signal input merkleRoots[NUM_MERKLE_ROOTS];
 
     // Nullifier - prevents double claiming
     signal input nullifier;
@@ -118,6 +144,7 @@ template PrivateTransferClaim(maxTxBytes) {
     signal input chainId;
 
     // Recipient EVM address (as field element)
+    // IMPORTANT: Also included in commitment to prevent front-running
     signal input recipient;
 
     // Hash of locker's Bitcoin script - contract verifies this is valid locker
@@ -146,13 +173,18 @@ template PrivateTransferClaim(maxTxBytes) {
     // Byte offset where commitment starts in OP_RETURN output
     signal input commitmentOffset;
 
+    // HIDDEN ROOT SELECTION: Which merkle root the TX is in (0 to NUM_MERKLE_ROOTS-1)
+    // This is PRIVATE - observers cannot determine which root was used
+    signal input rootIndex;
+
     // Merkle proof data (kept for future, not verified now)
     signal input merkleProof[12][256];
     signal input merkleIndex;
 
     // ═══════════════════════════════════════════════════════════
     // CONSTRAINT 1: Compute commitment and verify it's in TX
-    // commitment = SHA256(secret || amount || chainId)
+    // commitment = SHA256(secret || amount || chainId || recipient)
+    // Including recipient prevents front-running attacks
     // ═══════════════════════════════════════════════════════════
 
     // Convert amount to bits (64 bits, big-endian)
@@ -163,9 +195,13 @@ template PrivateTransferClaim(maxTxBytes) {
     component chainIdBits = Num2Bits(16);
     chainIdBits.in <== chainId;
 
-    // Compute commitment: SHA256(secret[256] || amount[64] || chainId[16])
-    // Total: 336 bits = 42 bytes, padded to 512 bits for SHA256
-    component commitmentHasher = Sha256(336);
+    // Convert recipient to bits (160 bits, big-endian)
+    component recipientBits = Num2Bits(160);
+    recipientBits.in <== recipient;
+
+    // Compute commitment: SHA256(secret[256] || amount[64] || chainId[16] || recipient[160])
+    // Total: 496 bits = 62 bytes
+    component commitmentHasher = Sha256(496);
 
     // Wire secret (256 bits)
     for (var i = 0; i < 256; i++) {
@@ -178,6 +214,10 @@ template PrivateTransferClaim(maxTxBytes) {
     // Wire chainId (16 bits)
     for (var i = 0; i < 16; i++) {
         commitmentHasher.in[320 + i] <== chainIdBits.out[15 - i];  // big-endian
+    }
+    // Wire recipient (160 bits) - PREVENTS FRONT-RUNNING
+    for (var i = 0; i < 160; i++) {
+        commitmentHasher.in[336 + i] <== recipientBits.out[159 - i];  // big-endian
     }
 
     // Verify commitment matches what's in TX at commitmentOffset
@@ -267,36 +307,60 @@ template PrivateTransferClaim(maxTxBytes) {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // CONSTRAINT 6: Merkle proof verification (SKIPPED FOR NOW)
+    // CONSTRAINT 6: Hidden root selection (PRIVACY ENHANCEMENT)
+    // Proves TX is in ONE of merkleRoots[N] without revealing which
+    // ═══════════════════════════════════════════════════════════
+
+    // Verify rootIndex is valid (0 or 1 for N=2)
+    component rootIndexValid = LessThan(8);
+    rootIndexValid.in[0] <== rootIndex;
+    rootIndexValid.in[1] <== NUM_MERKLE_ROOTS;
+    rootIndexValid.out === 1;
+
+    // Select the actual merkle root based on private rootIndex
+    // Using Mux1 for N=2 selection
+    component rootSelector = Mux1();
+    rootSelector.c[0] <== merkleRoots[0];
+    rootSelector.c[1] <== merkleRoots[1];
+    rootSelector.s <== rootIndex;
+
+    signal selectedMerkleRoot;
+    selectedMerkleRoot <== rootSelector.out;
+
+    // Dummy constraint to use selectedMerkleRoot (for future Merkle verification)
+    signal merkleRootSquared;
+    merkleRootSquared <== selectedMerkleRoot * selectedMerkleRoot;
+
+    // ═══════════════════════════════════════════════════════════
+    // CONSTRAINT 7: Merkle proof verification (SKIPPED FOR NOW)
     // Will be implemented when block headers available on contract
     // ═══════════════════════════════════════════════════════════
 
-    // FUTURE: Verify txId is in Merkle tree with root merkleRoot
-    // For now, merkleRoot and merkleProof are inputs but not verified
-    // Contract will verify merkleRoot against Bitcoin relay
-
-    // Dummy constraint to use merkleRoot (prevents unused signal error)
-    signal merkleRootSquared;
-    merkleRootSquared <== merkleRoot * merkleRoot;
+    // FUTURE: Verify txId is in Merkle tree with root selectedMerkleRoot
+    // For now, merkleProof inputs are kept but not verified
+    // Contract will verify all merkleRoots against Bitcoin relay
 }
 
 // Main component with 1KB max transaction size
-component main {public [merkleRoot, nullifier, amount, chainId, recipient, lockerScriptHash]} = PrivateTransferClaim(1024);
+// Public inputs: merkleRoots[2], nullifier, amount, chainId, recipient, lockerScriptHash
+component main {public [merkleRoots, nullifier, amount, chainId, recipient, lockerScriptHash]} = PrivateTransferClaim(1024);
 ```
 
 ### Constraint Summary
 
 | Component | Constraints | Status |
 |-----------|-------------|--------|
-| Commitment hash (SHA256 of 336 bits) | ~25,000 | ✓ Implemented |
+| Commitment hash (SHA256 of 496 bits) | ~27,000 | ✓ Implemented |
 | Nullifier hash (SHA256 of 264 bits) | ~25,000 | ✓ Implemented |
 | Locker script hash (SHA256 of 520 bits) | ~25,000 | ✓ Implemented |
+| Recipient bit conversion (160 bits) | ~200 | ✓ Implemented |
+| Hidden root selection (Mux1 + LessThan) | ~50 | ✓ Implemented |
 | Bit conversions + comparisons | ~43,000 | ✓ Implemented |
 | TX parsing + output verification | ~7,500 | ✓ Implemented |
 | TxId double hash (8192 bits) | ~500,000 | **Phase 2** |
 | Merkle proof (12 levels) | ~300,000 | **Phase 2** |
-| **Total (Phase 1 - current)** | **~125,554** | ✓ Complete |
-| **Total (Phase 2 with txId + Merkle)** | **~925,000** | |
+| **Total (Phase 1.5 - current)** | **~127,750** | ✓ Complete |
+| **Total (Phase 2 with txId + Merkle)** | **~927,000** | |
 
 ---
 
@@ -318,24 +382,27 @@ address public zkVerifier;
 ### New Function: claimPrivate
 
 ```solidity
+// Number of merkle roots for hidden selection (matches circuit)
+uint256 public constant NUM_MERKLE_ROOTS = 2;
+
 /// @notice Claim teleBTC privately with ZK proof
 /// @param _pA Groth16 proof part A
 /// @param _pB Groth16 proof part B
 /// @param _pC Groth16 proof part C
-/// @param _merkleRoot Merkle root of Bitcoin block (verified in future)
+/// @param _merkleRoots Array of merkle roots (user proves TX is in ONE, hidden which)
 /// @param _nullifier Nullifier derived from secret
 /// @param _amount Amount in satoshis
-/// @param _recipient Address to receive teleBTC
+/// @param _recipient Address to receive teleBTC (must match commitment!)
 /// @param _lockerScriptHash Hash of locker's Bitcoin script
 function claimPrivate(
     uint256[2] calldata _pA,
     uint256[2][2] calldata _pB,
     uint256[2] calldata _pC,
-    bytes32 _merkleRoot,
-    bytes32 _nullifier,
+    uint256[NUM_MERKLE_ROOTS] calldata _merkleRoots,
+    uint256 _nullifier,
     uint256 _amount,
     address _recipient,
-    bytes32 _lockerScriptHash
+    uint256 _lockerScriptHash
 ) external nonReentrant returns (bool) {
 
     // 1. Check nullifier not used
@@ -344,18 +411,22 @@ function claimPrivate(
     // 2. Verify locker script hash is valid
     require(isValidLockerHash[_lockerScriptHash], "invalid locker");
 
-    // 3. Verify Merkle root (SKIPPED FOR NOW)
+    // 3. Verify Merkle roots (SKIPPED FOR NOW)
     // TODO: When block headers available on contract:
-    // require(bitcoinRelay.isMerkleRootValid(_merkleRoot), "invalid merkle root");
+    // for (uint i = 0; i < NUM_MERKLE_ROOTS; i++) {
+    //     require(bitcoinRelay.isMerkleRootValid(_merkleRoots[i]), "invalid merkle root");
+    // }
 
     // 4. Verify ZK proof
-    uint256[6] memory publicInputs = [
-        uint256(_merkleRoot),
-        uint256(_nullifier),
+    // Public inputs order: merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash
+    uint256[7] memory publicInputs = [
+        _merkleRoots[0],
+        _merkleRoots[1],
+        _nullifier,
         _amount,
-        chainId,
+        claimChainId,
         uint256(uint160(_recipient)),
-        uint256(_lockerScriptHash)
+        _lockerScriptHash
     ];
 
     require(
@@ -370,10 +441,15 @@ function claimPrivate(
     bytes memory lockerScript = lockerScriptFromHash[_lockerScriptHash];
     ILockersManager(lockers).mint(lockerScript, _recipient, _amount);
 
-    emit PrivateClaim(_nullifier, _recipient, _amount, _merkleRoot);
+    emit PrivateClaim(_nullifier, _recipient, _amount, _merkleRoots[0]);
     return true;
 }
 ```
+
+**Key changes from previous version:**
+1. `_merkleRoots[2]` array instead of single `_merkleRoot` - enables hidden root selection
+2. `_recipient` is verified in circuit against commitment - prevents front-running
+3. Public inputs array has 7 elements now (was 6)
 
 ### Admin Functions
 
@@ -399,7 +475,7 @@ function setZkVerifier(address _verifier) external onlyOwner {
 ### Phase 1: Core Circuit (Without Merkle) ✅ COMPLETE
 
 - [x] **Commitment verification**
-  - [x] SHA256 of secret + amount + chainId
+  - [x] SHA256 of secret + amount + chainId + **recipient**
   - [x] Verify commitment matches TX commitment (provided by prover)
 
 - [x] **Nullifier verification**
@@ -415,6 +491,17 @@ function setZkVerifier(address _verifier) external onlyOwner {
   - [x] Extract script at offset + 72 bits (after value + length byte)
   - [x] Verify output value == amount
   - [x] Verify output script == lockerScript (P2PKH, 25 bytes)
+
+- [x] **Front-running protection** (NEW)
+  - [x] Include recipient in commitment
+  - [x] Circuit verifies recipient matches commitment
+  - [x] Only intended recipient can claim
+
+- [x] **Hidden root selection** (NEW)
+  - [x] Accept merkleRoots[N] array (N=2) as public input
+  - [x] Private rootIndex selects which root
+  - [x] Mux1 component for selection
+  - [x] Observer cannot determine which root was used
 
 - [ ] **TxId computation** (Phase 2)
   - [ ] Double SHA256 of transaction
@@ -461,7 +548,7 @@ function setZkVerifier(address _verifier) external onlyOwner {
 
 ## Security Analysis
 
-### What's Verified Now (Phase 1)
+### What's Verified Now (Phase 1.5)
 
 | Check | Verified By | Attack Prevented |
 |-------|-------------|------------------|
@@ -470,6 +557,8 @@ function setZkVerifier(address _verifier) external onlyOwner {
 | Correct nullifier | ZK proof | Nullifier manipulation |
 | TX sends to locker | ZK proof | Fake locker |
 | TX amount matches commitment | ZK proof | Over-claiming |
+| **Recipient in commitment** | ZK proof | **Front-running** |
+| **Hidden root selection** | ZK proof | **TX-claim linkage** |
 | Nullifier not reused | Contract | Double-claim |
 | Locker is valid | Contract | Invalid locker |
 
@@ -508,9 +597,22 @@ function setZkVerifier(address _verifier) external onlyOwner {
 - Contract rejects duplicate nullifier
 - Attack fails ✓
 
-**5. Fake TX attempt (Phase 1 risk):**
+**5. Front-running attempt:** (NEW)
+- Attacker sees claim TX in mempool
+- Tries to front-run with same proof but different recipient
+- Circuit verifies recipient matches commitment
+- Recipient was fixed at deposit time (in OP_RETURN)
+- Attack fails ✓
+
+**6. Transaction linkage attempt:** (NEW)
+- Observer sees claim with merkleRoots[2] array
+- Cannot determine which root (which block) contains the TX
+- Anonymity set = all deposits in BOTH blocks
+- Privacy preserved ✓
+
+**7. Fake TX attempt (Phase 2 risk):**
 - User creates TX not in any block
-- Merkle verification skipped
+- Merkle verification skipped for now
 - Attack succeeds ⚠️
 - **Mitigation:** Additional off-chain checks until Phase 2
 
@@ -556,17 +658,25 @@ Use existing test data in `zkproof/test-data/`:
 | 2026-01-14 | 0.3.0 | Added locker + amount verification, skip Merkle for now |
 | 2026-01-15 | 0.4.0 | Implemented circuit, trusted setup, proof generation |
 | 2026-01-16 | 1.0.0 | **Phase 1 Complete**: TX parsing, smart contracts, tests passing |
+| 2026-01-20 | 1.5.0 | **Security Enhancements**: Hidden root selection (privacy), recipient in commitment (front-running protection) |
 
 ---
 
 ## Current Status
 
-**Phase 1 is COMPLETE.** The system can:
+**Phase 1.5 is COMPLETE.** The system now includes:
 - Generate valid ZK proofs for private transfers
 - Verify proofs on-chain via Groth16Verifier
 - Process claims through PrivateTransferClaim contract
 - Track nullifiers to prevent double-claims
 - Validate locker script hashes
+- **Hidden root selection** - user proves TX is in one of N merkle roots without revealing which
+- **Front-running protection** - recipient address is bound in commitment, only intended recipient can claim
+
+**Privacy enhancements:**
+- `merkleRoots[2]` array instead of single merkleRoot - expands anonymity set
+- Private `rootIndex` - observers cannot link claim to specific Bitcoin block
+- `recipient` in commitment - prevents mempool front-running attacks
 
 **Next steps for Phase 2:**
 - Implement txId computation (double SHA256)

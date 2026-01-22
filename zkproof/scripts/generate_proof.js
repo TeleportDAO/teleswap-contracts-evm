@@ -98,8 +98,9 @@ async function generateProof(input, outputDir = 'zkproof/build') {
         log(`  - ${calldataPath}`, 'reset');
         log("", 'reset');
 
-        log("Public signals (6 values):", 'yellow');
-        const signalNames = ['merkleRoot', 'nullifier', 'amount', 'chainId', 'recipient', 'lockerScriptHash'];
+        log("Public signals (7 values):", 'yellow');
+        // Circuit has merkleRoots[2], so 7 public inputs total
+        const signalNames = ['merkleRoots[0]', 'merkleRoots[1]', 'nullifier', 'amount', 'chainId', 'recipient', 'lockerScriptHash'];
         publicSignals.forEach((signal, idx) => {
             const name = signalNames[idx] || `signal_${idx}`;
             const display = signal.length > 40 ? signal.substring(0, 40) + '...' : signal;

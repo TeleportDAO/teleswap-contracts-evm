@@ -1,5 +1,5 @@
 /**
- * Submit ZK Claim on Polygon
+ * Submit ZK Claim
  *
  * This script submits a generated ZK proof to the PrivateTransferClaimTest contract.
  *
@@ -10,9 +10,10 @@
  *   npm run zk:submit-claim -- --claim=<txid>.json --network polygon
  */
 
-import { ethers } from "hardhat";
+import { ethers, deployments } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
+import zkConfig from "../../config/zk.json";
 
 interface ClaimData {
     txid: string;
@@ -21,28 +22,26 @@ interface ClaimData {
     recipient: string;
     nullifier: string;
     lockerScriptHash: string;
-    merkleRoot: string;
+    merkleRoots: string[];  // Array of 2 roots for hidden selection
     calldata: string;
 }
 
-interface DeploymentData {
-    claimContract: string;
-    verifier: string;
-}
-
 async function main() {
+    const network = await ethers.provider.getNetwork();
+
     console.log("\n╔════════════════════════════════════════════════════════════╗");
-    console.log("║           Submit ZK Claim on Polygon Mainnet               ║");
+    console.log(`║           Submit ZK Claim on ${network.name.padEnd(24)}║`);
     console.log("╚════════════════════════════════════════════════════════════╝\n");
 
-    // Parse arguments
+    // Parse arguments - support both --claim= arg and CLAIM_FILE env var
     const claimArg = process.argv.find(arg => arg.startsWith("--claim="));
-    if (!claimArg) {
-        console.error("❌ Usage: npx hardhat run scripts/zk/submit-claim.ts --network polygon -- --claim=<txid>.json");
+    const claimFileName = claimArg ? claimArg.split("=")[1] : process.env.CLAIM_FILE;
+
+    if (!claimFileName) {
+        console.error("❌ Usage: CLAIM_FILE=<txid>.json npx hardhat run scripts/zk/submit-claim.ts --network polygon");
+        console.error("   Or:   npx hardhat run scripts/zk/submit-claim.ts --network polygon (with --claim=<file> in argv)");
         process.exit(1);
     }
-
-    const claimFileName = claimArg.split("=")[1];
     const claimPath = claimFileName.startsWith("/")
         ? claimFileName
         : path.join(__dirname, "../../zkproof/claims", claimFileName);
@@ -59,16 +58,21 @@ async function main() {
     console.log(`  Amount:   ${claimData.amount} satoshis`);
     console.log(`  Recipient: ${claimData.recipient}`);
 
-    // Load deployment data
-    const deploymentPath = path.join(__dirname, "../../deployments/zk/polygon.json");
-    if (!fs.existsSync(deploymentPath)) {
-        console.error(`❌ Deployment not found: ${deploymentPath}`);
-        console.error("   Run: npx hardhat run scripts/zk/deploy-polygon.ts --network polygon");
+    // Load deployment data from hardhat-deploy
+    let claimContractAddress: string;
+    let verifierAddress: string;
+    try {
+        const claimDeployment = await deployments.get("PrivateTransferClaimTest");
+        const verifierDeployment = await deployments.get("Groth16Verifier");
+        claimContractAddress = claimDeployment.address;
+        verifierAddress = verifierDeployment.address;
+    } catch (e) {
+        console.error(`❌ Deployment not found for ZK contracts`);
+        console.error("   Run: NETWORK=<network> TAG=zk npm run deploy");
         process.exit(1);
     }
 
-    const deployment: DeploymentData = JSON.parse(fs.readFileSync(deploymentPath, "utf8"));
-    console.log(`\nContract: ${deployment.claimContract}`);
+    console.log(`\nContract: ${claimContractAddress}`);
 
     // Get signer
     const [signer] = await ethers.getSigners();
@@ -101,7 +105,7 @@ async function main() {
     // Connect to contract
     const claimContract = await ethers.getContractAt(
         "PrivateTransferClaimTest",
-        deployment.claimContract,
+        claimContractAddress,
         signer
     );
 
@@ -124,17 +128,18 @@ async function main() {
     console.log("✓ Nullifier not yet used");
 
     // Estimate gas
+    // Public signals order: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
     console.log("\nEstimating gas...");
     try {
         const gasEstimate = await claimContract.estimateGas.claimPrivate(
             pA,
             [pB0, pB1],
             pC,
-            publicSignals[0],  // merkleRoot
-            publicSignals[1],  // nullifier
-            publicSignals[2],  // amount
+            [publicSignals[0], publicSignals[1]],  // merkleRoots array
+            publicSignals[2],  // nullifier
+            publicSignals[3],  // amount
             claimData.recipient,
-            publicSignals[5],  // lockerScriptHash
+            publicSignals[6],  // lockerScriptHash
         );
         console.log(`  Estimated gas: ${gasEstimate.toString()}`);
     } catch (error: any) {
@@ -148,7 +153,7 @@ async function main() {
     console.log("REVIEW BEFORE SUBMITTING:");
     console.log(`  Amount:    ${claimData.amount} satoshis`);
     console.log(`  Recipient: ${claimData.recipient}`);
-    console.log(`  Contract:  ${deployment.claimContract}`);
+    console.log(`  Contract:  ${claimContractAddress}`);
     console.log("─────────────────────────────────────────────────────────────");
 
     const readline = require("readline");
@@ -168,16 +173,17 @@ async function main() {
     }
 
     // Submit claim
+    // Public signals order: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
     console.log("\nSubmitting claim...");
     const tx = await claimContract.claimPrivate(
         pA,
         [pB0, pB1],
         pC,
-        publicSignals[0],  // merkleRoot
-        publicSignals[1],  // nullifier
-        publicSignals[2],  // amount
+        [publicSignals[0], publicSignals[1]],  // merkleRoots array
+        publicSignals[2],  // nullifier
+        publicSignals[3],  // amount
         claimData.recipient,
-        publicSignals[5],  // lockerScriptHash
+        publicSignals[6],  // lockerScriptHash
     );
 
     console.log(`  TX Hash: ${tx.hash}`);
@@ -199,8 +205,12 @@ async function main() {
     console.log("\n╔════════════════════════════════════════════════════════════╗");
     console.log("║                  CLAIM SUCCESSFUL!                         ║");
     console.log("╚════════════════════════════════════════════════════════════╝");
-    console.log(`\nView on Polygonscan:`);
-    console.log(`  https://polygonscan.com/tx/${tx.hash}`);
+
+    // Get block explorer from config
+    const networkConfig = (zkConfig.supported_networks as Record<string, { block_explorer: string }>)[network.name];
+    const blockExplorer = networkConfig?.block_explorer || "https://etherscan.io";
+    console.log(`\nView on block explorer:`);
+    console.log(`  ${blockExplorer}/tx/${tx.hash}`);
 }
 
 main()

@@ -15,6 +15,10 @@ import "./IGroth16Verifier.sol";
  * - No LockersManager dependency
  * - No actual minting - just emits event
  * - Safe to deploy on mainnet for testing
+ *
+ * v1.5 Security enhancements:
+ * - Hidden root selection: merkleRoots[2] array instead of single merkleRoot
+ * - Front-running protection: recipient is bound in commitment
  */
 contract PrivateTransferClaimTest is
     Initializable,
@@ -36,6 +40,13 @@ contract PrivateTransferClaimTest is
     event LockerHashRegistered(uint256 indexed lockerScriptHash, bytes lockerScript);
     event LockerHashRemoved(uint256 indexed lockerScriptHash);
     event ZkVerifierSet(address indexed verifier);
+
+    // ═══════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @notice Number of merkle roots for hidden selection (matches circuit)
+    uint256 public constant NUM_MERKLE_ROOTS = 2;
 
     // ═══════════════════════════════════════════════════════════════════
     // STORAGE
@@ -101,10 +112,10 @@ contract PrivateTransferClaimTest is
      * @param _pA Groth16 proof point A
      * @param _pB Groth16 proof point B
      * @param _pC Groth16 proof point C
-     * @param _merkleRoot Merkle root of Bitcoin block (placeholder for Phase 1)
+     * @param _merkleRoots Array of merkle roots (user proves TX is in ONE, hidden which)
      * @param _nullifier Nullifier derived from secret (prevents double-claim)
      * @param _amount Amount in satoshis
-     * @param _recipient Address to receive TeleBTC
+     * @param _recipient Address to receive TeleBTC (must match commitment for front-running protection)
      * @param _lockerScriptHash Hash of locker's Bitcoin script
      * @return success True if claim succeeded
      */
@@ -112,7 +123,7 @@ contract PrivateTransferClaimTest is
         uint256[2] calldata _pA,
         uint256[2][2] calldata _pB,
         uint256[2] calldata _pC,
-        uint256 _merkleRoot,
+        uint256[NUM_MERKLE_ROOTS] calldata _merkleRoots,
         uint256 _nullifier,
         uint256 _amount,
         address _recipient,
@@ -137,10 +148,13 @@ contract PrivateTransferClaimTest is
         // ─────────────────────────────────────────────────────────────────
         // 4. Prepare public signals for ZK verification
         // Order must match circuit's public inputs:
-        // [merkleRoot, nullifier, amount, chainId, recipient, lockerScriptHash]
+        // [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
+        // Note: merkleRoots array provides privacy through hidden root selection
+        // Note: recipient is verified against commitment (front-running protection)
         // ─────────────────────────────────────────────────────────────────
-        uint256[6] memory publicSignals = [
-            _merkleRoot,
+        uint256[7] memory publicSignals = [
+            _merkleRoots[0],
+            _merkleRoots[1],
             _nullifier,
             _amount,
             claimChainId,
@@ -171,7 +185,7 @@ contract PrivateTransferClaimTest is
         // ─────────────────────────────────────────────────────────────────
         // 8. Emit event (this is what we're testing for!)
         // ─────────────────────────────────────────────────────────────────
-        emit PrivateClaim(_nullifier, _recipient, _amount, _merkleRoot, _lockerScriptHash);
+        emit PrivateClaim(_nullifier, _recipient, _amount, _merkleRoots[0], _lockerScriptHash);
 
         return true;
     }
