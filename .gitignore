@@ -46,3 +46,8 @@ circuits/build/
 
 # Keep verification key for reference
 !zkproof/build/verification_key.json
+
+# ZK proof test data (contains secrets)
+zkproof/claims/
+zkproof/deposits/
+zkproof/lockers/
