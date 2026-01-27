@@ -1,5 +1,35 @@
 /**
- * Register Locker Hash on PrivateTransferClaimTest Contract
+ * Register Locker Hash on PrivateTransferClaim Contract
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * WHY LOCKER SCRIPT HASH INSTEAD OF LOCKER SCRIPT DIRECTLY?
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * The locker script hash is a SYSTEM IDENTIFIER (Type 2 hash in our system).
+ * It's NOT a Bitcoin standard hash - it's our construct for locker identification.
+ *
+ * We hash the script instead of using it directly because:
+ *
+ * 1. FIXED SIZE FOR PUBLIC INPUT
+ *    - Bitcoin scripts have variable lengths (P2PKH=25, P2SH=23, P2WPKH=22 bytes)
+ *    - ZK circuit public inputs must be single field elements (~254 bits)
+ *    - Hashing produces a fixed-size identifier regardless of script type
+ *
+ * 2. EFFICIENT ON-CHAIN STORAGE
+ *    - Smart contract stores: mapping(uint256 => bool) isValidLockerHash
+ *    - One field element per locker, not variable-length bytes
+ *    - Cheaper gas for storage and comparison
+ *
+ * 3. SECURITY MODEL
+ *    - Circuit PROVES: "TX sent BTC to script S, and SHA256(S) = H"
+ *    - Contract VERIFIES: "H is in our registry of approved lockers"
+ *    - Result: Only deposits to registered lockers can mint teleBTC
+ *
+ * IMPORTANT: This hash uses BN254 field modulo because it's a public input.
+ * The circuit automatically applies modulo via Bits2Num(254).
+ * This script must apply the same modulo to match.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Usage:
  *   npx hardhat run scripts/zk/register-locker.ts --network polygon
@@ -28,10 +58,17 @@ try {
 
 require("dotenv").config();
 
+// BN254 scalar field prime (used by Groth16 on this curve)
+const BN254_PRIME = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+
 function sha256(data: Buffer): Buffer {
     return crypto.createHash("sha256").update(data).digest();
 }
 
+/**
+ * Convert Buffer to bit array (big-endian, MSB first per byte)
+ * This matches circomlib SHA256 input/output format.
+ */
 function bufferToBitsBE(buffer: Buffer): number[] {
     const bits: number[] = [];
     for (let i = 0; i < buffer.length; i++) {
@@ -42,12 +79,44 @@ function bufferToBitsBE(buffer: Buffer): number[] {
     return bits;
 }
 
-function bitsToBigInt(bits: number[]): bigint {
-    let result = BigInt(0);
-    for (let i = 0; i < bits.length; i++) {
-        result = (result << BigInt(1)) | BigInt(bits[i]);
+/**
+ * Compute locker script hash exactly as the circuit does.
+ *
+ * The circuit:
+ * 1. Hashes the 65-byte (520-bit) zero-padded locker script with SHA256
+ * 2. Converts the first 254 bits to a field element using Bits2Num
+ *    - Bits2Num.in[i] = SHA256.out[253 - i]
+ *    - Result = sum(in[i] * 2^i) for i=0..253
+ * 3. The result is automatically reduced modulo the BN254 field prime
+ *
+ * This function replicates that exact computation.
+ */
+function computeLockerScriptHash(lockerScript: Buffer): bigint {
+    // 1. Pad locker script to 65 bytes (circuit uses 520 bits)
+    const paddedScript = Buffer.alloc(65);
+    lockerScript.copy(paddedScript);
+
+    // 2. Compute SHA256
+    const hash = sha256(paddedScript);
+
+    // 3. Convert to bits (big-endian, MSB first per byte)
+    const hashBits = bufferToBitsBE(hash);
+
+    // 4. Convert to field element using Bits2Num logic:
+    //    Circuit does: bits2num.in[i] = hasher.out[253 - i]
+    //    Bits2Num computes: result = sum(in[i] * 2^i)
+    //    So: result = sum(hashBits[253 - i] * 2^i) for i=0..253
+    let fieldElement = BigInt(0);
+    for (let i = 0; i < 254; i++) {
+        if (hashBits[253 - i]) {
+            fieldElement += BigInt(1) << BigInt(i);
+        }
     }
-    return result;
+
+    // 5. Apply modulo BN254 field prime (circuit does this automatically)
+    fieldElement = fieldElement % BN254_PRIME;
+
+    return fieldElement;
 }
 
 async function main() {
@@ -68,22 +137,19 @@ async function main() {
     console.log(`Locker Script: ${lockerScript.toString("hex")}`);
     console.log(`Script Length: ${lockerScript.length} bytes`);
 
-    // Compute hash (padded to 65 bytes as circuit expects)
-    const lockerScriptPadded = Buffer.alloc(65);
-    lockerScript.copy(lockerScriptPadded);
-    const hashBytes = sha256(lockerScriptPadded);
-    const hashBits = bufferToBitsBE(hashBytes);
-    const lockerScriptHash = bitsToBigInt(hashBits.slice(0, 254));
+    // Compute hash using the same method as the circuit
+    // (SHA256 of 65-byte padded script, then Bits2Num conversion with BN254 modulo)
+    const lockerScriptHash = computeLockerScriptHash(lockerScript);
 
     console.log(`Locker Script Hash: ${lockerScriptHash.toString()}`);
 
     // Load deployment from hardhat-deploy
     let claimContractAddress: string;
     try {
-        const deployment = await deployments.get("PrivateTransferClaimTest");
+        const deployment = await deployments.get("PrivateTransferClaim");
         claimContractAddress = deployment.address;
     } catch (e) {
-        console.error(`❌ Deployment not found for PrivateTransferClaimTest`);
+        console.error(`❌ Deployment not found for PrivateTransferClaim`);
         console.error("   Run: NETWORK=<network> TAG=zk npm run deploy");
         process.exit(1);
     }
@@ -96,7 +162,7 @@ async function main() {
 
     // Connect to contract
     const claimContract = await ethers.getContractAt(
-        "PrivateTransferClaimTest",
+        "PrivateTransferClaim",
         claimContractAddress,
         signer
     );

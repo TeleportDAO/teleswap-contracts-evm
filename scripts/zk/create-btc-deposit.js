@@ -52,7 +52,8 @@ const CONFIG = {
     chainId: parseInt(process.env.EVM_CHAIN_ID || '137'),           // Default: Polygon
     recipient: process.env.EVM_RECIPIENT,
     network: bitcoin.networks.bitcoin,  // Mainnet
-    feeRate: 10,  // sats/vbyte (adjust based on mempool)
+    feeRate: 2,  // sats/vbyte (adjust based on mempool)
+    autoBroadcast: true,  // Skip confirmation prompt
 };
 
 /**
@@ -385,28 +386,32 @@ async function main() {
     console.log('Step 7: Broadcast Transaction');
     console.log('─────────────────────────────────────────────────────────────');
 
-    console.log('\n⚠️  REVIEW BEFORE BROADCASTING:');
+    console.log('\n⚠️  TRANSACTION DETAILS:');
     console.log(`    Amount to locker: ${CONFIG.amountSats} sats (${CONFIG.amountSats / 100000000} BTC)`);
     console.log(`    Locker address:   ${CONFIG.lockerAddress}`);
     console.log(`    Fee:              ${inputTotal - CONFIG.amountSats - (changeAmount > 546 ? changeAmount : 0)} sats`);
 
-    // Ask for confirmation
-    const readline = require('readline');
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
+    // Skip confirmation if autoBroadcast is enabled
+    if (!CONFIG.autoBroadcast) {
+        const readline = require('readline');
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+        });
 
-    const answer = await new Promise(resolve => {
-        rl.question('\nBroadcast transaction? (yes/no): ', resolve);
-    });
-    rl.close();
+        const answer = await new Promise(resolve => {
+            rl.question('\nBroadcast transaction? (yes/no): ', resolve);
+        });
+        rl.close();
 
-    if (answer.toLowerCase() !== 'yes') {
-        console.log('\n❌ Transaction NOT broadcast. Deposit data saved for later use.');
-        console.log(`   Raw TX hex saved in: ${depositFile}`);
-        console.log('   You can broadcast manually at: https://mempool.space/tx/push');
-        process.exit(0);
+        if (answer.toLowerCase() !== 'yes') {
+            console.log('\n❌ Transaction NOT broadcast. Deposit data saved for later use.');
+            console.log(`   Raw TX hex saved in: ${depositFile}`);
+            console.log('   You can broadcast manually at: https://mempool.space/tx/push');
+            process.exit(0);
+        }
+    } else {
+        console.log('\n🚀 Auto-broadcasting enabled...');
     }
 
     try {
@@ -430,10 +435,10 @@ async function main() {
     console.log(`    Secret: ${secret.toString('hex')}`);
     console.log('\nNext Steps:');
     console.log('  1. Wait for Bitcoin confirmation (6+ blocks recommended)');
-    console.log('  2. Generate claim proof:');
-    console.log(`     npm run zk:generate-claim -- --txid=${txid}`);
-    console.log('  3. Submit claim on Polygon:');
-    console.log('     npm run zk:submit-claim --network polygon');
+    console.log('  2. Generate witness and proof:');
+    console.log(`     npm run zk:generate-witness -- --txid=${txid}`);
+    console.log('  3. Submit proof on Polygon:');
+    console.log('     npm run zk:submit-proof --network polygon');
 }
 
 main().catch(error => {

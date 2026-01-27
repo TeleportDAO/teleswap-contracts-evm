@@ -11,8 +11,8 @@
  * 5. Outputs calldata for contract submission
  *
  * Usage:
- *   node scripts/zk/generate-claim.js --txid=<bitcoin_txid>
- *   node scripts/zk/generate-claim.js --deposit=<deposit_file>
+ *   node scripts/zk/generate-witness.js --txid=<bitcoin_txid>
+ *   node scripts/zk/generate-witness.js --deposit=<deposit_file>
  *
  * If you used create-btc-deposit.js, use --deposit flag with the saved file.
  */
@@ -22,14 +22,15 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Circuit constants
-const MAX_TX_BYTES = 1024;
+// Circuit constants - MUST match main.circom parameters
+const MAX_TX_BYTES = 512;  // Must match PrivateTransferClaim(512) in main.circom
 const MAX_TX_BITS = MAX_TX_BYTES * 8;
 const LOCKER_SCRIPT_BITS = 520;
 const MERKLE_DEPTH = 12;
 
-// Max padded transaction size: ceil((MAX_TX_BITS + 65) / 512) * 512 = 8704 bits
-const MAX_PADDED_BITS = Math.ceil((MAX_TX_BITS + 65) / 512) * 512;
+// Max padded transaction size: matches circuit calculation
+// ((maxTxBits + 64) \ 512 + 1) * 512 = ((4096 + 64) / 512 + 1) * 512 = 4608 bits
+const MAX_PADDED_BITS = (Math.floor((MAX_TX_BITS + 64) / 512) + 1) * 512;
 
 // Parse command line arguments
 const args = process.argv.slice(2).reduce((acc, arg) => {
@@ -138,8 +139,50 @@ function padBits(bits, targetLength) {
     return padded.slice(0, targetLength);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// IMPORTANT: TWO TYPES OF HASHES - UNDERSTAND THIS BEFORE MODIFYING
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// TYPE 1: BITCOIN-COMPATIBLE HASHES (Full 256-bit, NO modulo)
+// ───────────────────────────────────────────────────────────────────────────────
+// These MUST match Bitcoin exactly. Used for:
+//   • TxId = SHA256(SHA256(transaction)) - Bitcoin's transaction identifier
+//   • Commitment = SHA256(secret||amount||chainId||recipient) - stored in OP_RETURN
+//   • Merkle proof hashes - Bitcoin's Merkle tree structure
+//
+// These are compared as 256-bit values in the circuit (bit-by-bit).
+// DO NOT apply BN254 modulo to these - they must match Bitcoin!
+//
+// TYPE 2: SYSTEM IDENTIFIERS (254-bit field elements WITH BN254 modulo)
+// ───────────────────────────────────────────────────────────────────────────────
+// These are OUR constructs for the ZK system, NOT Bitcoin standards. Used for:
+//   • Nullifier = SHA256(secret||0x01) % BN254_PRIME - double-spend prevention
+//   • LockerScriptHash = SHA256(lockerScript) % BN254_PRIME - locker identification
+//   • MerkleRoots (public inputs) - truncated for smart contract interface
+//
+// These are converted to field elements because:
+//   • Public inputs must fit in BN254's scalar field (~254 bits)
+//   • The circuit uses Bits2Num(254) which implicitly does modulo
+//   • JavaScript must apply the same modulo to match
+//
+// WHY BN254 MODULO?
+// ZK circuits use the BN254 elliptic curve. Its scalar field prime is:
+// 21888242871839275222246405745257275088548364400416034343698204186575808495617
+// When a 256-bit hash value exceeds this prime, it wraps around (modulo).
+// The circuit does this automatically via Bits2Num; JavaScript must match.
+//
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// BN254 scalar field prime (used by Groth16 proofs on this curve)
+const BN254_PRIME = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+
 /**
- * Convert bits to BigInt
+ * Convert bits to BigInt (raw, no modulo)
+ *
+ * USE FOR: Bitcoin-compatible hashes (Type 1) that need full 256-bit values
+ * - TxId computation
+ * - Commitment comparison
+ * - Merkle proof verification
  */
 function bitsToBigInt(bits) {
     let result = BigInt(0);
@@ -147,6 +190,36 @@ function bitsToBigInt(bits) {
         result = (result << BigInt(1)) | BigInt(bits[i]);
     }
     return result;
+}
+
+/**
+ * Convert bits to field element (with BN254 modulo)
+ *
+ * USE FOR: System identifiers (Type 2) that become public inputs
+ * - Nullifier (our construct for double-spend prevention)
+ * - LockerScriptHash (our construct for locker identification)
+ * - MerkleRoot public inputs (truncated for contract interface)
+ *
+ * This matches how the circuit's Bits2Num(254) computes field elements.
+ * The circuit implicitly applies modulo; we must do the same.
+ */
+function bitsToFieldElement(bits) {
+    const raw = bitsToBigInt(bits);
+    return raw % BN254_PRIME;
+}
+
+/**
+ * Convert BigInt to 256-bit array for merkle root comparison
+ * The circuit uses Bits2Num(254) with: in[i] = merkleRootBits[253-i]
+ */
+function bigIntToMerkleRootBits(value) {
+    const bits = [];
+    for (let i = 253; i >= 0; i--) {
+        bits.push(Number((value >> BigInt(i)) & BigInt(1)));
+    }
+    bits.push(0);
+    bits.push(0);
+    return bits;
 }
 
 /**
@@ -174,6 +247,53 @@ async function fetchTransaction(txid) {
     const txHex = await hexResponse.text();
 
     return { txData, txHex };
+}
+
+/**
+ * Fetch REAL merkle proof from mempool.space API
+ * Returns the merkle proof siblings and the block's merkle root
+ */
+async function fetchMerkleProof(txid) {
+    const fetch = (await import('node-fetch')).default;
+
+    console.log(`\nFetching merkle proof for ${txid}...`);
+
+    // Fetch merkle proof
+    const proofUrl = `https://mempool.space/api/tx/${txid}/merkle-proof`;
+    const proofResponse = await fetch(proofUrl);
+    if (!proofResponse.ok) {
+        throw new Error(`Failed to fetch merkle proof: ${proofResponse.status}`);
+    }
+    const proofData = await proofResponse.json();
+
+    // proofData contains: { block_height, merkle, pos }
+    // merkle is array of sibling hashes (hex strings, already in correct order)
+    // pos is the position/index of the transaction in the block
+
+    // Fetch block to get merkle root
+    const txUrl = `https://mempool.space/api/tx/${txid}`;
+    const txResponse = await fetch(txUrl);
+    const txData = await txResponse.json();
+    const blockHash = txData.status.block_hash;
+
+    const blockUrl = `https://mempool.space/api/block/${blockHash}`;
+    const blockResponse = await fetch(blockUrl);
+    if (!blockResponse.ok) {
+        throw new Error(`Failed to fetch block: ${blockResponse.status}`);
+    }
+    const blockData = await blockResponse.json();
+
+    console.log(`  Block height: ${proofData.block_height}`);
+    console.log(`  TX position in block: ${proofData.pos}`);
+    console.log(`  Merkle proof depth: ${proofData.merkle.length}`);
+    console.log(`  Block merkle root: ${blockData.merkle_root}`);
+
+    return {
+        siblings: proofData.merkle,  // Array of hex strings
+        txIndex: proofData.pos,      // Position of TX in block
+        merkleRoot: blockData.merkle_root,  // Block's merkle root (hex)
+        blockHeight: proofData.block_height
+    };
 }
 
 /**
@@ -393,8 +513,13 @@ function readVarInt(buffer, offset) {
 
 /**
  * Generate circuit inputs
+ * @param {Object} depositData - Deposit data from create-btc-deposit
+ * @param {Object} txParseResult - Parsed transaction data
+ * @param {number} chainId - Target EVM chain ID
+ * @param {string} recipient - EVM recipient address
+ * @param {Object} merkleProofData - Real merkle proof from Bitcoin block
  */
-function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
+function generateCircuitInputs(depositData, txParseResult, chainId, recipient, merkleProofData) {
     console.log('\nGenerating circuit inputs...');
 
     const secret = Buffer.from(depositData.secret, 'hex');
@@ -404,18 +529,33 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
     const lockerScript = Buffer.from(depositData.lockerScript, 'hex');
     const lockerScriptBits = padBits(bufferToBitsBE(lockerScript), LOCKER_SCRIPT_BITS);
 
-    // Locker script hash (padded to 65 bytes)
+    // ═══════════════════════════════════════════════════════════════════
+    // LOCKER SCRIPT HASH - TYPE 2: System Identifier (needs BN254 modulo)
+    // ═══════════════════════════════════════════════════════════════════
+    // This is NOT a Bitcoin hash - it's our construct for locker identification.
+    // The circuit uses Bits2Num(254) which applies modulo automatically.
+    // We must apply the same modulo here to match.
+    //
+    // WHY HASH INSTEAD OF SCRIPT DIRECTLY?
+    // - Scripts have variable length (22-25 bytes)
+    // - Public inputs must be single field elements
+    // - Hashing gives fixed-size identifier for any script type
     const lockerScriptPadded = Buffer.alloc(65);
     lockerScript.copy(lockerScriptPadded);
     const lockerHashBytes = sha256(lockerScriptPadded);
     const lockerHashBits = bufferToBitsBE(lockerHashBytes);
-    const lockerScriptHash = bitsToBigInt(lockerHashBits.slice(0, 254));
+    const lockerScriptHash = bitsToFieldElement(lockerHashBits.slice(0, 254));  // BN254 modulo applied
 
-    // Nullifier
+    // ═══════════════════════════════════════════════════════════════════
+    // NULLIFIER - TYPE 2: System Identifier (needs BN254 modulo)
+    // ═══════════════════════════════════════════════════════════════════
+    // This is NOT a Bitcoin hash - it's our construct for double-spend prevention.
+    // The circuit uses Bits2Num(254) which applies modulo automatically.
+    // We must apply the same modulo here to match.
     const nullifierInput = Buffer.concat([secret, Buffer.from([0x01])]);
     const nullifierHash = sha256(nullifierInput);
     const nullifierBits = bufferToBitsBE(nullifierHash);
-    const nullifier = bitsToBigInt(nullifierBits.slice(0, 254));
+    const nullifier = bitsToFieldElement(nullifierBits.slice(0, 254));  // BN254 modulo applied
 
     // Use STRIPPED transaction (without witness data) for circuit
     const strippedTx = txParseResult.strippedTx;
@@ -433,9 +573,15 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
     // This ensures the commitment is actually in the transaction.
     // ═══════════════════════════════════════════════════════════════════
 
-    // Compute txId from stripped transaction (double SHA256)
+    // ═══════════════════════════════════════════════════════════════════
+    // TXID - TYPE 1: Bitcoin-Compatible Hash (NO BN254 modulo)
+    // ═══════════════════════════════════════════════════════════════════
+    // This MUST match Bitcoin's transaction ID exactly.
+    // txId = SHA256(SHA256(raw_transaction))
+    // The circuit compares this as full 256 bits - NO field modulo.
+    // This is used for Merkle proof verification (must match block data).
     const txIdBytes = doubleSha256(strippedTx);
-    const txIdBits = bufferToBitsBE(txIdBytes);
+    const txIdBits = bufferToBitsBE(txIdBytes);  // Full 256 bits, no modulo
 
     // Apply SHA256 padding for circuit
     const { padded: paddedTx, numBlocks } = sha256PadForCircuit(strippedTx, MAX_PADDED_BITS);
@@ -446,18 +592,88 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
     console.log(`  TxId (for verification): ${txIdDisplay}`);
     console.log(`  Stripped TX: ${strippedTx.length} bytes -> ${numBlocks} SHA256 blocks`);
 
-    // Merkle proof (placeholder)
+    // ═══════════════════════════════════════════════════════════════════
+    // REAL MERKLE PROOF FROM BITCOIN BLOCK
+    // ═══════════════════════════════════════════════════════════════════
+    // The Merkle root has two representations:
+    //
+    // 1. merkleRootBits (private input) - TYPE 1: Full 256 bits
+    //    Used for internal Merkle proof verification
+    //    Must match Bitcoin's Merkle tree exactly
+    //
+    // 2. merkleRoots (public input) - TYPE 2: Field element with BN254 modulo
+    //    Used for smart contract interface
+    //    Truncated to 254 bits and converted to field element
+    //
+    // Now using REAL merkle proof from Bitcoin block!
+    // ═══════════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════════
+    // BITCOIN BYTE ORDER CONVENTION:
+    // - API/Display format: reversed bytes (little-endian hex display)
+    // - Internal format: big-endian bytes (used for hashing)
+    //
+    // mempool.space API returns hashes in DISPLAY format (reversed).
+    // We need to reverse them back to INTERNAL format for the circuit.
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Get real merkle root from block - REVERSE bytes from display to internal format
+    const merkleRootDisplayBytes = Buffer.from(merkleProofData.merkleRoot, 'hex');
+    const merkleRootInternalBytes = Buffer.from(merkleRootDisplayBytes).reverse();
+    const merkleRootBitsComputed = bufferToBitsBE(merkleRootInternalBytes);  // Full 256 bits
+
+    // Merkle depth from actual proof
+    const merkleDepth = merkleProofData.siblings.length;
+    console.log(`  Using REAL merkle proof: depth=${merkleDepth}, txIndex=${merkleProofData.txIndex}`);
+    console.log(`  Merkle root (display): ${merkleProofData.merkleRoot}`);
+    console.log(`  Merkle root (internal): ${merkleRootInternalBytes.toString('hex')}`);
+
+    // Public input (Type 2): Apply BN254 modulo for smart contract interface
+    const merkleRoot0Value = bitsToFieldElement(merkleRootBitsComputed.slice(0, 254));
+    // For hidden root selection, we use a second dummy root (root + 1)
+    const merkleRoot1Value = merkleRoot0Value + BigInt(1);
+
+    // merkleRootBits for circuit (Type 1: full 256 bits for Merkle verification)
+    const merkleRootBits = [
+        merkleRootBitsComputed,
+        bigIntToMerkleRootBits(merkleRoot1Value)
+    ];
+
+    // Convert real merkle proof siblings to bit arrays
+    // Siblings are in order from leaf to root
+    // REVERSE each sibling from display to internal format
     const merkleProof = [];
-    for (let i = 0; i < MERKLE_DEPTH; i++) {
-        merkleProof.push(padBits([], 256).fill(0));
+    for (let i = 0; i < merkleProofData.siblings.length; i++) {
+        const siblingHex = merkleProofData.siblings[i];
+        const siblingDisplayBytes = Buffer.from(siblingHex, 'hex');
+        const siblingInternalBytes = Buffer.from(siblingDisplayBytes).reverse();  // REVERSE!
+        merkleProof.push(bufferToBitsBE(siblingInternalBytes));
     }
+    // Pad remaining levels with zeros (circuit expects 12 levels)
+    for (let i = merkleProofData.siblings.length; i < MERKLE_DEPTH; i++) {
+        merkleProof.push(padBits([], 256));
+    }
+
+    // Convert transaction index to path indices (binary representation)
+    // Bit i of txIndex indicates if node is left (0) or right (1) child at level i
+    const merklePathIndices = [];
+    let txIndex = merkleProofData.txIndex;
+    for (let i = 0; i < MERKLE_DEPTH; i++) {
+        if (i < merkleDepth) {
+            merklePathIndices.push(txIndex & 1);  // LSB indicates left/right
+            txIndex = txIndex >> 1;
+        } else {
+            merklePathIndices.push(0);  // Unused levels
+        }
+    }
+    console.log(`  Path indices: [${merklePathIndices.slice(0, merkleDepth).join(', ')}]`);
 
     // Recipient as BigInt
     const recipientBigInt = BigInt(recipient);
 
     const circuitInput = {
         // PUBLIC INPUTS (7 total: merkleRoots[2] counts as 2)
-        merkleRoots: ["12345", "67890"],  // Placeholder array for hidden root selection
+        merkleRoots: [merkleRoot0Value.toString(), merkleRoot1Value.toString()],
         nullifier: nullifier.toString(),
         amount: txParseResult.amount.toString(),
         chainId: chainId.toString(),
@@ -470,19 +686,21 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
         lockerScriptLength: lockerScript.length,
         lockerOutputIndex: txParseResult.lockerOutputIndex,
         lockerOutputByteOffset: txParseResult.lockerOutputByteOffset,
-        commitmentByteOffset: txParseResult.commitmentByteOffset,  // Where commitment starts in TX
-        rootIndex: 0,  // Which merkle root the TX is in (private)
+        commitmentByteOffset: txParseResult.commitmentByteOffset,
+        rootIndex: 0,
         merkleProof: merkleProof,
-        merkleIndex: 0,
+        merklePathIndices: merklePathIndices,
+        merkleDepth: merkleDepth,
+        merkleRootBits: merkleRootBits,
 
         // SINGLE TRANSACTION INPUT (used for everything)
-        paddedTransaction: paddedTxBits,   // Stripped transaction with SHA256 padding
-        numBlocks: numBlocks,              // Number of 512-bit blocks to process
-        txId: txIdBits,                    // Expected SHA256(SHA256(stripped_transaction)) - 256 bits
+        paddedTransaction: paddedTxBits,
+        numBlocks: numBlocks,
+        txId: txIdBits,
     };
 
     console.log('  Public inputs prepared:');
-    console.log(`    merkleRoots: [12345, 67890] (placeholders)`);
+    console.log(`    merkleRoots: [${merkleRoot0Value.toString().substring(0, 20)}..., ${merkleRoot1Value.toString().substring(0, 20)}...]`);
     console.log(`    nullifier: ${nullifier.toString().substring(0, 30)}...`);
     console.log(`    amount: ${txParseResult.amount} satoshis`);
     console.log(`    chainId: ${chainId}`);
@@ -491,6 +709,7 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient) {
     console.log('  Private inputs:');
     console.log(`    lockerOutputByteOffset: ${txParseResult.lockerOutputByteOffset} bytes`);
     console.log(`    commitmentByteOffset: ${txParseResult.commitmentByteOffset} bytes`);
+    console.log(`    merkleDepth: ${merkleDepth}`);
 
     return circuitInput;
 }
@@ -601,8 +820,8 @@ async function main() {
         }
     } else {
         console.error('\n❌ Usage:');
-        console.error('   node generate-claim.js --deposit=<txid>.json');
-        console.error('   node generate-claim.js --txid=<txid> --secret=<hex> --lockerScript=<hex> --recipient=<addr>');
+        console.error('   node generate-witness.js --deposit=<txid>.json');
+        console.error('   node generate-witness.js --txid=<txid> --secret=<hex> --lockerScript=<hex> --recipient=<addr>');
         process.exit(1);
     }
 
@@ -630,13 +849,19 @@ async function main() {
     const txParseResult = parseTransaction(txHex, txData, lockerAddress);
 
     // ═══════════════════════════════════════════════════════════════════
+    // Fetch REAL merkle proof from Bitcoin block
+    // ═══════════════════════════════════════════════════════════════════
+    const merkleProofData = await fetchMerkleProof(depositData.txid);
+
+    // ═══════════════════════════════════════════════════════════════════
     // Generate circuit inputs
     // ═══════════════════════════════════════════════════════════════════
     const circuitInput = generateCircuitInputs(
         depositData,
         txParseResult,
         depositData.chainId,
-        depositData.recipient
+        depositData.recipient,
+        merkleProofData  // Pass real merkle proof
     );
 
     // ═══════════════════════════════════════════════════════════════════
@@ -696,7 +921,7 @@ async function main() {
     console.log('Next Step:');
     console.log('─────────────────────────────────────────────────────────────');
     console.log('Submit claim on Polygon:');
-    console.log(`  npm run zk:submit-claim -- --claim=${depositData.txid}.json --network polygon`);
+    console.log(`  npm run zk:submit-proof -- --claim=${depositData.txid}.json --network polygon`);
 }
 
 main().catch(error => {

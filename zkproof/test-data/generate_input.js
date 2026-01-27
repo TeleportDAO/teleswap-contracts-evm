@@ -13,14 +13,15 @@ const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 
-// Circuit constants
-const MAX_TX_BYTES = 1024;
+// Circuit constants - MUST match main.circom parameters
+const MAX_TX_BYTES = 512;  // Must match PrivateTransferClaim(512) in main.circom
 const MAX_TX_BITS = MAX_TX_BYTES * 8;
 const LOCKER_SCRIPT_BITS = 520;  // 65 bytes max
 const MERKLE_DEPTH = 12;
 
-// Max padded transaction size: ceil((MAX_TX_BITS + 65) / 512) * 512 = 8704 bits
-const MAX_PADDED_BITS = Math.ceil((MAX_TX_BITS + 65) / 512) * 512;
+// Max padded transaction size: matches circuit calculation
+// ((maxTxBits + 64) \ 512 + 1) * 512 = ((4096 + 64) / 512 + 1) * 512 = 4608 bits
+const MAX_PADDED_BITS = (Math.floor((MAX_TX_BITS + 64) / 512) + 1) * 512;
 
 // Default locker address (P2PKH) - use environment variable or this default
 // This should match the locker registered on the contract
@@ -105,6 +106,29 @@ function bitsToBigInt(bits) {
         result = (result << BigInt(1)) | BigInt(bits[i]);
     }
     return result;
+}
+
+/**
+ * Convert BigInt to 256-bit array for merkle root comparison
+ *
+ * The circuit uses Bits2Num(254) with: in[i] = merkleRootBits[253-i]
+ * This means only bits[0..253] are used, and:
+ * - bits[253] = LSB of the field element
+ * - bits[0] = MSB (bit 253) of the field element
+ *
+ * @param {BigInt} value - Input value (max 254 bits)
+ * @returns {number[]} Array of 256 bits
+ */
+function bigIntToMerkleRootBits(value) {
+    const bits = [];
+    // Generate 254 bits in big-endian order (MSB first)
+    for (let i = 253; i >= 0; i--) {
+        bits.push(Number((value >> BigInt(i)) & BigInt(1)));
+    }
+    // Pad with 2 zeros (bits 254 and 255 are unused by circuit)
+    bits.push(0);
+    bits.push(0);
+    return bits;  // 256 bits total
 }
 
 /**
@@ -358,24 +382,60 @@ function generateTestInput() {
     console.log(`✓ TxId: ${Buffer.from(txIdBytes).reverse().toString('hex')}`);
 
     // ═══════════════════════════════════════════════════════════
-    // Step 7: Create mock Merkle proof (placeholder for Phase 2)
+    // Step 7: Create valid Merkle proof for testing
     // Circuit expects NUM_MERKLE_ROOTS = 2 for hidden root selection
+    //
+    // We use depth=1 for simplicity:
+    // - leaf = txId
+    // - sibling[0] = zero hash
+    // - root = DoubleSHA256(txId || sibling) when pathIndices[0] = 0
     // ═══════════════════════════════════════════════════════════
-    const merkleProof = [];
-    for (let i = 0; i < MERKLE_DEPTH; i++) {
-        const sibling = crypto.randomBytes(32);
-        merkleProof.push(bufferToBitsBE(sibling));
-    }
-    const merkleIndex = 0;  // Leaf position
 
-    // Circuit uses merkleRoots[2] for privacy (hidden root selection)
-    // User proves TX is in ONE of these without revealing which
+    // Use depth 1 for test (simplest valid proof)
+    const merkleDepth = 1;
+
+    // Sibling at level 0 is all zeros (32 bytes)
+    const sibling0 = Buffer.alloc(32);
+
+    // Compute the merkle root: DoubleSHA256(txId || sibling0)
+    // pathIndices[0] = 0 means txId is the left child
+    const merkleInput = Buffer.concat([txIdBytes, sibling0]);
+    const computedMerkleRoot = doubleSha256(merkleInput);
+    const merkleRootBitsComputed = bufferToBitsBE(computedMerkleRoot);
+
+    // Convert to field element (first 254 bits)
+    const merkleRoot0Value = bitsToBigInt(merkleRootBitsComputed.slice(0, 254));
+
+    // Create placeholder second root (different value)
+    const merkleRoot1Value = merkleRoot0Value + BigInt(1);
+
     const merkleRoots = [
-        BigInt(12345).toString(),  // Placeholder root 0
-        BigInt(67890).toString()   // Placeholder root 1
+        merkleRoot0Value.toString(),
+        merkleRoot1Value.toString()
     ];
-    const rootIndex = 0;  // Which root the TX is in (private input)
-    console.log(`✓ Merkle roots: [${merkleRoots[0]}, ${merkleRoots[1]}] (placeholders)`);
+
+    // merkleRootBits: must match the full 256-bit hash for proper comparison
+    // For root 0, use the actual computed hash bits
+    // For root 1, create bits that match the field element
+    const merkleRootBits = [
+        merkleRootBitsComputed,  // Root 0: actual computed merkle root
+        bigIntToMerkleRootBits(merkleRoot1Value)  // Root 1: placeholder
+    ];
+
+    // Create merkle proof array (12 levels, but only first is used)
+    const merkleProof = [];
+    merkleProof.push(bufferToBitsBE(sibling0));  // Level 0 sibling
+    for (let i = 1; i < MERKLE_DEPTH; i++) {
+        // Unused levels get zero siblings
+        merkleProof.push(padBits([], 256));
+    }
+
+    // Path indices: 0 means leaf is left child (txId || sibling)
+    const merklePathIndices = Array(MERKLE_DEPTH).fill(0);
+
+    const rootIndex = 0;  // Use root 0 (the valid computed one)
+    console.log(`✓ Merkle root computed: ${computedMerkleRoot.toString('hex').substring(0, 16)}...`);
+    console.log(`✓ Merkle depth: ${merkleDepth}`);
     console.log(`✓ Root index: ${rootIndex} (private)`);
 
     // ═══════════════════════════════════════════════════════════
@@ -404,7 +464,9 @@ function generateTestInput() {
         commitmentByteOffset: commitmentByteOffset,      // Byte offset where commitment starts in OP_RETURN
         rootIndex: rootIndex,  // Which merkle root the TX is in (private)
         merkleProof: merkleProof,
-        merkleIndex: merkleIndex,
+        merklePathIndices: merklePathIndices,
+        merkleDepth: merkleDepth,
+        merkleRootBits: merkleRootBits,
 
         // SINGLE TRANSACTION INPUT (used for everything)
         paddedTransaction: paddedTxBits,  // Transaction with SHA256 padding

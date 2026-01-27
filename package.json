@@ -72,13 +72,14 @@
 		"circuit:compile": "cd circuits && bash ../zkproof/scripts/compile.sh",
 		"circuit:setup": "cd circuits && bash ../zkproof/scripts/setup.sh",
 		"circuit:test": "cd circuits && node test/main.test.js",
-		"zk:generate-proof": "node zkproof/scripts/generate_proof.js",
-		"zk:verify-proof": "node zkproof/scripts/verify_proof.js",
+		"zk:generate-test-proof": "node zkproof/scripts/generate-test-proof.js",
+		"zk:verify-test-proof": "node zkproof/scripts/verify-test-proof.js",
 		"zk:test-realistic": "node zkproof/test-data/test_real_btc_tx.js",
 		"zk:deploy": "NODE_ENV=$NETWORK hardhat deploy --tags zk --network $NETWORK --export export/abi/$NETWORK-zk.json",
 		"zk:register-locker": "npx hardhat run scripts/zk/register-locker.ts --network $NETWORK",
 		"zk:create-deposit": "node scripts/zk/create-btc-deposit.js",
-		"zk:generate-claim": "node scripts/zk/generate-claim.js",
-		"zk:submit-claim": "npx hardhat run scripts/zk/submit-claim.ts --network $NETWORK"
+		"zk:generate-witness": "node scripts/zk/generate-witness.js",
+		"zk:submit-proof": "npx hardhat run scripts/zk/submit-proof.ts --network $NETWORK",
+		"zk:test-invalid-args": "npx hardhat run scripts/zk/submit-proof-with-invalid-args.ts --network $NETWORK"
 	}
 }

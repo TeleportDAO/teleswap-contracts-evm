@@ -51,9 +51,9 @@ contract PrivateTransferClaim is
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════
 
-    /// @notice Number of merkle roots for hidden selection (matches circuit)
-    /// User proves TX is in ONE of these roots without revealing which
-    uint256 public constant NUM_MERKLE_ROOTS = 2;
+    /// @notice Mask to truncate 256-bit merkle root to 254 bits for circuit
+    /// Circuit uses BN254 curve which has ~254-bit field elements
+    uint256 private constant FIELD_MASK = (1 << 254) - 1;
 
     // ═══════════════════════════════════════════════════════════════════
     // STORAGE
@@ -95,7 +95,7 @@ contract PrivateTransferClaim is
     /**
      * @notice Initialize the contract
      * @param _zkVerifier Address of the Groth16 verifier contract
-     * @param _lockersManager Address of the LockersManager contract
+     * @param _lockersManager Address of the LockersManager contract (optional until minting enabled)
      * @param _chainId Chain ID for this deployment
      */
     function initialize(
@@ -107,7 +107,7 @@ contract PrivateTransferClaim is
         __ReentrancyGuard_init();
 
         require(_zkVerifier != address(0), "PTC: zero verifier");
-        require(_lockersManager != address(0), "PTC: zero lockers");
+        // NOTE: lockersManager can be zero until minting is enabled
         require(_chainId > 0, "PTC: zero chainId");
 
         zkVerifier = _zkVerifier;
@@ -200,20 +200,21 @@ contract PrivateTransferClaim is
 
         // ─────────────────────────────────────────────────────────────────
         // 8. Mint TeleBTC to recipient
+        // TODO: Uncomment when ready for production
         // ─────────────────────────────────────────────────────────────────
-        bytes memory lockerScript = lockerScriptFromHash[_lockerScriptHash];
-
-        // Call LockersManager.mint(lockerScript, recipient, amount)
-        // Note: Amount is in satoshis, TeleBTC has 8 decimals (same as BTC)
-        (bool mintSuccess, ) = lockersManager.call(
-            abi.encodeWithSignature(
-                "mint(bytes,address,uint256)",
-                lockerScript,
-                _recipient,
-                _amount
-            )
-        );
-        require(mintSuccess, "PTC: mint failed");
+        // bytes memory lockerScript = lockerScriptFromHash[_lockerScriptHash];
+        //
+        // // Call LockersManager.mint(lockerScript, recipient, amount)
+        // // Note: Amount is in satoshis, TeleBTC has 8 decimals (same as BTC)
+        // (bool mintSuccess, ) = lockersManager.call(
+        //     abi.encodeWithSignature(
+        //         "mint(bytes,address,uint256)",
+        //         lockerScript,
+        //         _recipient,
+        //         _amount
+        //     )
+        // );
+        // require(mintSuccess, "PTC: mint failed");
 
         // ─────────────────────────────────────────────────────────────────
         // 9. Update stats and emit event

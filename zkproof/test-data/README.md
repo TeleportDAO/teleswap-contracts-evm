@@ -108,7 +108,7 @@ For **Output 1** (second vout):
 ### Test Case 1: Prove Output 0 (P2WPKH)
 
 ```bash
-node zkproof/scripts/generate_proof.js \
+node zkproof/scripts/generate-test-proof.js \
   --tx-file zkproof/test-data/bitcoin-tx-sample.json \
   --vout-index 0 \
   --block 931456
@@ -122,7 +122,7 @@ node zkproof/scripts/generate_proof.js \
 ### Test Case 2: Prove Output 1 (P2SH)
 
 ```bash
-node zkproof/scripts/generate_proof.js \
+node zkproof/scripts/generate-test-proof.js \
   --tx-file zkproof/test-data/bitcoin-tx-sample.json \
   --vout-index 1 \
   --block 931456

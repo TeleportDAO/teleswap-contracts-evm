@@ -1,13 +1,13 @@
 /**
  * Submit ZK Claim
  *
- * This script submits a generated ZK proof to the PrivateTransferClaimTest contract.
+ * This script submits a generated ZK proof to the PrivateTransferClaim contract.
  *
  * Usage:
- *   npx hardhat run scripts/zk/submit-claim.ts --network polygon -- --claim=<txid>.json
+ *   npx hardhat run scripts/zk/submit-proof.ts --network polygon -- --claim=<txid>.json
  *
  * Or with npm:
- *   npm run zk:submit-claim -- --claim=<txid>.json --network polygon
+ *   npm run zk:submit-proof -- --claim=<txid>.json --network polygon
  */
 
 import { ethers, deployments } from "hardhat";
@@ -38,8 +38,8 @@ async function main() {
     const claimFileName = claimArg ? claimArg.split("=")[1] : process.env.CLAIM_FILE;
 
     if (!claimFileName) {
-        console.error("❌ Usage: CLAIM_FILE=<txid>.json npx hardhat run scripts/zk/submit-claim.ts --network polygon");
-        console.error("   Or:   npx hardhat run scripts/zk/submit-claim.ts --network polygon (with --claim=<file> in argv)");
+        console.error("❌ Usage: CLAIM_FILE=<txid>.json npx hardhat run scripts/zk/submit-proof.ts --network polygon");
+        console.error("   Or:   npx hardhat run scripts/zk/submit-proof.ts --network polygon (with --claim=<file> in argv)");
         process.exit(1);
     }
     const claimPath = claimFileName.startsWith("/")
@@ -62,7 +62,7 @@ async function main() {
     let claimContractAddress: string;
     let verifierAddress: string;
     try {
-        const claimDeployment = await deployments.get("PrivateTransferClaimTest");
+        const claimDeployment = await deployments.get("PrivateTransferClaim");
         const verifierDeployment = await deployments.get("Groth16Verifier");
         claimContractAddress = claimDeployment.address;
         verifierAddress = verifierDeployment.address;
@@ -97,23 +97,28 @@ async function main() {
     const pC = parseArray(calldataMatch[4]);
     const publicSignals = parseArray(calldataMatch[5]);
 
+    // Extract locker hash from public signals (circuit computes this internally)
+    // Public signals order: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
+    const lockerScriptHashFromProof = BigInt(publicSignals[6]).toString();
+
     console.log("\nProof Components:");
     console.log(`  pA: [${pA[0].substring(0, 20)}..., ${pA[1].substring(0, 20)}...]`);
     console.log(`  pC: [${pC[0].substring(0, 20)}..., ${pC[1].substring(0, 20)}...]`);
     console.log(`  Public signals: ${publicSignals.length} values`);
+    console.log(`  Locker hash (from proof): ${lockerScriptHashFromProof.substring(0, 30)}...`);
 
     // Connect to contract
     const claimContract = await ethers.getContractAt(
-        "PrivateTransferClaimTest",
+        "PrivateTransferClaim",
         claimContractAddress,
         signer
     );
 
-    // Check if locker hash is registered
-    const isValidLocker = await claimContract.isValidLockerHash(claimData.lockerScriptHash);
+    // Check if locker hash is registered (use hash from proof, not claim file)
+    const isValidLocker = await claimContract.isValidLockerHash(lockerScriptHashFromProof);
     if (!isValidLocker) {
         console.error("\n❌ Locker hash not registered!");
-        console.error(`   Hash: ${claimData.lockerScriptHash}`);
+        console.error(`   Hash from proof: ${lockerScriptHashFromProof}`);
         console.error("   Register it first with: npm run zk:register-locker --network polygon");
         process.exit(1);
     }
