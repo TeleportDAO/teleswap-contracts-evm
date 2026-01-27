@@ -22,7 +22,8 @@ interface ClaimData {
     recipient: string;
     nullifier: string;
     lockerScriptHash: string;
-    merkleRoots: string[];  // Array of 2 roots for hidden selection
+    merkleRoots: string[];  // Array of 2 roots for hidden selection (circuit format)
+    bitcoinMerkleRoots: string[];  // Array of 2 roots in Bitcoin display format (bytes32)
     calldata: string;
 }
 
@@ -132,20 +133,42 @@ async function main() {
     }
     console.log("✓ Nullifier not yet used");
 
-    // Estimate gas
+    // Estimate gas using claimPrivateWithBitcoinRoots (accepts Bitcoin display format)
     // Public signals order: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
     console.log("\nEstimating gas...");
+
+    // Use Bitcoin merkle roots (display format) if available, otherwise fall back to circuit format
+    const useBitcoinRoots = claimData.bitcoinMerkleRoots && claimData.bitcoinMerkleRoots.length === 2;
+    const methodName = useBitcoinRoots ? "claimPrivateWithBitcoinRoots" : "claimPrivate";
+    console.log(`  Using method: ${methodName}`);
+
     try {
-        const gasEstimate = await claimContract.estimateGas.claimPrivate(
-            pA,
-            [pB0, pB1],
-            pC,
-            [publicSignals[0], publicSignals[1]],  // merkleRoots array
-            publicSignals[2],  // nullifier
-            publicSignals[3],  // amount
-            claimData.recipient,
-            publicSignals[6],  // lockerScriptHash
-        );
+        let gasEstimate;
+        if (useBitcoinRoots) {
+            // Use Bitcoin display format roots (recommended - what block explorers show)
+            gasEstimate = await claimContract.estimateGas.claimPrivateWithBitcoinRoots(
+                pA,
+                [pB0, pB1],
+                pC,
+                claimData.bitcoinMerkleRoots,  // bytes32[2] in Bitcoin display format
+                publicSignals[2],  // nullifier
+                publicSignals[3],  // amount
+                claimData.recipient,
+                publicSignals[6],  // lockerScriptHash
+            );
+        } else {
+            // Fall back to circuit format (pre-converted)
+            gasEstimate = await claimContract.estimateGas.claimPrivate(
+                pA,
+                [pB0, pB1],
+                pC,
+                [publicSignals[0], publicSignals[1]],  // merkleRoots array (circuit format)
+                publicSignals[2],  // nullifier
+                publicSignals[3],  // amount
+                claimData.recipient,
+                publicSignals[6],  // lockerScriptHash
+            );
+        }
         console.log(`  Estimated gas: ${gasEstimate.toString()}`);
     } catch (error: any) {
         console.error(`\n❌ Gas estimation failed: ${error.message}`);
@@ -177,19 +200,38 @@ async function main() {
         process.exit(0);
     }
 
-    // Submit claim
+    // Submit claim using the appropriate method
     // Public signals order: [merkleRoots[0], merkleRoots[1], nullifier, amount, chainId, recipient, lockerScriptHash]
     console.log("\nSubmitting claim...");
-    const tx = await claimContract.claimPrivate(
-        pA,
-        [pB0, pB1],
-        pC,
-        [publicSignals[0], publicSignals[1]],  // merkleRoots array
-        publicSignals[2],  // nullifier
-        publicSignals[3],  // amount
-        claimData.recipient,
-        publicSignals[6],  // lockerScriptHash
-    );
+    console.log(`  Method: ${methodName}`);
+
+    let tx;
+    if (useBitcoinRoots) {
+        // Use Bitcoin display format roots (recommended)
+        console.log(`  Bitcoin merkle roots: ${claimData.bitcoinMerkleRoots[0].substring(0, 20)}...`);
+        tx = await claimContract.claimPrivateWithBitcoinRoots(
+            pA,
+            [pB0, pB1],
+            pC,
+            claimData.bitcoinMerkleRoots,  // bytes32[2] in Bitcoin display format
+            publicSignals[2],  // nullifier
+            publicSignals[3],  // amount
+            claimData.recipient,
+            publicSignals[6],  // lockerScriptHash
+        );
+    } else {
+        // Fall back to circuit format
+        tx = await claimContract.claimPrivate(
+            pA,
+            [pB0, pB1],
+            pC,
+            [publicSignals[0], publicSignals[1]],  // merkleRoots array (circuit format)
+            publicSignals[2],  // nullifier
+            publicSignals[3],  // amount
+            claimData.recipient,
+            publicSignals[6],  // lockerScriptHash
+        );
+    }
 
     console.log(`  TX Hash: ${tx.hash}`);
     console.log("  Waiting for confirmation...");
