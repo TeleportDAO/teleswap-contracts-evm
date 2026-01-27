@@ -51,3 +51,9 @@ circuits/build/
 zkproof/claims/
 zkproof/deposits/
 zkproof/lockers/
+
+# ZK setup logs
+circuits/zkproof/logs/
+
+# Nested zkproof build artifacts
+zkproof/zkproof/
