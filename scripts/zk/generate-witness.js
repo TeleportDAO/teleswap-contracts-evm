@@ -625,13 +625,32 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient, m
     // Merkle depth from actual proof
     const merkleDepth = merkleProofData.siblings.length;
     console.log(`  Using REAL merkle proof: depth=${merkleDepth}, txIndex=${merkleProofData.txIndex}`);
-    console.log(`  Merkle root (display): ${merkleProofData.merkleRoot}`);
+    console.log(`  Merkle root (display/Bitcoin format): ${merkleProofData.merkleRoot}`);
     console.log(`  Merkle root (internal): ${merkleRootInternalBytes.toString('hex')}`);
 
+    // ═══════════════════════════════════════════════════════════════════
+    // BITCOIN MERKLE ROOTS (for claimPrivateWithBitcoinRoots)
+    // These are in Bitcoin display format (bytes reversed) - what block explorers show
+    // The contract will convert these to circuit format internally
+    // ═══════════════════════════════════════════════════════════════════
+    const bitcoinMerkleRoot0 = '0x' + merkleProofData.merkleRoot;  // Already in display format
+
     // Public input (Type 2): Apply BN254 modulo for smart contract interface
+    // Contract does: (reverse(displayRoot) >> 2) % BN254_PRIME
     const merkleRoot0Value = bitsToFieldElement(merkleRootBitsComputed.slice(0, 254));
     // For hidden root selection, we use a second dummy root (root + 1)
     const merkleRoot1Value = merkleRoot0Value + BigInt(1);
+
+    // For bitcoinMerkleRoot1: we need contract conversion to produce merkleRoot1Value
+    // Contract does: (internalRoot >> 2) % BN254_PRIME = circuitRoot
+    // So: internalRoot1 = internalRoot0 + 4 (because >>2 means /4)
+    // Then: displayRoot1 = reverse(internalRoot1)
+    const internalRoot0BigInt = BigInt('0x' + merkleRootInternalBytes.toString('hex'));
+    const internalRoot1BigInt = internalRoot0BigInt + BigInt(4);
+    const internalRoot1Hex = internalRoot1BigInt.toString(16).padStart(64, '0');
+    const internalRoot1Bytes = Buffer.from(internalRoot1Hex, 'hex');
+    const displayRoot1Bytes = Buffer.from(internalRoot1Bytes).reverse();
+    const bitcoinMerkleRoot1 = '0x' + displayRoot1Bytes.toString('hex');
 
     // merkleRootBits for circuit (Type 1: full 256 bits for Merkle verification)
     const merkleRootBits = [
@@ -711,7 +730,9 @@ function generateCircuitInputs(depositData, txParseResult, chainId, recipient, m
     console.log(`    commitmentByteOffset: ${txParseResult.commitmentByteOffset} bytes`);
     console.log(`    merkleDepth: ${merkleDepth}`);
 
-    return circuitInput;
+    // Return both circuit input and Bitcoin merkle roots (for contract call)
+    const bitcoinMerkleRoots = [bitcoinMerkleRoot0, bitcoinMerkleRoot1];
+    return { circuitInput, bitcoinMerkleRoots };
 }
 
 /**
@@ -856,7 +877,7 @@ async function main() {
     // ═══════════════════════════════════════════════════════════════════
     // Generate circuit inputs
     // ═══════════════════════════════════════════════════════════════════
-    const circuitInput = generateCircuitInputs(
+    const { circuitInput, bitcoinMerkleRoots } = generateCircuitInputs(
         depositData,
         txParseResult,
         depositData.chainId,
@@ -879,7 +900,8 @@ async function main() {
         recipient: depositData.recipient,
         nullifier: circuitInput.nullifier,
         lockerScriptHash: circuitInput.lockerScriptHash,
-        merkleRoots: circuitInput.merkleRoots,  // Array for hidden root selection
+        merkleRoots: circuitInput.merkleRoots,  // Array for hidden root selection (circuit format)
+        bitcoinMerkleRoots: bitcoinMerkleRoots,  // Array in Bitcoin display format (bytes32)
         calldata: calldata,
         proofPath: proofPath,
         publicPath: publicPath,
