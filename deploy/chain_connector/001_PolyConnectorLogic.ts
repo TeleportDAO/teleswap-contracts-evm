@@ -10,7 +10,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     if (
         network.name == "hardhat" ||
         network.name == "amoy" ||
-        network.name == "polygon"
+        network.name == "polygon" ||
+        network.name == "bsc"
     ) {
         const deployedContract = await deploy("PolyConnectorLogic", {
             from: deployer,

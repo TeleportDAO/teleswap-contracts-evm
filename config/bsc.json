@@ -14,7 +14,7 @@
 	"acceptable_delay": 177,
 	"chain_id": 56,
 	"treasury": "0x24004f4f6d2e75b039d528e82b100355d8b1d4fb",
-	"across": "0x0000000000000000000000000000000000000000",
+	"across": "0x4e8E101924eDE233C13e2D8622DC8aED2872d505",
     "locker": "0x8Fc53b97ebe52AdCB30b2e0ec1813C7C92814FCC",
     "lockerLockingScript": "0xa91440059ea01abcf5ead734dec719932b75f487691687",
     "lockerScriptType": "3",

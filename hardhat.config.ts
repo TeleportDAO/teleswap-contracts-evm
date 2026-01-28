@@ -1,7 +1,8 @@
 import * as dotenv from "dotenv";
 import { HardhatUserConfig } from "hardhat/config";
+import "@nomiclabs/hardhat-ethers";
+import "@nomicfoundation/hardhat-verify";
 import '@openzeppelin/hardhat-upgrades';
-import "@nomiclabs/hardhat-etherscan";
 import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "hardhat-deploy";
@@ -74,7 +75,7 @@ const config: HardhatUserConfig = {
 			accounts: [process.env.PRIVATE_KEY ?? ""],
 		},
 		base: {
-			url: "https://base.llamarpc.com",
+			url: "https://developer-access-mainnet.base.org",
 			chainId: 8453,
 			accounts: [process.env.PRIVATE_KEY ?? ""]
 		},
@@ -136,27 +137,14 @@ const config: HardhatUserConfig = {
 		currency: "USD",
   	},
   	etherscan: {
-		apiKey: {
-			ethereum: process.env.ETHEREUM_API_KEY??"",
-    		polygon: process.env.POLYGON_API_KEY??"",
-			base: process.env.BASE_API_KEY??"",
-			bsc: process.env.BSC_API_KEY??"",
-			arbitrum: process.env.ARBITRUM_API_KEY??"",
-			optimism: process.env.OPTIMISM_API_KEY??"",
-			bsquared: process.env.BSQUARED_API_KEY??"",
-			amoy: process.env.AMOY_API_KEY??"",
-			sepolia: process.env.SEPOLIA_API_KEY??"",
-			bob: process.env.BOB_API_KEY??"",
-			unichain: process.env.UNICHAIN_API_KEY??"",
-			worldchain: process.env.WORLDCHAIN_API_KEY??"",
-			plasma: process.env.PLASMA_API_KEY??""
-  		},
+		enabled: true,
+		apiKey: process.env.ETHERSCAN_API_KEY ?? "",
 		customChains: [
 			{
 				network: "ethereum",
 				chainId: 1,
 				urls: {
-					apiURL: "https://api.etherscan.io/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=1",
 					browserURL: "https://etherscan.io/"
 				}
 			},
@@ -172,7 +160,7 @@ const config: HardhatUserConfig = {
 				network: "base",
 				chainId: 8453,
 				urls: {
-					apiURL: "https://api.basescan.org/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=8453",
 					browserURL: "https://basescan.org/"
 				}
 			},
@@ -188,7 +176,7 @@ const config: HardhatUserConfig = {
 				network: "arbitrum",
 				chainId: 42161,
 				urls: {
-					apiURL: "https://api.arbiscan.io/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=42161",
 					browserURL: "https://arbiscan.com/"
 				}
 			},
@@ -196,7 +184,7 @@ const config: HardhatUserConfig = {
 				network: "optimism",
 				chainId: 10,
 				urls: {
-					apiURL: "https://api-optimistic.etherscan.io/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=10",
 					browserURL: "https://optimism.etherscan.io/"
 				}
 			},
@@ -204,7 +192,7 @@ const config: HardhatUserConfig = {
 				network: "unichain",
 				chainId: 130,
 				urls: {
-					apiURL: "https://api.uniscan.xyz/api",
+					apiURL: "https://api.etherscan.io/v2/api?chainid=130",
 					browserURL: "https://uniscan.xyz/"
 				}
 			},
@@ -258,6 +246,9 @@ const config: HardhatUserConfig = {
 			}
 		]
   	},
+  	sourcify: {
+		enabled: false
+  	}
 };
 
 export default config;

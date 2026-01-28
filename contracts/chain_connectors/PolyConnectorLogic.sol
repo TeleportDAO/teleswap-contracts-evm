@@ -88,6 +88,24 @@ contract PolyConnectorLogic is
         gasLimit = _gasLimit;
     }
 
+    /// @notice Setter for Chain ID
+    function setChainId(
+        uint256 _chainId
+    ) external onlyOwner {
+        chainId = _chainId;
+    }
+
+    /// @notice Setter for token decimals on destination chain
+    /// @dev Used for handling decimal differences (e.g., USDT: 18 on BSC, 6 on other chains)
+    /// @param _token Address of the token on the current chain
+    /// @param _decimals Decimals of the token on destination chains (e.g., 6 for USDT on non-BSC chains)
+    function setTokenDecimalsOnDestinationChain(
+        address _token,
+        uint256 _decimals
+    ) external onlyOwner {
+        tokenDecimalsOnDestinationChain[_token] = _decimals;
+    }
+
     /// @notice Setter for bridge token mapping
     /// @param _sourceToken Address of the token on the current chain
     /// @param _destinationToken Address of the token on the target chain
@@ -121,10 +139,10 @@ contract PolyConnectorLogic is
         bridgeConnectorMapping[_destinationChainId] = _bridgeConnector;
     }
 
-    /// @notice Setter for currChainId
-    /// @param _currChainId The new current chain ID to set.
-    function setCurrChainId(uint256 _currChainId) external override onlyOwner {
-        currChainId = _currChainId;
+    /// @notice Setter for chainId
+    /// @param _chainId The new current chain ID to set.
+    function setCurrChainId(uint256 _chainId) external override onlyOwner {
+        chainId = _chainId;
     }
 
     /// @notice Process requests coming from Ethereum (using Across V3)
@@ -362,14 +380,14 @@ contract PolyConnectorLogic is
     ) external override nonReentrant {
         require(msg.sender == acrossAdmin || msg.sender == owner(), "PolygonConnectorLogic: not authorized");
 
-        uint256 _amount = newFailedRefundBTCReqs[_refundAddress][currChainId][_bitcoinTxId][
+        uint256 _amount = newFailedRefundBTCReqs[_refundAddress][chainId][_bitcoinTxId][
             _token
         ];
         require(_amount == _amounts[0], "PolygonConnectorLogic: invalid amount");
         require(IERC20(_token).balanceOf(address(this)) >= _amount, "PolygonConnectorLogic: insufficient balance");
 
         // Update withheld amount
-        delete newFailedRefundBTCReqs[_refundAddress][currChainId][_bitcoinTxId][_token];
+        delete newFailedRefundBTCReqs[_refundAddress][chainId][_bitcoinTxId][_token];
 
         require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
 
@@ -381,7 +399,7 @@ contract PolyConnectorLogic is
         bytes memory message = abi.encode(
             "swapBackAndRefundBTC",
             uint256(_bitcoinTxId),
-            currChainId,
+            chainId,
             _refundAddress,
             _exchangeConnector,
             _minOutputAmount,
@@ -895,6 +913,10 @@ contract PolyConnectorLogic is
     ) internal {
         IERC20(_token).approve(across, _amount);
 
+        // Convert amount to destination chain decimals
+        uint256 convertedAmount = _convertTokenDecimals(_token, _amount, _chainId);
+        uint256 outputAmount = convertedAmount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18;
+
         bytes memory callData = abi.encodeWithSignature(
             "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
             acrossAdmin, // depositor
@@ -902,7 +924,7 @@ contract PolyConnectorLogic is
             _token, // inputToken
             bridgeTokenMapping[_token][_chainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
             _amount, // inputAmount
-            _amount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18, // outputAmount
+            outputAmount, // outputAmount (converted to destination chain decimals)
             _chainId, // destinationChainId
             address(0), // exclusiveRelayer (none for now)
             uint32(block.timestamp), // quoteTimestamp
@@ -932,6 +954,10 @@ contract PolyConnectorLogic is
         IERC20(_token).approve(across, _amount);
         bytes memory callData;
 
+        // Convert amount to destination chain decimals
+        uint256 convertedAmount = _convertTokenDecimals(_token, _amount, _chainId);
+        uint256 outputAmount = convertedAmount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18;
+
         if (_chainId == 101) { // Solana
             callData = abi.encodeWithSignature(
                 "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
@@ -940,7 +966,7 @@ contract PolyConnectorLogic is
                 bytes32(uint256(uint160(_token))),
                 0x0000000000000000000000000000000000000000000000000000000000000000, // TODO: Replace with the output token
                 _amount,
-                _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18,
+                outputAmount, // outputAmount (converted to destination chain decimals)
                 34268394551451, // Across Solana chainId
                 bytes32(0),
                 uint32(block.timestamp),
@@ -956,7 +982,7 @@ contract PolyConnectorLogic is
                 _token, // inputToken
                 bridgeTokenMapping[_token][_chainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
                 _amount, // inputAmount
-                _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18, // outputAmount
+                outputAmount, // outputAmount (converted to destination chain decimals)
                 _chainId,
                 address(0), // exclusiveRelayer (none for now)
                 uint32(block.timestamp), // quoteTimestamp
@@ -1096,5 +1122,31 @@ contract PolyConnectorLogic is
             result := mload(add(_data, add(32, _offset)))
         }
         return result;
+    }
+
+    /// @notice Converts token amount between chains with different decimals
+    /// @dev Handles USDT/USDC decimal differences between BSC (18) and other chains (6)
+    /// @param _token Address of the token on the current chain
+    /// @param _amount Amount to convert
+    /// @param _destinationChainId Destination chain ID
+    /// @return convertedAmount The amount converted to destination chain decimals
+    function _convertTokenDecimals(
+        address _token,
+        uint256 _amount,
+        uint256 _destinationChainId
+    ) private view returns (uint256 convertedAmount) {
+        convertedAmount = _amount;
+        uint256 destDecimals = tokenDecimalsOnDestinationChain[_token];
+        // Only convert if both chainId and destDecimals are properly configured
+        if (chainId != 0 && destDecimals != 0) {
+            if (_destinationChainId != chainId) {
+                if (chainId == 56) { // Current chain is BSC (18 decimals -> 6 decimals)
+                    convertedAmount = _amount / 10 ** (18 - destDecimals);
+                } else if (_destinationChainId == 56) { // Destination chain is BSC (6 decimals -> 18 decimals)
+                    convertedAmount = _amount * 10 ** (18 - destDecimals);
+                }
+            }
+        }
+        return convertedAmount;
     }
 }

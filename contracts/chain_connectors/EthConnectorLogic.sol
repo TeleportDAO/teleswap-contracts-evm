@@ -88,6 +88,15 @@ contract EthConnectorLogic is
         bridgeTokenMapping[_sourceToken][_destinationChainId] = _destinationToken;
     }
 
+    /// @notice Setter for input token decimals on destination chain
+    function setOutputTokenDecimalsOnDestinationChain(
+        address _outputToken,
+        uint256 _destinationChainId,
+        uint256 _decimalsOnDestinationChain
+    ) external override onlyOwner {
+        outputTokenDecimalsOnDestinationChain[_outputToken][_destinationChainId] = _decimalsOnDestinationChain;
+    }
+
     /// @notice Setter for bridge connector mapping
     /// @param _exchangeConnector Address of the exchange connector
     /// @param _targetChainId Target chain ID
@@ -127,12 +136,12 @@ contract EthConnectorLogic is
     }
 
     /// @notice Request exchanging token for BTC
-    /// @dev To find teleBTCAmount, _relayerFeePercentage should be reduced from the inputTokenAmount
+    /// @dev To find teleBTCAmount, _bridgePercentageFee should be reduced from the inputTokenAmount
     /// @param _token Address of input token (on the current chain)
     /// @param _exchangeConnector Address of exchange connector to be used
     /// @param _amounts [inputTokenAmount, teleBTCAmount]
     /// @param _path of exchanging inputToken to teleBTC (these are Polygon token addresses, so _path[0] != _token)
-    /// @param _relayerFeePercentage Fee percentage for relayer
+    /// @param _bridgePercentageFee Fee percentage for relayer
     /// @param _thirdParty Id of third party
     function swapAndUnwrap(
         address _token,
@@ -141,7 +150,7 @@ contract EthConnectorLogic is
         bool _isInputFixed,
         address[] calldata _path,
         UserAndLockerScript calldata _userAndLockerScript,
-        int64 _relayerFeePercentage,
+        int64 _bridgePercentageFee,
         uint256 _thirdParty
     ) external payable override nonReentrant {
         _checkMessageValue(_token, _amounts[0]);
@@ -159,13 +168,13 @@ contract EthConnectorLogic is
             _thirdParty
         );
 
-        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
+        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _bridgePercentageFee);
         _sendMsgUsingAcross(
             _exchangeConnector,
             _token,
             _amounts[0],
             message,
-            _relayerFeePercentage,
+            _bridgePercentageFee,
             false
         );
     }
@@ -177,7 +186,7 @@ contract EthConnectorLogic is
         bool _isInputFixed,
         address[] calldata _path,
         UserAndLockerScript calldata _userAndLockerScript,
-        int64 _relayerFeePercentage,
+        int64 _bridgePercentageFee,
         uint256 _thirdParty,
         address _refundAddress
     ) external payable override nonReentrant {
@@ -196,9 +205,9 @@ contract EthConnectorLogic is
             _thirdParty
         );
 
-        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
+        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _bridgePercentageFee);
 
-        // if (_relayerFeePercentage == 0) {
+        // if (_bridgePercentageFee == 0) {
         //     // Here we are using Stargate to send the message
         //     _sendMsgUsingStargate(
         //         _token,
@@ -213,7 +222,7 @@ contract EthConnectorLogic is
                 _token,
                 _amounts[0],
                 message,
-                _relayerFeePercentage,
+                _bridgePercentageFee,
                 false
             );
         // }
@@ -296,7 +305,7 @@ contract EthConnectorLogic is
         uint256 _internalId,
         address[] calldata _path,
         UserScript calldata _userScript,
-        int64 _relayerFeePercentage,
+        int64 _bridgePercentageFee,
         uint256 _thirdParty
     ) external payable override nonReentrant {
         _checkMessageValue(_token, _amounts[0]);
@@ -314,13 +323,13 @@ contract EthConnectorLogic is
             _thirdParty
         );
 
-        emit MsgSentRune(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
+        emit MsgSentRune(uniqueCounter, message, _token, _amounts[0], _bridgePercentageFee);
         _sendMsgUsingAcross(
             _exchangeConnector,
             _token,
             _amounts[0],
             message,
-            _relayerFeePercentage,
+            _bridgePercentageFee,
             false
         );
     }
@@ -695,6 +704,10 @@ contract EthConnectorLogic is
     ) internal {
         uniqueCounter++;
 
+        // Cache to reduce stack usage
+        BridgeConnectorData storage connectorData = bridgeConnectorMapping[_exchangeConnector];
+        uint256 targetChainId = connectorData.targetChainId;
+
         if (msg.value > 0) { // Token is ETH
             _token = wrappedNativeToken;
         } else {
@@ -708,25 +721,52 @@ contract EthConnectorLogic is
             IERC20(_token).safeApprove(across, _amount);
         }
 
-        // Call across for transferring token and msg
+        address outputToken = bridgeTokenMapping[_token][targetChainId];
+        uint256 outputAmount = _amount;
+        if (outputTokenDecimalsOnDestinationChain[outputToken][targetChainId] != 0) {
+            outputAmount = _amount * 10 ** (18 - outputTokenDecimalsOnDestinationChain[outputToken][targetChainId]);
+        }
+        outputAmount = outputAmount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18;
+
+        _executeAcrossDeposit(
+            connectorData.targetChainConnectorProxy,
+            _token,
+            outputToken,
+            _amount,
+            outputAmount,
+            targetChainId,
+            _message
+        );
+    }
+
+    /// @notice Execute Across deposit call
+    function _executeAcrossDeposit(
+        address _recipient,
+        address _inputToken,
+        address _outputToken,
+        uint256 _inputAmount,
+        uint256 _outputAmount,
+        uint256 _destChainId,
+        bytes memory _message
+    ) private {
         bytes memory callData = abi.encodeWithSignature(
             "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
-            acrossAdmin, // depositor (if bridge fails, intermediary token will be refunded to this address)
-            bridgeConnectorMapping[_exchangeConnector].targetChainConnectorProxy, // recipient
-            _token, // inputToken
-            bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
-            _amount, // inputAmount
-            _amount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18, // outputAmount
-            bridgeConnectorMapping[_exchangeConnector].targetChainId, // destinationChainId
-            address(0), // exclusiveRelayer (none for now)
+            acrossAdmin, // depositor
+            _recipient, // recipient
+            _inputToken, // inputToken
+            _outputToken, // outputToken
+            _inputAmount, // inputAmount
+            _outputAmount, // outputAmount
+            _destChainId, // destinationChainId
+            address(0), // exclusiveRelayer
             uint32(block.timestamp), // quoteTimestamp
-            uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+            uint32(block.timestamp + 4 hours), // fillDeadline
             0, // exclusivityDeadline
             _message // message
         );
 
         // Append integrator identifier
-        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
 
         Address.functionCallWithValue(
             across,

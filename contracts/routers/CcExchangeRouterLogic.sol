@@ -222,12 +222,22 @@ contract CcExchangeRouterLogic is
         _setDestConnectorProxyMapping(_destRealChainId, _destConnectorProxy);
     }
 
-    /// @notice Setter for bridge intermediary token mapping
-    /// @param _outputTokenID Token ID (8 bytes) of the output token on the destination chain (from op-return)
-    /// @param _chainId Any chain ID
-    /// @param _intermediaryToken Intermediary token address on that chain ID
-    function setBridgeIntermediaryTokenMapping(bytes8 _outputTokenID, uint256 _chainId, bytes32 _intermediaryToken) external override onlyOwner {
-        _setBridgeIntermediaryTokenMapping(_outputTokenID, _chainId, _intermediaryToken);
+    /// @notice Setter for intermediary token mapping
+    /// @param _destinationTokenID Destination token ID (8 bytes)
+    /// @param _intermediaryToken Intermediary token address on the current chain
+    function setIntermediaryTokenMapping(
+        bytes8 _destinationTokenID,
+        address _intermediaryToken
+    ) external onlyOwner {
+        _setIntermediaryTokenMapping(_destinationTokenID, _intermediaryToken);
+    }
+
+    /// @notice Setter for output token decimals
+    function setInputTokenDecimalsOnDestinationChain(
+        address _inputToken,
+        uint256 _decimalsOnDestinationChain
+    ) external override onlyOwner {
+        _setInputTokenDecimalsOnDestinationChain(_inputToken, _decimalsOnDestinationChain);
     }
 
     /// @notice Check if a request has been processed
@@ -297,7 +307,7 @@ contract CcExchangeRouterLogic is
         // Check if the provided path is valid
         require(
             teleBTC == _pathFromTeleBtcToIntermediary[0] &&
-            address(uint160(uint256(bridgeIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]][chainId]))) == _pathFromTeleBtcToIntermediary[_pathFromTeleBtcToIntermediary.length - 1],
+            intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]] == _pathFromTeleBtcToIntermediary[_pathFromTeleBtcToIntermediary.length - 1],
             "ExchangeRouter: invalid path"
         );
 
@@ -329,7 +339,7 @@ contract CcExchangeRouterLogic is
         // Validate path and amounts for swap on the destination chain if a swap is required
         if (_pathFromIntermediaryToDestTokenOnDestChain.length > 0) {
             require(
-               bridgeIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]][destRealChainId] == _pathFromIntermediaryToDestTokenOnDestChain[0],
+               bytes32(uint256(uint160(intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]))) == _pathFromIntermediaryToDestTokenOnDestChain[0],
                 "ExchangeRouter: invalid dest intermediary token"
             );
 
@@ -357,7 +367,7 @@ contract CcExchangeRouterLogic is
             */
             address filler =
                 fillerAddressV2[txId][request.recipientAddress]
-                    [address(uint160(uint256(bridgeIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]][chainId])))]
+                    [intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
                     [request.outputAmount]
                     [destRealChainId]
                     [extendedCcExchangeRequests[txId].bridgePercentageFee];
@@ -375,10 +385,7 @@ contract CcExchangeRouterLogic is
                     })
                 );
                 return true;
-            } else { // Request has not been filled
-                // Treat it as a normal request
-                ccExchangeRequestsV2[txId].speed = 0;
-            }
+            } // Otherwise, request has not been filled so treat it as a normal request
         }
 
         _wrapAndSwapUniversal(
@@ -426,17 +433,20 @@ contract CcExchangeRouterLogic is
         );
 
         require(
-            _intermediaryToken == address(uint160(uint256(bridgeIntermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))][chainId]))),
+            _intermediaryToken == intermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
             "ExchangeRouter: invalid intermediary token"
         );
 
+        // Convert the fill amount to the destination chain's decimals
+        uint256 fillAmount = _convertTokenDecimals(_intermediaryToken, _fillAmount, _destRealChainId);
+
         // Calculate the final amount that user will receive
-        uint _finalAmount = _fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
+        uint _finalAmount = fillAmount * (MAX_BRIDGE_FEE - _bridgePercentageFee) / MAX_BRIDGE_FEE;
 
         // Validate amounts for swap on the destination chain if a swap is required
         if (_pathFromIntermediaryToDestTokenOnDestChain.length > 0) {
             require(
-                bridgeIntermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))][_destRealChainId] == _pathFromIntermediaryToDestTokenOnDestChain[0],
+                bytes32(uint256(uint160(intermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))]))) == _pathFromIntermediaryToDestTokenOnDestChain[0],
                 "ExchangeRouter: invalid intermediary token"
             );
 
@@ -662,59 +672,75 @@ contract CcExchangeRouterLogic is
         // Send fees to the teleporter, treasury, third party, and locker
         _sendFees(args.txId, args.lockerLockingScript);
 
-        ccExchangeRequestV2 memory request = ccExchangeRequestsV2[args.txId];
-        extendedCcExchangeRequest
-            memory extendedRequest = extendedCcExchangeRequests[args.txId];
-
-        // Mark the request as completed
+// Mark the request as completed
         extendedCcExchangeRequests[args.txId].isRequestCompleted = true;
 
+        extendedCcExchangeRequest storage extendedRequest = extendedCcExchangeRequests[args.txId];
+
         // Send TeleBTC to filler
-        ITeleBTC(teleBTC).transfer(
-            args.filler,
-            extendedRequest.remainedInputAmount
-        );
+        ITeleBTC(teleBTC).transfer(args.filler, extendedRequest.remainedInputAmount);
 
-        uint256[5] memory fees = [
-            request.networkFee,
-            extendedRequest.lockerFee,
-            extendedRequest.protocolFee,
-            extendedRequest.thirdPartyFee,
-            extendedRequest.bridgePercentageFee
-        ];
+emit FillerRefunded(args.filler, args.txId, extendedRequest.remainedInputAmount);
 
-        emit NewWrapAndSwapUniversal(
-            ILockersManager(lockers).getLockerTargetAddress(
-                args.lockerLockingScript
-            ),
+        ccExchangeRequestV2 storage request = ccExchangeRequestsV2[args.txId];
+
+        uint256 outputAmount = finalAmount[args.txId];
+
+        bytes32[3] memory tokens;
+        tokens[0] = bytes32(uint256(uint160(teleBTC)));
+        tokens[1] = bytes32(uint256(uint160(intermediaryTokenMapping[request.tokenIDs[1]])));
+        tokens[2] = request.outputToken;
+
+        uint256[3] memory amounts;
+        amounts[0] = extendedRequest.remainedInputAmount;
+        amounts[1] = request.minIntermediaryTokenAmount;
+        amounts[2] = outputAmount;
+
+        uint256[5] memory fees;
+        fees[0] = request.networkFee;
+        fees[1] = extendedRequest.lockerFee;
+        fees[2] = extendedRequest.protocolFee;
+        fees[3] = extendedRequest.thirdPartyFee;
+        fees[4] = outputAmount * extendedRequest.bridgePercentageFee / (1e18 - extendedRequest.bridgePercentageFee);
+
+        _emitNewWrapAndSwapV2(
+            ILockersManager(lockers).getLockerTargetAddress(args.lockerLockingScript),
             request.recipientAddress,
-            [
-                bytes32(uint256(uint160(teleBTC))), // Input token
-                bridgeIntermediaryTokenMapping[request.tokenIDs[1]][chainId], // Intermediary token
-                request.outputToken // Output token
-            ],
-            [
-                extendedRequest.remainedInputAmount, // Input amount
-                request.minIntermediaryTokenAmount, // Intermediary amount
-                finalAmount[args.txId] // Output amount
-            ],
-            1,
             _msgSender(),
             args.txId,
-            [
-                args.destinationChainId, // destinationChainId
-                request.appId, // appId
-                extendedRequest.thirdParty // thirdPartyId
-            ],
-            fees,
-            args.pathFromIntermediaryToDestTokenOnDestChain,
-            args.amountsFromIntermediaryToDestTokenOnDestChain
+            request.appId,
+            extendedRequest.thirdParty,
+            args.destinationChainId,
+            tokens,
+            amounts,
+            fees
         );
+    }
 
-        emit FillerRefunded(
-            args.filler,
-            args.txId,
-            extendedRequest.remainedInputAmount
+    function _emitNewWrapAndSwapV2(
+        address _lockerAddress,
+        bytes32 _recipientAddress,
+        address _teleporter,
+        bytes32 _txId,
+        uint256 _appId,
+        uint256 _thirdParty,
+        uint256 _destinationChainId,
+        bytes32[3] memory _tokens,
+        uint256[3] memory _amounts,
+        uint256[5] memory _fees
+    ) private {
+        emit NewWrapAndSwapV2(
+            _lockerAddress,
+            _recipientAddress,
+            _tokens,
+            _amounts,
+            1,
+            _teleporter,
+            _txId,
+            _appId,
+            _thirdParty,
+            _fees,
+            _destinationChainId
         );
     }
 
@@ -735,7 +761,7 @@ contract CcExchangeRouterLogic is
             recipient = destConnectorProxyMapping[arguments._destRealChainId];
             require(recipient != bytes32(0), "ExchangeRouter: destination connector proxy not set");
 
-            bridgeOutputToken = bridgeIntermediaryTokenMapping[ccExchangeRequestsV2[arguments._txId].tokenIDs[1]][arguments._destRealChainId];
+            bridgeOutputToken = bytes32(uint256(uint160(intermediaryTokenMapping[ccExchangeRequestsV2[arguments._txId].tokenIDs[1]])));
 
             // Create the across message to send to the destination chain connector contract
             if (arguments._destRealChainId == 34268394551451) { // Solana
@@ -766,6 +792,10 @@ contract CcExchangeRouterLogic is
             }
         }
 
+// Convert amount to destination chain decimals (from dev - CRITICAL for production)
+        uint256 inputAmount = _convertTokenDecimals(arguments._intermediaryToken, arguments._amount, arguments._destRealChainId);
+        uint256 outputAmount = inputAmount * (1e18 - arguments._bridgePercentageFee) / 1e18;
+
         if (arguments._destRealChainId == 34268394551451) { // Solana
             callData = abi.encodeWithSignature(
                 "deposit(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint256,bytes32,uint32,uint32,uint32,bytes)",
@@ -774,7 +804,7 @@ contract CcExchangeRouterLogic is
                 bytes32(uint256(uint160(arguments._intermediaryToken))),
                 bridgeOutputToken,
                 arguments._amount,
-                arguments._amount * (1e18 - arguments._bridgePercentageFee) / 1e18,
+                outputAmount,
                 arguments._destRealChainId,
                 bytes32(0),
                 uint32(block.timestamp),
@@ -786,11 +816,11 @@ contract CcExchangeRouterLogic is
             callData = abi.encodeWithSignature(
                 "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
                 acrossAdmin, // depositor
-                address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
+address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
                 arguments._intermediaryToken, // inputToken
                 address(uint160(uint256(bridgeOutputToken))), // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
                 arguments._amount, // inputAmount
-                arguments._amount * (1e18 - arguments._bridgePercentageFee) / 1e18, // outputAmount
+                outputAmount, // outputAmount (with decimal conversion)
                 arguments._destRealChainId,
                 address(0), // exclusiveRelayer (none for now)
                 uint32(block.timestamp), // quoteTimestamp
@@ -1122,11 +1152,49 @@ contract CcExchangeRouterLogic is
         destConnectorProxyMapping[_destRealChainId] = _destConnectorProxy;
     }
 
-    /// @notice Internal setter for bridge intermediary token mapping
+    /// @notice Internal setter for intermediary token mapping
+    /// @param _destinationTokenID Destination token ID (8 bytes)
     /// @param _intermediaryToken Intermediary token address on the current chain
-    /// @param _chainId Any chain ID
-    /// @param _intermediaryToken Intermediary token address on that chain ID
-    function _setBridgeIntermediaryTokenMapping(bytes8 _outputTokenID, uint256 _chainId, bytes32 _intermediaryToken) private {
-        bridgeIntermediaryTokenMapping[_outputTokenID][_chainId] = _intermediaryToken;
+    function _setIntermediaryTokenMapping(
+        bytes8 _destinationTokenID,
+        address _intermediaryToken
+    ) private {
+        intermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
+    }
+
+    /// @notice Internal setter for output token decimals
+    function _setInputTokenDecimalsOnDestinationChain(
+        address _inputToken,
+        uint256 _decimalsOnDestinationChain
+    ) private {
+        inputTokenDecimalsOnDestinationChain[_inputToken] = _decimalsOnDestinationChain;
+    }
+
+    /// @notice Internal function to convert token decimals between chains
+    /// @dev Handles USDT/USDC decimal differences between BSC (18) and other chains (6)
+    /// @param _token Address of the token on the current chain
+    /// @param _amount Amount to convert
+    /// @param _destinationChainId Destination chain ID
+    /// @return convertedAmount The amount converted to destination chain decimals
+    function _convertTokenDecimals(
+        address _token,
+        uint256 _amount,
+        uint256 _destinationChainId
+    ) private view returns (uint256 convertedAmount) {
+        convertedAmount = _amount;
+        if (inputTokenDecimalsOnDestinationChain[_token] != 0) {
+            if (_destinationChainId != chainId) {
+                if (chainId == 56) { // BSC chain
+                    convertedAmount =
+                        _amount /
+                        10 ** (18 - inputTokenDecimalsOnDestinationChain[_token]);
+                } else if (_destinationChainId == 56) { // BSC chain
+                    convertedAmount =
+                        _amount *
+                        10 ** (18 - inputTokenDecimalsOnDestinationChain[_token]);
+                }
+            }
+        }
+        return convertedAmount;
     }
 }

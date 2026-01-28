@@ -245,6 +245,21 @@ interface ICcExchangeRouter {
         uint amount
     );
 
+    /// @notice Emits when a cc exchange request gets done (V2 - for filler flow)
+    event NewWrapAndSwapV2(
+        address lockerTargetAddress,
+        bytes32 indexed user,
+        bytes32[3] inputIntermediaryOutputToken,
+        uint[3] inputIntermediaryOutputAmount,
+        uint indexed speed,
+        address indexed teleporter,
+        bytes32 bitcoinTxId,
+        uint appId,
+        uint thirdPartyId,
+        uint[5] fees,
+        uint destinationChainId
+    );
+
     /// @notice Emits when a cc exchange request gets done
     /// @param lockerTargetAddress Address of Locker
     /// @param user Exchange recipient address
@@ -444,13 +459,12 @@ interface ICcExchangeRouter {
         address _destinationToken
     ) external;
 
-    function setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) external;
-    
-    function setBridgeIntermediaryTokenMapping(
-        bytes8 _outputTokenID,
-        uint256 _chainId,
-        bytes32 _intermediaryToken
+function setInputTokenDecimalsOnDestinationChain(
+        address _inputToken,
+        uint256 _decimalsOnDestinationChain
     ) external;
+
+    function setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) external;
 
     function fillTxUniversal(
         bytes32 _txId,

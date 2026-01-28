@@ -10,15 +10,18 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
     const across = config.get("across");
     const wrappedNativeToken = config.get("wrapped_native_token");
-    const targetChainId = config.get("target_chain_id");
-    const sourceChainId = config.get("source_chain_id");
 
-    if (network.name == "polygon") {
+    if (network.name == "polygon" || network.name == "bsc") {
         const lockersManagerProxy = await deployments.get(
             "LockersManagerProxy"
         );
         const burnRouterProxy = await deployments.get("BurnRouterProxy");
-        const runeRouterProxy = await deployments.get("RuneRouterProxy");
+        let runeRouterProxy;
+        try {
+            runeRouterProxy = await deployments.get("RuneRouterProxy");
+        } catch (e) {
+            runeRouterProxy = { address: ZERO_ADD };
+        }
         const polyConnectorLogic = await deployments.get("PolyConnectorLogic");
         const polyConnectorProxy = await deployments.get("PolyConnectorProxy");
         const across = config.get("across");
@@ -63,6 +66,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
             console.log("PolyConnectorLogic is already initialized");
         }
     } else {
+        const targetChainId = config.get("target_chain_id");
+        const sourceChainId = config.get("source_chain_id");
+
         const ethConnectorLogic = await deployments.get("EthConnectorLogic");
         const ethConnectorProxy = await deployments.get("EthConnectorProxy");
         logger

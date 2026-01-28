@@ -8,7 +8,7 @@
 		"@commitlint/config-conventional": "^17.4.4",
 		"@nomicfoundation/hardhat-chai-matchers": "^1.0.5",
 		"@nomiclabs/hardhat-ethers": "^2.0.6",
-		"@nomiclabs/hardhat-etherscan": "^3.0.4",
+		"@nomicfoundation/hardhat-verify": "^2.0.0",
 		"@openzeppelin/hardhat-upgrades": "^1.12.0",
 		"@typechain/ethers-v5": "^7.2.0",
 		"@typechain/hardhat": "^2.3.1",

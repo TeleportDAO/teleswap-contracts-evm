@@ -868,6 +868,10 @@ describe("CcExchangeRouter", async function () {
         });
 
         it("Swap BTC for output token (input amount is fixed)", async function () {
+            await ccExchangeRouter.setInputTokenDecimalsOnDestinationChain(
+                exchangeToken.address,
+                6
+            );
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";
             let vout = CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput.vout;
             vout = vout.replace(

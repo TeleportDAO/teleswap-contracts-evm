@@ -32,3 +32,9 @@ deployments/bsc/.DS_Store
 deployments/arbitrum/.DS_Store
 deployments/.DS_Store
 deployments/base/.DS_Store
+
+# ZK proof files
+zkproof/claims/
+zkproof/deposits/
+zkproof/lockers/
+circuits/zkproof/
