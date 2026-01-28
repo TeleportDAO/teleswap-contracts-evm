@@ -123,7 +123,7 @@ interface IEthConnector {
         bytes data
     );
 
-    event swappedBackAndRefundedToSourceChain(
+    event SwappedBackAndRefundedToSourceChain(
         uint256 uniqueCounter,
         uint256 chainId,
         address refundAddress,

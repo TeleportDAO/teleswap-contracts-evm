@@ -3023,7 +3023,7 @@ describe("CcExchangeRouter", async function () {
             ).to.be.revertedWith("ExchangeRouter: already processed");
         });
 
-        it("Swap tokens to the detination token after sending it to the destination chain using across (universal wrap and swap)", async function () {
+        it("Swap tokens to the destination token after sending it to the destination chain using across (universal wrap and swap)", async function () {
             // Replaces dummy address in vout with output token address on destination chain
             // For cross-chain, we need destChainId: 2, so we modify the vout to encode that
             const DUMMY_TOKEN_ID = "XXXXXXXXXXXXXXXX";

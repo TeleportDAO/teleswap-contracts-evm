@@ -88,13 +88,6 @@ contract PolyConnectorLogic is
         gasLimit = _gasLimit;
     }
 
-    /// @notice Setter for Chain ID
-    function setChainId(
-        uint256 _chainId
-    ) external onlyOwner {
-        chainId = _chainId;
-    }
-
     /// @notice Setter for token decimals on destination chain
     /// @dev Used for handling decimal differences (e.g., USDT: 18 on BSC, 6 on other chains)
     /// @param _token Address of the token on the current chain

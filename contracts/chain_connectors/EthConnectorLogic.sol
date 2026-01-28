@@ -605,7 +605,7 @@ contract EthConnectorLogic is
                 inputTokenAmount
             );
 
-            emit swappedBackAndRefundedToSourceChain(
+            emit SwappedBackAndRefundedToSourceChain(
                 arguments.uniqueCounter,
                 arguments.chainId,
                 arguments.refundAddress,
