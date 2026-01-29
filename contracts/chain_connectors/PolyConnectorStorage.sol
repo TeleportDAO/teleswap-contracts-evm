@@ -49,7 +49,7 @@ abstract contract PolyConnectorStorage is IPolyConnector {
                 )
             )
         )
-    ) public newFailedUniversalSwapAndUnwrapReqs;
+    ) public failedSwapAndUnwrapReqs;
     // ^ Mapping from [refundAddress][chainId][reqId][intermediaryToken] to SwapAndUnwrapUniversalPathsData
 
     mapping(
@@ -79,7 +79,7 @@ abstract contract PolyConnectorStorage is IPolyConnector {
                 )
             )
         )
-    ) public newFailedRefundBTCReqs;
+    ) public failedWrapAndSwapRefundReqs;
     // ^ Mapping from [refundAddress][chainId][bitcoinTxId][token] to amount
 
     mapping(address => mapping(uint256 => bytes32)) public bridgeTokenMappingUniversal; // ^ Mapping from [source token][destination chain id] to destination token

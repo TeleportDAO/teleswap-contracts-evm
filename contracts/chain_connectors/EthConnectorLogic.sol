@@ -378,7 +378,7 @@ contract EthConnectorLogic is
         );
 
         // Get the amount from failed wrap and swap requests
-        uint256 _amount = newFailedWrapAndSwapReqs[_args.targetAddress][_args.intermediaryChainId][_args.bitcoinTxId][_args.tokenSent]; 
+        uint256 _amount = failedWrapAndSwapReqs[_args.targetAddress][_args.intermediaryChainId][_args.bitcoinTxId][_args.tokenSent]; 
         
 
         require(_amount == _args.amounts[0], "EthConnector: invalid amount");
@@ -391,7 +391,7 @@ contract EthConnectorLogic is
         require(_args.path[0] == _args.tokenSent, "EthConnector: invalid path");
 
         // Update withheld amount
-        delete newFailedWrapAndSwapReqs[_args.targetAddress][_args.intermediaryChainId][_args.bitcoinTxId][_args.tokenSent];
+        delete failedWrapAndSwapReqs[_args.targetAddress][_args.intermediaryChainId][_args.bitcoinTxId][_args.tokenSent];
 
         require(_amount > 0, "EthConnector: already withdrawn");
 
@@ -436,7 +436,7 @@ contract EthConnectorLogic is
     }
 
     /// @notice Allows admin to swap failed swap back and refund requests and send input token to user
-    /// @dev When swap fails in _swapBackAndRefund, the intermediary token amount is saved in newFailedSwapBackAndRefundReqs.
+    /// @dev When swap fails in _swapBackAndRefund, the intermediary token amount is saved in failedSwapAndUnwrapRefundReqs.
     ///      This function allows admin to swap the intermediary token back to input token and refund it to the user.
     /// @param _uniqueCounter Unique counter from the original swap and unwrap universal request
     /// @param _refundAddress Address to receive the input token (user's address)
@@ -457,7 +457,7 @@ contract EthConnectorLogic is
 
         address intermediaryToken = _pathFromIntermediaryToInputOnSourceChain[0];
 
-        uint256 storedAmount = newFailedSwapBackAndRefundReqs[_refundAddress][
+        uint256 storedAmount = failedSwapAndUnwrapRefundReqs[_refundAddress][
             _inputToken
         ][_uniqueCounter][intermediaryToken];
 
@@ -472,7 +472,7 @@ contract EthConnectorLogic is
         );
 
         // Delete the mapping entry
-        delete newFailedSwapBackAndRefundReqs[_refundAddress][_inputToken][
+        delete failedSwapAndUnwrapRefundReqs[_refundAddress][_inputToken][
             _uniqueCounter
         ][intermediaryToken];
 
@@ -555,7 +555,7 @@ contract EthConnectorLogic is
             );
         } else {
             // Save wrap and swap info so admin can refund BTC to user in future
-            newFailedWrapAndSwapReqs[arguments.targetAddress][arguments.intermediaryChainId][
+            failedWrapAndSwapReqs[arguments.targetAddress][arguments.intermediaryChainId][
                 arguments.bitcoinTxId
             ][_tokenSent] = _amount;
 
@@ -615,7 +615,7 @@ contract EthConnectorLogic is
             );
         } else {
             // Save token amount so user can withdraw it in future
-            newFailedSwapBackAndRefundReqs[arguments.refundAddress][inputToken][
+            failedSwapAndUnwrapRefundReqs[arguments.refundAddress][inputToken][
                 arguments.uniqueCounter
             ][_tokenSent] = _amount;
 

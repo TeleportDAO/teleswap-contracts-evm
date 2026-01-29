@@ -15,18 +15,18 @@
 
 ## Problem
 
-Currently, TeleSwap only supports destination tokens that exist on Polygon/BSC (the intermediary chains). Tokens not supported by the Across bridge cannot be bridged, limiting the swap options available to users.
+Currently, TeleSwap only supports destination tokens that exist on Polygon/BSC (the intermediaryChains). Tokens not supported by the Across bridge cannot be bridged, limiting the swap options available to users.
 
 ```
 CURRENT STATE
 ─────────────
 ├── Step 1: User sends BTC, wants token on Ethereum (e.g., AAVE)
 ├── Step 2: System can only swap to tokens that exist on Polygon AND are supported by Across
-└── Result: AAVE.eth not supported because it doesn't exist on Polygon
+└── Result: AAVE.eth not supported because Across doesn't support bridging AAVE from Polygon to Ethereum
 
 DESIRED STATE
 ─────────────
-├── Step 1: User sends BTC, wants any token on any supported chain
+├── Step 1: User sends BTC, wants any token on any supported chain (e.g., AAVE on Ethereum)
 ├── Step 2: System uses intermediary token (e.g., WBTC) to bridge cross-chain
 ├── Step 3: Swap intermediary token to destination token on the destination chain
 └── Result: User receives AAVE.eth seamlessly
@@ -37,18 +37,18 @@ DESIRED STATE
 | Supported Tokens | Only tokens existing on Polygon AND supported by Across |
 | User Experience | Must manually bridge and swap for unsupported tokens |
 | Business Impact | Lower trading volume, limited market reach |
-| Extensibility | Cannot easily add new chains like Solana |
 
 ## Solution
 
-Introduce an **intermediary token** concept that enables swapping between Bitcoin and any token on any supported chain, regardless of whether the destination token exists on the intermediary chain (Polygon/BSC).
+Introduce an **intermediary token** concept that enables swapping between Bitcoin and any token on any supported chain, regardless of whether the destination token exists on the intermediaryChain (Polygon/BSC).
 
 ### General Model
 
 | Component | Description | Example |
 |-----------|-------------|---------|
 | **sourceChain** | Where funds originate | Bitcoin, Ethereum, Solana |
-| **destChain** | Where user receives tokens | Ethereum, Arbitrum, Base |
+| **intermediaryChain** | Chain where BTC is swapped to intermediaryToken and bridged to destChain | Polygon, BSC |
+| **destChain** | Where user receives tokens and intermediaryToken is swapped for destToken | Ethereum, Arbitrum, Base |
 | **destToken** | Final token user wants | AAVE, UNI, any ERC-20 |
 | **intermediaryToken** | Cross-chain bridgeable token | WBTC, USDC |
 
@@ -79,7 +79,7 @@ STEP 1: Mint TeleBTC
 
 STEP 2: Swap TeleBTC → Intermediary Token
 ├── Input:  TeleBTC
-├── Process: DEX swap via exchange connector
+├── Process: DEX swap via DexConnector
 └── Output: Intermediary token (e.g., WBTC)
 
 STEP 3: Bridge to Destination Chain
@@ -89,7 +89,7 @@ STEP 3: Bridge to Destination Chain
 
 STEP 4: Swap Intermediary → DestToken
 ├── Input:  Intermediary token
-├── Process: DEX swap via exchange connector
+├── Process: DEX swap via DexConnector
 └── Output: destToken
 
 STEP 5: Deliver to User
@@ -132,7 +132,7 @@ sequenceDiagram
 
 ---
 
-#### Scenario B: Sad Path — TeleBTC → intermediaryToken swap fails on intermediary chain
+#### Scenario B: Sad Path — TeleBTC → intermediaryToken swap fails on intermediaryChain
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
@@ -142,7 +142,7 @@ sequenceDiagram
 1. Swap fails, TeleBTC remains in contract
 2. All fees (protocol, locker, network, thirdParty) are added back to `extendedCcExchangeRequests[txId].remainedInputAmount`
 3. Admin calls `refundByOwnerOrAdmin()` with user's Bitcoin script
-4. BTC refunded to user via locker (full amount, no fees deducted)
+4. BTC refunded to user via locker (unwrap fees are deducted since a new burn request is initiated)
 
 ---
 
@@ -150,15 +150,16 @@ sequenceDiagram
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
-| Across bridge fails | Intermediary token sent to Across admin | Manual refund process |
+| Across bridge fails (e.g., low fee or other reasons—contract call succeeded but Across doesn't deliver tokens on destChain and refunds to acrossAdmin on intermediaryChain) | Intermediary token sent to Across admin | Manual refund process |
 
 **Resolution Flow:**
 1. Bridge fails after `NewWrapAndSwapV2` event was emitted
-2. Intermediary tokens land in Across admin wallet (set via `setAcrossAdmin()`)
-3. Admin correlates failed bridge with original request using off-chain event monitoring (`uniqueCounter` and `txId` in events provide correlation)
-4. Admin manually refunds BTC to user following standard refund process
+2. Admin observes that no tokens are transferred to destChain
+3. After a few hours, Across refunds tokens to Across admin wallet (set via `setAcrossAdmin()`)
+4. Admin correlates failed bridge with original request using `txId` from `NewWrapAndSwapV2` event
+5. Admin manually refunds BTC to user following standard refund process
 
-> **Note:** Scenario C resolution relies on off-chain event monitoring. There is no on-chain mapping linking failed bridges to original requests. Admin must monitor `MsgSent` and `NewWrapAndSwapV2` events and correlate with Across bridge failures.
+> **Note:** Scenario C resolution relies on off-chain event monitoring. There is no on-chain mapping linking failed bridges to original requests. Admin must monitor `NewWrapAndSwapV2` events and correlate with Across bridge failures using `txId`.
 
 ---
 
@@ -171,7 +172,7 @@ sequenceDiagram
 **Resolution Flow:**
 1. Swap fails on destination chain
 2. `FailedWrapAndSwapToDestChain` event emitted
-3. Amount saved in `newFailedWrapAndSwapReqs` mapping
+3. Amount saved in `failedWrapAndSwapReqs` mapping
 4. Admin calls `swapBackAndRefundBTCByAdmin()` on EthConnector
 5. Message sent back to PolyConnector via Across
 6. PolyConnector swaps intermediaryToken → TeleBTC
@@ -191,17 +192,17 @@ sequenceDiagram
   participant DexConnectorPoly as DexConnector<br/>(Polygon/Bsc)
   participant LockersManager as LockersManager
 
-  Note over EthConnector,DexConnectorDest: ... (Previous processes:<br/>wrapAndSwapUniversal on intermediary chain,<br/>bridge to destination chain)
+  Note over EthConnector,DexConnectorDest: ... (Previous processes:<br/>wrapAndSwapUniversal on intermediaryChain,<br/>bridge to destination chain)
 
   EthConnector->>DexConnectorDest: swap(Intermediary Token → Dest Token)
   DexConnectorDest-->>EthConnector: Swap failed
   EthConnector-->>EthConnector: event: FailedWrapAndSwapToDestChain
-  Note over EthConnector: Saves failed request<br/>in newFailedWrapAndSwapReqs
+  Note over EthConnector: Saves failed request<br/>in failedWrapAndSwapReqs
 
   Admin->>EthConnector: swapBackAndRefundBTCByAdmin()
   Note over EthConnector: Validates & retrieves<br/>failed request amount
   EthConnector-->>EthConnector: event: SwappedBackAndRefundedBTCUniversal
-  Note over Across: Cross-chain bridge<br/>to intermediary chain
+  Note over Across: Cross-chain bridge<br/>to intermediaryChain
 
   Across->>PolyConnector: handleV3AcrossMessage(intermediaryToken, message)
   PolyConnector-->>PolyConnector: event: MsgReceived("swapBackAndRefundBTC")
@@ -216,11 +217,14 @@ sequenceDiagram
 
 ---
 
-#### Scenario D1: Sad Path — Bridge back to intermediary chain fails (during D refund)
+#### Scenario D1: Sad Path — Bridge back to intermediaryChain fails (during D refund)
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
 | Across bridge fails during refund | Tokens sent to Across admin on destChain | Manual refund |
+
+**Resolution Flow:**
+TODO (to be defined)
 
 ---
 
@@ -228,12 +232,12 @@ sequenceDiagram
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
-| Swap to TeleBTC fails on PolyConnector | Amount saved in `newFailedRefundBTCReqs` | Call `swapBackAndRefundBTCByAdmin()` on PolyConnector |
+| Swap to TeleBTC fails on PolyConnector | Amount saved in `failedWrapAndSwapRefundReqs` | Call `swapBackAndRefundBTCByAdmin()` on PolyConnector |
 
 **Resolution Flow:**
 1. Swap fails in PolyConnector
 2. `FailedSwapAndUnwrapUniversal` event emitted
-3. Amount saved in `newFailedRefundBTCReqs` mapping
+3. Amount saved in `failedWrapAndSwapRefundReqs` mapping
 4. Admin calls `swapBackAndRefundBTCByAdmin()` on PolyConnector
 5. Retry swap and burn
 
@@ -255,7 +259,7 @@ sequenceDiagram
   DexConnectorPoly-->>BurnRouter: Swap failed
   Note over BurnRouter: _exchange reverts
   BurnRouter-->>PolyConnector: Revert
-  Note over PolyConnector: Catch block saves amount<br/>in newFailedRefundBTCReqs
+  Note over PolyConnector: Catch block saves amount<br/>in failedWrapAndSwapRefundReqs
   PolyConnector-->>PolyConnector: event: FailedSwapAndUnwrapUniversal
 
   Admin->>PolyConnector: swapBackAndRefundBTCByAdmin()
@@ -283,7 +287,7 @@ sequenceDiagram
 ```
 STEP 1: Swap SourceToken → Intermediary Token
 ├── Input:  User's source token (e.g., AAVE)
-├── Process: DEX swap via exchange connector
+├── Process: DEX swap via DexConnector
 └── Output: Intermediary token (e.g., WBTC)
 
 STEP 2: Bridge to Intermediary Chain
@@ -293,7 +297,7 @@ STEP 2: Bridge to Intermediary Chain
 
 STEP 3: Swap Intermediary → TeleBTC
 ├── Input:  Intermediary token
-├── Process: DEX swap via BurnRouter
+├── Process: DEX swap via DexConnector
 └── Output: TeleBTC
 
 STEP 4: Unwrap TeleBTC → BTC
@@ -322,7 +326,7 @@ sequenceDiagram
   DexConnectorSource-->>EthConnector: Swap successful
   EthConnector-->>EthConnector: event: MsgSent("swapAndUnwrapUniversal")
   EthConnector->>Across: deposit/depositV3(intermediaryToken + message)
-  Note over Across: Cross-chain bridge<br/>to intermediary chain
+  Note over Across: Cross-chain bridge<br/>to intermediaryChain
 
   Across->>PolyConnector: handleV3AcrossMessage(intermediaryToken, message)
   PolyConnector-->>PolyConnector: event: MsgReceived("swapAndUnwrapUniversal")
@@ -347,7 +351,7 @@ sequenceDiagram
 
 ---
 
-#### Scenario C: Sad Path — Bridging from source to intermediary chain fails
+#### Scenario C: Sad Path — Bridging from source to intermediaryChain fails
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
@@ -363,16 +367,16 @@ sequenceDiagram
 
 ---
 
-#### Scenario D: Sad Path — intermediaryToken → TeleBTC swap fails on intermediary chain
+#### Scenario D: Sad Path — intermediaryToken → TeleBTC swap fails on intermediaryChain
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
-| Swap to TeleBTC fails | Amount saved in `newFailedUniversalSwapAndUnwrapReqs` | Call `withdrawFundsToSourceChainByAdminUniversal()` |
+| Swap to TeleBTC fails | Amount saved in `failedSwapAndUnwrapReqs` | Call `withdrawFundsToSourceChainByAdminUniversal()` |
 
 **Resolution Flow:**
 1. Swap fails on PolyConnector
 2. `FailedSwapAndUnwrapUniversal` event emitted
-3. Amount and original path saved in `newFailedUniversalSwapAndUnwrapReqs` mapping (includes `pathFromInputToIntermediaryOnSourceChain`)
+3. Amount and original path saved in `failedSwapAndUnwrapReqs` mapping (includes `pathFromInputToIntermediaryOnSourceChain`)
 4. Admin calls `withdrawFundsToSourceChainByAdminUniversal()` with reverse path
 5. Contract validates reverse path: intermediary token must match original path end, input token must match original path start
 6. Message with purpose `"swapBackAndRefund"` sent back to EthConnector via Across
@@ -393,14 +397,14 @@ sequenceDiagram
   participant DexConnectorSource as DexConnector<br/>(Ethereum/Solana)
   participant User as User
 
-  Note over PolyConnector,DexConnectorPoly: ... (Previous: swapAndUnwrapUniversal,<br/>bridge to intermediary chain)
+  Note over PolyConnector,DexConnectorPoly: ... (Previous: swapAndUnwrapUniversal,<br/>bridge to intermediaryChain)
 
   PolyConnector->>BurnRouter: swapAndUnwrap(intermediaryToken → TeleBTC)
   BurnRouter->>DexConnectorPoly: swap(Intermediary Token → TeleBTC)
   DexConnectorPoly-->>BurnRouter: Swap failed
   Note over BurnRouter: _exchange reverts
   BurnRouter-->>PolyConnector: Revert
-  Note over PolyConnector: Catch block saves amount<br/>in newFailedUniversalSwapAndUnwrapReqs
+  Note over PolyConnector: Catch block saves amount<br/>in failedSwapAndUnwrapReqs
   PolyConnector-->>PolyConnector: event: FailedSwapAndUnwrapUniversal
 
   Admin->>PolyConnector: withdrawFundsToSourceChainByAdminUniversal()
@@ -424,7 +428,7 @@ sequenceDiagram
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
-| Across bridge fails during refund | Tokens sent to Across admin on intermediary chain | Manual refund of sourceToken |
+| Across bridge fails during refund | Tokens sent to Across admin on intermediaryChain | Manual refund of sourceToken |
 
 ---
 
@@ -432,7 +436,7 @@ sequenceDiagram
 
 | Trigger | Resolution | Admin Action |
 |---------|------------|--------------|
-| Swap back to sourceToken fails | Amount saved in `newFailedSwapBackAndRefundReqs` | Call `refundFailedSwapAndUnwrapUniversal()` |
+| Swap back to sourceToken fails | Amount saved in `failedSwapAndUnwrapRefundReqs` | Call `refundFailedSwapAndUnwrapUniversal()` |
 
 **Resolution Flow:**
 1. Swap fails on EthConnector
@@ -447,16 +451,16 @@ sequenceDiagram
 
 | Direction | Scenario | Failure Point | Storage Mapping | Admin Function |
 |-----------|----------|---------------|-----------------|----------------|
-| BTC→Dest | B | TeleBTC→Intermediary swap | `extendedCcExchangeRequests[txId].remainedInputAmount` | `refundByOwnerOrAdmin()` |
+| BTC→Dest | B | TeleBTC→Intermediary swap | `extendedCcExchangeRequests[txId].remainedInputAmount` | `refundByOwnerOrAdmin()` (CcExchangeRouter, intermediaryChain) |
 | BTC→Dest | C | Bridge to dest | Across admin (off-chain) | Manual |
-| BTC→Dest | D | Intermediary→DestToken swap | `newFailedWrapAndSwapReqs` | `swapBackAndRefundBTCByAdmin()` |
+| BTC→Dest | D | Intermediary→DestToken swap | `failedWrapAndSwapReqs` | `swapBackAndRefundBTCByAdmin()` (EthConnector, destChain) |
 | BTC→Dest | D1 | Bridge back | Across admin (off-chain) | Manual |
-| BTC→Dest | D2 | Intermediary→TeleBTC swap | `newFailedRefundBTCReqs` | `swapBackAndRefundBTCByAdmin()` |
+| BTC→Dest | D2 | Intermediary→TeleBTC swap | `failedWrapAndSwapRefundReqs` | `swapBackAndRefundBTCByAdmin()` (PolyConnector, intermediaryChain) |
 | Src→BTC | B | Source→Intermediary swap | N/A (reverts) | None |
 | Src→BTC | C | Bridge to intermediary | Across admin (off-chain) | Manual |
-| Src→BTC | D | Intermediary→TeleBTC swap | `newFailedUniversalSwapAndUnwrapReqs` | `withdrawFundsToSourceChainByAdminUniversal()` |
+| Src→BTC | D | Intermediary→TeleBTC swap | `failedSwapAndUnwrapReqs` | `withdrawFundsToSourceChainByAdminUniversal()` (PolyConnector, intermediaryChain) |
 | Src→BTC | D1 | Bridge back | Across admin (off-chain) | Manual |
-| Src→BTC | D2 | Intermediary→Source swap | `newFailedSwapBackAndRefundReqs` | `refundFailedSwapAndUnwrapUniversal()` |
+| Src→BTC | D2 | Intermediary→Source swap | `failedSwapAndUnwrapRefundReqs` | `refundFailedSwapAndUnwrapUniversal()` (EthConnector, sourceChain) |
 
 > **Note on Storage:** Each failure type uses a separate mapping to prevent collisions. For BTC→Dest flows, `bitcoinTxId` (bytes32) is used as the key. For Src→BTC flows, `uniqueCounter` (uint256) is used. These are different value spaces and stored in different mappings.
 
@@ -469,12 +473,12 @@ sequenceDiagram
 | Intermediary Token | WBTC preferred | Lower price fluctuation risk vs stablecoins | Swap failures due to slippage |
 | Refund Currency | Always sourceToken on sourceChain | Consistent user experience | User receiving unexpected tokens |
 | New Function | `swapAndUnwrapV3` on EthConnector | Backward compatibility | Breaking existing integrations |
+| Removed Function | `wrapAndSwapV2` removed from CcExchangeRouter | Not enough space in contract | N/A |
 | Message Encoding | ABI-encoded for EVM, raw bytes for Solana | Chain-specific optimization | Cross-chain compatibility issues |
 | OP_RETURN Structure | Add `minIntermediaryTokenAmount` | On-chain slippage protection | MEV/sandwich attacks on intermediary swap |
 | Failed Request Storage | Separate mappings per failure type | Clear state management | State corruption, incorrect refunds |
 | Solana Address Format | `bytes32` for all Solana addresses | Solana uses 32-byte addresses vs EVM 20-byte | Address truncation errors |
 | Fee Handling on Failure | Return all fees to user on swap failure | Minimize user loss on failures | User paying fees for failed transactions |
-| Validation Timing | Chain ID validated before mint; connector proxy after | Early failure for invalid chains | N/A (connector proxy failure falls back to Scenario B) |
 
 ### Security Properties
 
@@ -483,12 +487,10 @@ sequenceDiagram
 | 1 | Path validation (first token = intermediary, last = destToken) | Invalid swap paths, token theft | Done |
 | 2 | Amount validation (minOutput checks at each step) | Excessive slippage, front-running | Done |
 | 3 | Admin-only refund functions | Unauthorized fund withdrawal | Done |
-| 4 | Gas limit check on message handling | Out-of-gas griefing attacks | Done |
-| 5 | Reentrancy guards on all public functions | Reentrancy exploits | Done |
-| 6 | Chain ID validation | Cross-chain replay attacks | Done |
-| 7 | Connector proxy mapping verification | Message delivery to wrong contracts | Done |
-| 8 | Reverse path validation against original path endpoints | Admin providing malicious refund path | Done |
-| 9 | Separate storage mappings per failure type | uniqueCounter/bitcoinTxId collision | Done |
+| 4 | Chain ID validation | Cross-chain replay attacks | Done |
+| 5 | Connector proxy mapping verification | Message delivery to wrong contracts | Done |
+| 6 | Reverse path validation against original path endpoints | Admin providing malicious refund path | Done |
+| 7 | Separate storage mappings per failure type | uniqueCounter/bitcoinTxId collision | Done |
 
 ---
 
@@ -544,18 +546,31 @@ struct SwapAndUnwrapUniversalPaths {
 
 // EthConnectorStorage.sol - Mappings for failed requests
 mapping(address => mapping(uint256 => mapping(bytes32 => mapping(address => uint256))))
-    public newFailedWrapAndSwapReqs;
+    public failedWrapAndSwapReqs;
 // ^ [targetAddress][intermediaryChainId][bitcoinTxId][intermediaryToken] => amount
+// Stores: BTC→Dest Scenario D failures (intermediaryToken → destToken swap fails on destChain)
 
 mapping(address => mapping(address => mapping(uint256 => mapping(address => uint256))))
-    public newFailedSwapBackAndRefundReqs;
+    public failedSwapAndUnwrapRefundReqs;
 // ^ [refundAddress][inputToken][uniqueCounter][intermediaryToken] => amount
+// Stores: Src→BTC Scenario D2 failures (intermediaryToken → sourceToken swap fails on sourceChain)
 
 // PolyConnectorStorage.sol
 struct SwapAndUnwrapUniversalData {
     bytes32[] pathFromInputToIntermediaryOnSourceChain;
     uint256 intermediaryTokenAmount;
 }
+
+// PolyConnectorStorage.sol - Mappings for failed requests
+mapping(address => mapping(uint256 => mapping(address => uint256)))
+    public failedSwapAndUnwrapReqs;
+// ^ [refundAddress][uniqueCounter][intermediaryToken] => amount
+// Stores: Src→BTC Scenario D failures (intermediaryToken → TeleBTC swap fails on intermediaryChain)
+
+mapping(address => mapping(bytes32 => mapping(address => uint256)))
+    public failedWrapAndSwapRefundReqs;
+// ^ [targetAddress][bitcoinTxId][intermediaryToken] => amount
+// Stores: BTC→Dest Scenario D2 failures (intermediaryToken → TeleBTC swap fails during BTC refund)
 
 // CcExchangeRouterStorageV2.sol
 mapping(uint256 => bytes32) public destConnectorProxyMapping;
@@ -606,18 +621,6 @@ function swapAndUnwrapUniversal(
     uint256 _thirdParty,
     address _refundAddress
 ) external payable;
-```
-
-#### Cross-Chain Message Handling
-
-```solidity
-// EthConnectorLogic.sol & PolyConnectorLogic.sol
-function handleV3AcrossMessage(
-    address _tokenSent,
-    uint256 _amount,
-    address,
-    bytes memory _message
-) external;
 ```
 
 #### Admin Refund Functions
@@ -745,7 +748,7 @@ npm install
 
 | Test | Description | Line |
 |------|-------------|------|
-| `should swap and bridge to the intermediary chain` | swapAndUnwrapUniversal happy path | 669 |
+| `should swap and bridge to the intermediaryChain` | swapAndUnwrapUniversal happy path | 669 |
 | `should fail and revert if swap on the source chain fails` | Source swap failure (Scenario B) | 793 |
 | `should handle swapBackAndRefund message` | Refund message handling | 857 |
 | `should handle swapBackAndRefund message failure and allow admin to refund` | Admin retry refund | 935 |
@@ -827,7 +830,6 @@ npx hardhat test test/cc_exchange_router.test.ts test/cc_exchange_with_filler_ro
 - **Intermediary Token Risk** — Price fluctuations during multi-step process could affect final amounts
 - **Gas Costs** — Multiple swaps and cross-chain messages increase total gas costs
 - **Decimal Handling** — Special handling required for tokens with different decimals (USDT: 18 on BSC, 6 elsewhere)
-- **Connector Proxy Validation Timing** — `destConnectorProxyMapping` is validated after TeleBTC is minted; if not set, falls back to Scenario B refund flow
 
 ---
 

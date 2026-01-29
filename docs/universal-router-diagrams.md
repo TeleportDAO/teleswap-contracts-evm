@@ -81,7 +81,7 @@ sequenceDiagram
   EthConnector->>DexConnectorDest: swap(Intermediary Token → Dest Token)
   DexConnectorDest-->>EthConnector: Swap failed
   EthConnector-->>EthConnector: event: FailedWrapAndSwapToDestChain
-  Note over EthConnector: Saves failed request<br/>in newFailedWrapAndSwapReqs
+  Note over EthConnector: Saves failed request<br/>in failedWrapAndSwapReqs
 
   Admin->>EthConnector: swapBackAndRefundBTCByAdmin()
   Note over EthConnector: Validates & retrieves<br/>failed request amount
@@ -119,7 +119,7 @@ sequenceDiagram
   DexConnectorPoly-->>BurnRouter: Swap failed
   Note over BurnRouter: _exchange reverts<br/>(require(result, "exchange failed"))
   BurnRouter-->>PolyConnector: Revert
-  Note over PolyConnector: Catch block saves amount<br/>in newFailedRefundBTCReqs
+  Note over PolyConnector: Catch block saves amount<br/>in failedWrapAndSwapRefundReqs
   PolyConnector-->>PolyConnector: event: FailedSwapAndUnwrapUniversal<br/>(Differentiated from normal swapAndUnwrap<br/>by uniqueId being bitcoin txId<br/>rather than a counter)
 
   Admin->>PolyConnector: swapBackAndRefundBTCByAdmin()
@@ -215,7 +215,7 @@ sequenceDiagram
   DexConnectorPoly-->>BurnRouter: Swap failed
   Note over BurnRouter: _exchange reverts<br/>(require(result, "exchange failed"))
   BurnRouter-->>PolyConnector: Revert
-  Note over PolyConnector: Catch block saves amount<br/>in newFailedUniversalSwapAndUnwrapReqs
+  Note over PolyConnector: Catch block saves amount<br/>in failedSwapAndUnwrapReqs
   PolyConnector-->>PolyConnector: event: FailedSwapAndUnwrapUniversal
 
   Admin->>PolyConnector: withdrawFundsToSourceChainByAdminUniversal()

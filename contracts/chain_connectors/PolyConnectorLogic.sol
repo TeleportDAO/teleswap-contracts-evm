@@ -288,11 +288,11 @@ contract PolyConnectorLogic is
             "PolygonConnectorLogic: not authorized"
         );
 
-        SwapAndUnwrapUniversalData memory data = newFailedUniversalSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][
+        SwapAndUnwrapUniversalData memory data = failedSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][
             _token
         ];
         // Update withheld amount
-        delete newFailedUniversalSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][_token];
+        delete failedSwapAndUnwrapReqs[_refundAddress][_chainId][_uniqueCounter][_token];
 
         require(data.intermediaryTokenAmount > 0, "PolygonConnectorLogic: already withdrawn");
 
@@ -373,14 +373,14 @@ contract PolyConnectorLogic is
     ) external override nonReentrant {
         require(msg.sender == acrossAdmin || msg.sender == owner(), "PolygonConnectorLogic: not authorized");
 
-        uint256 _amount = newFailedRefundBTCReqs[_refundAddress][chainId][_bitcoinTxId][
+        uint256 _amount = failedWrapAndSwapRefundReqs[_refundAddress][chainId][_bitcoinTxId][
             _token
         ];
         require(_amount == _amounts[0], "PolygonConnectorLogic: invalid amount");
         require(IERC20(_token).balanceOf(address(this)) >= _amount, "PolygonConnectorLogic: insufficient balance");
 
         // Update withheld amount
-        delete newFailedRefundBTCReqs[_refundAddress][chainId][_bitcoinTxId][_token];
+        delete failedWrapAndSwapRefundReqs[_refundAddress][chainId][_bitcoinTxId][_token];
 
         require(_amount > 0, "PolygonConnectorLogic: already withdrawn");
 
@@ -552,7 +552,7 @@ contract PolyConnectorLogic is
 
             // Save token amount so user can withdraw it in future
             if (_isEqualString(purpose, "swapBackAndRefundBTC")) {
-                newFailedRefundBTCReqs[arguments.refundAddress][arguments.chainId][
+                failedWrapAndSwapRefundReqs[arguments.refundAddress][arguments.chainId][
                     bytes32(arguments.uniqueCounter)
                 ][_tokenSent] = _amount;
             } else {
@@ -564,7 +564,7 @@ contract PolyConnectorLogic is
                     pathFromInputToIntermediaryOnSourceChain,
                     _amount
                 );
-                newFailedUniversalSwapAndUnwrapReqs[arguments.refundAddress][arguments.chainId][
+                failedSwapAndUnwrapReqs[arguments.refundAddress][arguments.chainId][
                     arguments.uniqueCounter
                 ][_tokenSent] = data;
             }
