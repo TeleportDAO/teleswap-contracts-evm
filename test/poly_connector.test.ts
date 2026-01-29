@@ -14,8 +14,8 @@ import { Contract } from "@ethersproject/contracts";
 import { TeleBTCLogic } from "../src/types/TeleBTCLogic";
 import { TeleBTCLogic__factory } from "../src/types/factories/TeleBTCLogic__factory";
 import { TeleBTCProxy__factory } from "../src/types/factories/TeleBTCProxy__factory";
-import { Erc20 as ERC20 } from "../src/types/Erc20";
-import { Erc20__factory } from "../src/types/factories/Erc20__factory";
+import { TestERC20 } from "../src/types/TestERC20";
+import { TestERC20__factory } from "../src/types/factories/TestERC20__factory";
 import { PolyConnectorProxy__factory } from "../src/types/factories/PolyConnectorProxy__factory";
 import { PolyConnectorLogic__factory } from "../src/types/factories/PolyConnectorLogic__factory";
 import { BurnRouterLib } from "../src/types/BurnRouterLib";
@@ -50,7 +50,7 @@ describe("PolyConnector", async () => {
 
     // Contracts
     let teleBTC: TeleBTCLogic;
-    let inputToken: ERC20;
+    let inputToken: TestERC20;
     let TeleBTCSigner1: TeleBTCLogic;
     let PolyConnector: Contract;
     let PolyConnectorWithMockedAccross: Contract;
@@ -222,7 +222,7 @@ describe("PolyConnector", async () => {
         );
 
         // Deploys input token
-        const erc20Factory = new Erc20__factory(deployer);
+        const erc20Factory = new TestERC20__factory(deployer);
         inputToken = await erc20Factory.deploy("TestToken", "TT", 100000);
 
         // Mints TeleBTC for user
@@ -1705,7 +1705,7 @@ describe("PolyConnector", async () => {
 
             // Verify the failed request is stored correctly
             // Note: The contract stores uniqueCounter as bytes32, so we need to check with bytes32
-            const storedAmount = await PolyConnector.newFailedRefundBTCReqs(
+            const storedAmount = await PolyConnector.failedWrapAndSwapRefundReqs(
                 refundAddress,
                 1, // chainId
                 uniqueCounter, // bitcoinTxId (bytes32)

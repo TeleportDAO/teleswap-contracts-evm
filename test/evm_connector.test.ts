@@ -14,8 +14,8 @@ import { Contract } from "@ethersproject/contracts";
 import { TeleBTCLogic } from "../src/types/TeleBTCLogic";
 import { TeleBTCLogic__factory } from "../src/types/factories/TeleBTCLogic__factory";
 import { TeleBTCProxy__factory } from "../src/types/factories/TeleBTCProxy__factory";
-import { Erc20__factory } from "../src/types/factories/Erc20__factory";
-import { Erc20 as ERC20 } from "../src/types/Erc20";
+import { TestERC20__factory } from "../src/types/factories/TestERC20__factory";
+import { TestERC20 } from "../src/types/TestERC20";
 import { EthConnectorProxy__factory } from "../src/types/factories/EthConnectorProxy__factory";
 import { EthConnectorLogic__factory } from "../src/types/factories/EthConnectorLogic__factory";
 import { takeSnapshot, revertProvider } from "./block_utils";
@@ -53,10 +53,10 @@ describe("EthConnector", async () => {
 
     // Contracts
     let teleBTC: TeleBTCLogic;
-    let inputToken: ERC20;
-    let intermediaryToken: ERC20;
-    let wrappedNativeToken: ERC20;
-    let polygonToken: ERC20;
+    let inputToken: TestERC20;
+    let intermediaryToken: TestERC20;
+    let wrappedNativeToken: TestERC20;
+    let polygonToken: TestERC20;
     let EthConnector: Contract;
 
     // Mock contracts
@@ -138,7 +138,7 @@ describe("EthConnector", async () => {
         await teleBTC.initialize("TeleportDAO-BTC", "teleBTC");
 
         // Deploys input token
-        const erc20Factory = new Erc20__factory(deployer);
+        const erc20Factory = new TestERC20__factory(deployer);
         const initialSupplyOfInputToken = ethers.utils.parseUnits("10", 18);
         inputToken = await erc20Factory.deploy(
             "TestToken",
@@ -913,7 +913,7 @@ describe("EthConnector", async () => {
                 .withArgs("swapBackAndRefund", 0, 10, refundMessage)
                 .and.to.emit(
                     EthConnector,
-                    "swappedBackAndRefundedToSourceChain"
+                    "SwappedBackAndRefundedToSourceChain"
                 )
                 .withArgs(
                     0, // uniqueCounter
@@ -1008,7 +1008,7 @@ describe("EthConnector", async () => {
 
             // Verify the failed request is saved in the mapping
             const storedAmount =
-                await EthConnector.newFailedSwapBackAndRefundReqs(
+                await EthConnector.failedSwapAndUnwrapRefundReqs(
                     signer1Address,
                     inputToken.address,
                     uniqueCounter,
@@ -1084,7 +1084,7 @@ describe("EthConnector", async () => {
 
             // Verify the mapping entry was deleted
             const deletedAmount =
-                await EthConnector.newFailedSwapBackAndRefundReqs(
+                await EthConnector.failedSwapAndUnwrapRefundReqs(
                     signer1Address,
                     inputToken.address,
                     uniqueCounter,
@@ -1169,7 +1169,7 @@ describe("EthConnector", async () => {
 
             // Verify the failed request is saved in the mapping
             const storedAmount =
-                await EthConnector.newFailedSwapBackAndRefundReqs(
+                await EthConnector.failedSwapAndUnwrapRefundReqs(
                     signer1Address,
                     inputToken.address,
                     uniqueCounter,
@@ -1236,7 +1236,7 @@ describe("EthConnector", async () => {
 
             // Verify the mapping entry was not deleted
             const deletedAmount =
-                await EthConnector.newFailedSwapBackAndRefundReqs(
+                await EthConnector.failedSwapAndUnwrapRefundReqs(
                     signer1Address,
                     inputToken.address,
                     uniqueCounter,
