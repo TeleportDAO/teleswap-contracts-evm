@@ -466,6 +466,12 @@ function setInputTokenDecimalsOnDestinationChain(
 
     function setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) external;
 
+    function setBridgeIntermediaryTokenMapping(
+        bytes8 _outputTokenID,
+        uint256 _chainId,
+        bytes32 _intermediaryToken
+    ) external;
+
     function fillTxUniversal(
         bytes32 _txId,
         bytes32 _recipient,

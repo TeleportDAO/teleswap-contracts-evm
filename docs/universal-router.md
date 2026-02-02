@@ -576,8 +576,8 @@ mapping(address => mapping(bytes32 => mapping(address => uint256)))
 mapping(uint256 => bytes32) public destConnectorProxyMapping;
 // ^ destination chain id => connector proxy address
 
-mapping(bytes8 => address) public intermediaryTokenMapping;
-// ^ destination token ID => intermediary token on current chain
+mapping(bytes8 => mapping(uint256 => bytes32)) public bridgeIntermediaryTokenMapping;
+// ^ output token ID => chain ID => intermediary token address on this chain ID
 ```
 
 ### Key Functions
@@ -656,7 +656,7 @@ PolyConnector.setCurrChainId(chainId);
 
 ```solidity
 CcExchangeRouter.setDestConnectorProxyMapping(destRealChainId, destConnectorProxy);
-CcExchangeRouter.setIntermediaryTokenMapping(outputTokenID, intermediaryToken);
+CcExchangeRouter.setBridgeIntermediaryTokenMapping(outputTokenID, chainId, intermediaryToken);
 ```
 
 ### Events

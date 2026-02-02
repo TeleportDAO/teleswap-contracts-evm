@@ -45,22 +45,11 @@ abstract contract PolyConnectorStorage is IPolyConnector {
         bytes32 => mapping(
             uint256 => mapping(
                 uint256 => mapping(
-                    address => SwapAndUnwrapUniversalData
-                )
-            )
-        )
-    ) public failedSwapAndUnwrapReqs;
-    // ^ Mapping from [refundAddress][chainId][reqId][intermediaryToken] to SwapAndUnwrapUniversalPathsData
-
-    mapping(
-        bytes32 => mapping(
-            uint256 => mapping(
-                bytes32 => mapping(
                     address => uint256
                 )
             )
         )
-) public newFailedReqsV2;
+    ) public newFailedReqsV2;
     // ^ Mapping from [refundAddress][chainId][reqId][token] to amount
 
     // Chain ID of the current chain (used for decimal conversion)
@@ -70,7 +59,18 @@ abstract contract PolyConnectorStorage is IPolyConnector {
     // Used for handling decimal differences (e.g., USDT: 18 on BSC, 6 on other chains)
     mapping(address => uint256) public tokenDecimalsOnDestinationChain;
 
-    // --- New variables for universal router (feature branch) ---
+    // --- New variables for universal router ---
+    mapping(
+        bytes32 => mapping(
+            uint256 => mapping(
+                uint256 => mapping(
+                    address => SwapAndUnwrapUniversalData
+                )
+            )
+        )
+    ) public failedSwapAndUnwrapReqs;
+    // ^ Mapping from [refundAddress][chainId][reqId][intermediaryToken] to SwapAndUnwrapUniversalPathsData
+
     mapping(
         bytes32 => mapping(
             uint256 => mapping(

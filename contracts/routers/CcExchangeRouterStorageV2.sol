@@ -87,4 +87,6 @@ mapping(address => uint256) public inputTokenDecimalsOnDestinationChain; // inpu
 
     // --- New variables for universal router (feature branch) ---
     mapping(uint256 => bytes32) public destConnectorProxyMapping; // destination real chain id => destination chain connector proxy address
+
+    mapping(bytes8 => mapping(uint256 => bytes32)) public bridgeIntermediaryTokenMapping; // output token ID => chain ID => intermediary token address on this chain ID
 }
