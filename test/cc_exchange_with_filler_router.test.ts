@@ -819,7 +819,7 @@ describe("CcExchangeRouter", async () => {
                 "0x344e6fed192d01647ef2f715e29474ba6eef54cc197d9f59d3d05cf249f3a09d";
 
             // Set up intermediary token mapping (required by contract)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + exchangeToken.address.slice(-16),
                 CHAIN_ID,
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -894,14 +894,14 @@ describe("CcExchangeRouter", async () => {
             );
 
             // Set up intermediary token mapping (required by contract)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + exchangeToken.address.slice(-16),
                 CHAIN_ID,
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)
             );
 
             // Set up intermediary token mapping for destination chain (required for universal swap validation)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + exchangeToken.address.slice(-16),
                 2, // destination chain ID
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -998,7 +998,7 @@ describe("CcExchangeRouter", async () => {
             // Set up intermediary token mapping for native token
             // The mapping key is bytes8(uint64(uint256(_outputToken)))
             // For NATIVE_TOKEN_ADDRESS (0x0000...0001), last 8 bytes = 0x0000000000000001
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x0000000000000001",
                 CHAIN_ID,
                 ethers.utils.hexZeroPad(weth.address, 32)
@@ -1082,7 +1082,7 @@ describe("CcExchangeRouter", async () => {
                 "0x344e6fed192d01647ef2f715e29474ba6eef54cc197d9f59d3d05cf249f3a09d";
 
             // Set up intermediary token mapping
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + exchangeToken.address.slice(-16),
                 CHAIN_ID,
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -1151,7 +1151,7 @@ describe("CcExchangeRouter", async () => {
                 "0x344e6fed192d01647ef2f715e29474ba6eef54cc197d9f59d3d05cf249f3a09d";
 
             // Set up intermediary token mapping
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + exchangeToken.address.slice(-16),
                 CHAIN_ID,
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)

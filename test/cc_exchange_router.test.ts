@@ -406,7 +406,7 @@ describe("CcExchangeRouter", async function () {
         // Set bridge intermediary token mapping for exchangeToken on current chain
         // This maps: exchangeToken ID => current chain ID => exchangeToken (intermediary on current chain)
         // Used by "Send token to destination chain using across" test
-        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+        await ccExchangeRouter.setIntermediaryTokenMapping(
             "0x" + exchangeToken.address.slice(-16),
             CHAIN_ID, // Current chain ID (1)
             ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -414,7 +414,7 @@ describe("CcExchangeRouter", async function () {
 
         // Set bridge intermediary token mapping for current chain
         // This maps: outputTokenOnDestChain ID => current chain ID => exchangeToken (intermediary on current chain)
-        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+        await ccExchangeRouter.setIntermediaryTokenMapping(
             "0x" + outputTokenOnDestChain.address.slice(-16),
             CHAIN_ID, // Current chain ID (1), not destination chain ID
             ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -422,7 +422,7 @@ describe("CcExchangeRouter", async function () {
 
         // Set bridge intermediary token mapping for destination chain
         // This maps: outputTokenOnDestChain ID => destination chain ID => intermediaryTokenOnDestChain (intermediary on dest chain)
-        await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+        await ccExchangeRouter.setIntermediaryTokenMapping(
             "0x" + outputTokenOnDestChain.address.slice(-16),
             2, // Destination chain ID
             ethers.utils.hexZeroPad(intermediaryTokenOnDestChain.address, 32)
@@ -1382,7 +1382,7 @@ describe("CcExchangeRouter", async function () {
             vout = vout.replace(DUMMY_TOKEN_ID, ONE_ADDRESS.slice(-16));
 
             // Set intermediary token mapping so path validation passes
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + ONE_ADDRESS.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(ONE_ADDRESS, 32)
@@ -1495,7 +1495,7 @@ describe("CcExchangeRouter", async function () {
             vout = vout.replace(DUMMY_TOKEN_ID, ZERO_ADDRESS.slice(-16));
 
             // Set intermediary token mapping so path validation passes
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + ZERO_ADDRESS.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(ZERO_ADDRESS, 32)
@@ -2762,7 +2762,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
@@ -2868,7 +2868,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
@@ -2960,7 +2960,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
@@ -3250,7 +3250,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set up mappings for destination chain swap so validation passes
             // Set bridge intermediary token mapping for destination chain
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + exchangeToken.address.slice(-16),
                 2, // Destination chain ID
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -3379,7 +3379,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
@@ -3394,7 +3394,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set bridge intermediary token mapping for destination chain
             // This is required for destination chain swap validation
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 2, // Destination chain ID
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -3523,7 +3523,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
@@ -3538,7 +3538,7 @@ describe("CcExchangeRouter", async function () {
 
             // Set bridge intermediary token mapping for destination chain
             // This is required for destination chain swap validation
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 2, // Destination chain ID
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)
@@ -3646,14 +3646,14 @@ describe("CcExchangeRouter", async function () {
 
             // Set intermediary token mapping so path validation passes
             // The token ID extracted from vout will be deployerAddress.slice(-16)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 CHAIN_ID, // Current chain ID
                 ethers.utils.hexZeroPad(deployerAddress, 32)
             );
 
             // Set intermediary token mapping for destination chain (chain 2)
-            await ccExchangeRouter.setBridgeIntermediaryTokenMapping(
+            await ccExchangeRouter.setIntermediaryTokenMapping(
                 "0x" + deployerAddress.slice(-16),
                 2, // destination chain ID
                 ethers.utils.hexZeroPad(exchangeToken.address, 32)

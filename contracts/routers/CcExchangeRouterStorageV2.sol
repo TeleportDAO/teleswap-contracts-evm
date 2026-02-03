@@ -69,7 +69,7 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
 
     mapping(bytes8 => mapping(uint => bytes32)) public bridgeTokenIDMapping; // Token ID => Chain ID => Token address
     mapping(bytes32 => ccExchangeRequestV2) internal ccExchangeRequestsV2; // txId => ccExchangeRequestV2
-    mapping(bytes8 => address) public intermediaryTokenMapping; // Token ID of the destination token => Intermediary token on the current chain => deprecated (use bridgeIntermediaryTokenMapping instead)
+    mapping(bytes8 => address) public _deprecatedIntermediaryTokenMapping; // deprecated - do not use
 
     mapping(bytes32 => mapping(
         bytes32 => mapping(
@@ -88,5 +88,5 @@ mapping(address => uint256) public inputTokenDecimalsOnDestinationChain; // inpu
     // --- New variables for universal router (feature branch) ---
     mapping(uint256 => bytes32) public destConnectorProxyMapping; // destination real chain id => destination chain connector proxy address
 
-    mapping(bytes8 => mapping(uint256 => bytes32)) public bridgeIntermediaryTokenMapping; // output token ID => chain ID => intermediary token address on this chain ID
+    mapping(bytes8 => mapping(uint256 => bytes32)) public intermediaryTokenMapping; // output token ID => chain ID => intermediary token address on this chain ID
 }
