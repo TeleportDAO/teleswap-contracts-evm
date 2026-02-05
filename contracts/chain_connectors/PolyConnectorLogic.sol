@@ -160,6 +160,14 @@ contract PolyConnectorLogic is
         
         emit MsgReceived(purpose, uniqueCounter, chainId, _message);
 
+        // Check for duplicate fill from Across
+        if (processedRequests[chainId][uniqueCounter]) {
+            // Duplicate request - send tokens to acrossAdmin for manual handling
+            IERC20(_tokenSent).transfer(acrossAdmin, _amount);
+            return;
+        }
+        processedRequests[chainId][uniqueCounter] = true;
+
         if (_isEqualString(purpose, "swapAndUnwrap")) {
             _swapAndUnwrap(_amount, _message, _tokenSent);
         } else if (_isEqualString(purpose, "swapAndUnwrapRune")) {

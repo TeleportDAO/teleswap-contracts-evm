@@ -116,7 +116,7 @@ contract TstStakingLogic is
     }
 
     /// @notice Adds a controller
-    /// @dev Controller can stake and unstake on behalf of other users
+    /// @dev Controller can only stake on behalf of other users (not claim or unstake)
     function addController(address _controller) external onlyOwner {
         isController[_controller] = true;
     }
@@ -224,8 +224,7 @@ contract TstStakingLogic is
     }
 
     /// @notice Claims unclaimed reward
-    /// @dev Controller can claim reward on behalf of other users,
-    ///      but reward will be sent to user
+    /// @dev Only the user can claim their own reward
     function claimReward(
         address _locker,
         address _user
@@ -251,7 +250,7 @@ contract TstStakingLogic is
     }
 
     /// @notice Unstakes TST. Users cannot unstake partial amount.
-    /// @dev Controller can unstake on behalf of other users
+    /// @dev Only the user can unstake (not controller)
     /// @dev This burns veToken from the user
     /// @dev User can unstake only after staking period is over
     /// @dev All unclaimed reward will be sent to user
@@ -261,7 +260,7 @@ contract TstStakingLogic is
     ) external override whenNotPaused nonReentrant {
         uint _stakedAmount = stakingPosition[_locker][_user].stakedAmount;
 
-        // User or controller must be the caller
+        // Only user can unstake
         if (_user != msg.sender) {
             require(
                 stakingPosition[_locker][_user].controller == msg.sender,
@@ -356,6 +355,14 @@ contract TstStakingLogic is
                 _amount
             );
             emit RewardDeposited(msg.sender, _locker, address(0), _amount, 0);
+        } else if (stakingInfo[_locker].totalStakedAmount == 0) {
+            // If no stakers, send all rewards to locker
+            IERC20(stakingInfo[_locker].rewardToken).safeTransferFrom(
+                msg.sender,
+                _locker,
+                _amount
+            );
+            emit RewardDeposited(msg.sender, _locker, stakingInfo[_locker].rewardToken, _amount, 0);
         } else {
             // Get reward token from sender
             IERC20(stakingInfo[_locker].rewardToken).safeTransferFrom(

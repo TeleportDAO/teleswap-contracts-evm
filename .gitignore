@@ -34,7 +34,7 @@ deployments/.DS_Store
 deployments/base/.DS_Store
 
 # ZK proof files
-zkproof/claims/
-zkproof/deposits/
-zkproof/lockers/
-circuits/zkproof/
+circuits/zkproof
+zkproof/claims
+zkproof/deposits
+zkproof/lockers

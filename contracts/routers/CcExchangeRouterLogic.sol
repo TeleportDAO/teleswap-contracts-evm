@@ -33,6 +33,25 @@ contract CcExchangeRouterLogic is
     // Contract is payable
     receive() external payable {}
 
+    /// @notice Setter for the extension logic contract address
+    function setNewLogicContract(address _newLogicContract) external onlyOwner {
+        newLogicContract = _newLogicContract;
+    }
+
+    /// @notice Fallback function that delegates calls to the extension logic contract
+    fallback() external payable {
+        address logic = newLogicContract;
+        require(logic != address(0), "ExchangeRouter: no extension");
+        assembly {
+            calldatacopy(0, 0, calldatasize())
+            let result := delegatecall(gas(), logic, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch result
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
+    }
+
     /// @notice Initialize CcExchangeRouter
     /// @param _startingBlockNumber Transactions that are included in blocks older
     ///                             than _startingBlockNumber cannot be processed
