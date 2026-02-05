@@ -54,4 +54,8 @@ abstract contract PolyConnectorStorage is IPolyConnector {
     // Mapping from token address to its decimals on destination chains
     // Used for handling decimal differences (e.g., USDT: 18 on BSC, 6 on other chains)
     mapping(address => uint256) public tokenDecimalsOnDestinationChain;
+
+    // Mapping to track processed requests to prevent double-fill from Across
+    // chainId => uniqueCounter => processed
+    mapping(uint256 => mapping(uint256 => bool)) public processedRequests;
 }
