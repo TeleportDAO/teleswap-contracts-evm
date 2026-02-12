@@ -89,6 +89,16 @@ contract LockersManagerLogic is
         _;
     }
 
+    // *************** Internal functions ***************
+
+    function _transferCollateral(address _token, address _to, uint256 _amount) internal {
+        if (_token == NATIVE_TOKEN) {
+            Address.sendValue(payable(_to), _amount);
+        } else {
+            IERC20(_token).safeTransfer(_to, _amount);
+        }
+    }
+
     // *************** External functions ***************
 
     /// @notice Whitelist new collateral token with decimal
@@ -370,17 +380,11 @@ contract LockersManagerLogic is
             );
         }
 
-        if (lockerCollateralToken[_msgSender()] == NATIVE_TOKEN) {
-            Address.sendValue(
-                payable(_msgSender()),
-                lockerRequest.collateralTokenLockedAmount
-            );
-        } else {
-            IERC20(lockerCollateralToken[_msgSender()]).transfer(
-                _msgSender(),
-                lockerRequest.collateralTokenLockedAmount
-            );
-        }
+        _transferCollateral(
+            lockerCollateralToken[_msgSender()],
+            _msgSender(),
+            lockerRequest.collateralTokenLockedAmount
+        );
 
         emit RevokeAddLockerRequest(
             _msgSender(),
@@ -538,19 +542,12 @@ contract LockersManagerLogic is
             );
         }
 
-        if (lockerCollateralToken[_msgSender()] == NATIVE_TOKEN) {
-            Address.sendValue(
-                payable(_msgSender()),
-                _removingLocker.collateralTokenLockedAmount +
-                    _removingLocker.reservedCollateralTokenForSlash
-            );
-        } else {
-            IERC20(lockerCollateralToken[_msgSender()]).transfer(
-                _msgSender(),
-                _removingLocker.collateralTokenLockedAmount +
-                    _removingLocker.reservedCollateralTokenForSlash
-            );
-        }
+        _transferCollateral(
+            lockerCollateralToken[_msgSender()],
+            _msgSender(),
+            _removingLocker.collateralTokenLockedAmount +
+                _removingLocker.reservedCollateralTokenForSlash
+        );
 
         emit LockerRemoved(
             _msgSender(),
@@ -590,22 +587,16 @@ contract LockersManagerLogic is
                 _amount
             );
 
-        if (lockerCollateralToken[_lockerTargetAddress] == NATIVE_TOKEN) {
-            Address.sendValue(
-                payable(_recipient),
-                equivalentCollateralToken - rewardAmountInCollateralToken
-            );
-            Address.sendValue(payable(_slasher), rewardAmountInCollateralToken);
-        } else {
-            IERC20(lockerCollateralToken[_lockerTargetAddress]).transfer(
-                _recipient,
-                equivalentCollateralToken - rewardAmountInCollateralToken
-            );
-            IERC20(lockerCollateralToken[_lockerTargetAddress]).transfer(
-                _slasher,
-                rewardAmountInCollateralToken
-            );
-        }
+        _transferCollateral(
+            lockerCollateralToken[_lockerTargetAddress],
+            _recipient,
+            equivalentCollateralToken - rewardAmountInCollateralToken
+        );
+        _transferCollateral(
+            lockerCollateralToken[_lockerTargetAddress],
+            _slasher,
+            rewardAmountInCollateralToken
+        );
 
         emit LockerSlashed(
             _lockerTargetAddress,
@@ -652,14 +643,11 @@ contract LockersManagerLogic is
                 _amount
             );
 
-        if (lockerCollateralToken[_lockerTargetAddress] == NATIVE_TOKEN) {
-            Address.sendValue(payable(_slasher), rewardInCollateralToken);
-        } else {
-            IERC20(lockerCollateralToken[_lockerTargetAddress]).transfer(
-                _slasher,
-                rewardInCollateralToken
-            );
-        }
+        _transferCollateral(
+            lockerCollateralToken[_lockerTargetAddress],
+            _slasher,
+            rewardInCollateralToken
+        );
 
         emit LockerSlashed(
             _lockerTargetAddress,
@@ -730,14 +718,11 @@ contract LockersManagerLogic is
             0
         );
 
-        if (lockerCollateralToken[_lockerTargetAddress] == NATIVE_TOKEN) {
-            Address.sendValue(payable(_msgSender()), _collateralAmount);
-        } else {
-            IERC20(lockerCollateralToken[_lockerTargetAddress]).transfer(
-                _msgSender(),
-                _collateralAmount
-            );
-        }
+        _transferCollateral(
+            lockerCollateralToken[_lockerTargetAddress],
+            _msgSender(),
+            _collateralAmount
+        );
 
         emit LockerLiquidated(
             _lockerTargetAddress,
@@ -787,14 +772,11 @@ contract LockersManagerLogic is
         ITeleBTC(teleBTC).burn(neededTeleBTC);
 
         // Sends bought collateral to user
-        if (lockerCollateralToken[_lockerTargetAddress] == NATIVE_TOKEN) {
-            Address.sendValue(payable(_msgSender()), _collateralAmount);
-        } else {
-            IERC20(lockerCollateralToken[_lockerTargetAddress]).transfer(
-                _msgSender(),
-                _collateralAmount
-            );
-        }
+        _transferCollateral(
+            lockerCollateralToken[_lockerTargetAddress],
+            _msgSender(),
+            _collateralAmount
+        );
 
         emit LockerSlashedCollateralSold(
             _lockerTargetAddress,
@@ -844,53 +826,47 @@ contract LockersManagerLogic is
         return true;
     }
 
-    // /// @notice Decreases collateral of the locker
-    // /// @param _removingCollateralTokenAmount Amount of removed collateral
-    // /// @return True if collateral is removed successfully
-    // function removeCollateralByOwner(
-    //     address _lockerTargetAddress,
-    //     uint256 _removingCollateralTokenAmount
-    // )
-    //     external
-    //     payable
-    //     onlyOwner
-    //     nonZeroValue(_removingCollateralTokenAmount)
-    //     nonReentrant
-    //     returns (bool)
-    // {
-    //     LockersManagerLib.removeFromCollateral(
-    //         lockersMapping[_lockerTargetAddress],
-    //         libConstants,
-    //         libParams,
-    //         lockerReliabilityFactor[_lockerTargetAddress],
-    //         lockerCollateralToken[_lockerTargetAddress],
-    //         collateralDecimal[lockerCollateralToken[_lockerTargetAddress]],
-    //         _removingCollateralTokenAmount
-    //     );
+    /// @notice Decreases collateral of the locker
+    /// @param _removingCollateralTokenAmount Amount of removed collateral
+    /// @return True if collateral is removed successfully
+    function removeCollateralByOwner(
+        address _lockerTargetAddress,
+        uint256 _removingCollateralTokenAmount
+    )
+        external
+        payable
+        onlyOwner
+        nonZeroValue(_removingCollateralTokenAmount)
+        nonReentrant
+        returns (bool)
+    {
+        LockersManagerLib.removeFromCollateral(
+            lockersMapping[_lockerTargetAddress],
+            libConstants,
+            libParams,
+            lockerReliabilityFactor[_lockerTargetAddress],
+            lockerCollateralToken[_lockerTargetAddress],
+            collateralDecimal[lockerCollateralToken[_lockerTargetAddress]],
+            _removingCollateralTokenAmount
+        );
 
 
-    //     if (lockerCollateralToken[_lockerTargetAddress] == NATIVE_TOKEN) {
-    //         Address.sendValue(
-    //             payable(_msgSender()),
-    //             _removingCollateralTokenAmount
-    //         );
-    //     } else {
-    //         IERC20(lockerCollateralToken[_lockerTargetAddress]).safeTransfer(
-    //             _msgSender(),
-    //             _removingCollateralTokenAmount
-    //         );
-    //     }
+        _transferCollateral(
+            lockerCollateralToken[_lockerTargetAddress],
+            _msgSender(),
+            _removingCollateralTokenAmount
+        );
 
-    //     emit CollateralRemoved(
-    //         _lockerTargetAddress,
-    //         lockerCollateralToken[_lockerTargetAddress],
-    //         _removingCollateralTokenAmount,
-    //         lockersMapping[_lockerTargetAddress].collateralTokenLockedAmount,
-    //         block.timestamp
-    //     );
+        emit CollateralRemoved(
+            _lockerTargetAddress,
+            lockerCollateralToken[_lockerTargetAddress],
+            _removingCollateralTokenAmount,
+            lockersMapping[_lockerTargetAddress].collateralTokenLockedAmount,
+            block.timestamp
+        );
 
-    //     return true;
-    // }
+        return true;
+    }
 
     /// @notice Decreases collateral of the locker
     /// @param _removingCollateralTokenAmount Amount of removed collateral
@@ -917,17 +893,11 @@ contract LockersManagerLogic is
 
         if (isLockerActive(_msgSender())) revert LockerActive();
 
-        if (lockerCollateralToken[_msgSender()] == NATIVE_TOKEN) {
-            Address.sendValue(
-                payable(_msgSender()),
-                _removingCollateralTokenAmount
-            );
-        } else {
-            IERC20(lockerCollateralToken[_msgSender()]).safeTransfer(
-                _msgSender(),
-                _removingCollateralTokenAmount
-            );
-        }
+        _transferCollateral(
+            lockerCollateralToken[_msgSender()],
+            _msgSender(),
+            _removingCollateralTokenAmount
+        );
 
         emit CollateralRemoved(
             _msgSender(),
@@ -1066,11 +1036,7 @@ contract LockersManagerLogic is
         address _token,
         uint256 _amount
     ) external onlyOwner nonReentrant {
-        if (_token == NATIVE_TOKEN) {
-            Address.sendValue(payable(owner()), _amount);
-        } else {
-            IERC20(_token).safeTransfer(owner(), _amount);
-        }
+        _transferCollateral(_token, owner(), _amount);
     }
 
     /// @notice Return the Locker status
