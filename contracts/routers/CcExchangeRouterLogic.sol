@@ -314,7 +314,7 @@ contract CcExchangeRouterLogic is
         // Check if the provided path is valid
         require(
             teleBTC == _path[0] &&
-            intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]] == _path[_path.length - 1],
+            _deprecatedIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]] == _path[_path.length - 1],
             "ExchangeRouter: invalid path"
         );
 
@@ -349,7 +349,7 @@ contract CcExchangeRouterLogic is
             */
             address filler =
                 fillerAddressV2[txId][request.recipientAddress]
-                    [intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
+                    [_deprecatedIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
                     [request.outputAmount]
                     [destRealChainId]
                     [extendedCcExchangeRequests[txId].bridgePercentageFee];
@@ -403,7 +403,7 @@ contract CcExchangeRouterLogic is
         );
 
         require(
-            _intermediaryToken == intermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
+            _intermediaryToken == _deprecatedIntermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
             "ExchangeRouter: invalid intermediary token"
         );
 
@@ -596,7 +596,7 @@ contract CcExchangeRouterLogic is
 
         bytes32[3] memory tokens;
         tokens[0] = bytes32(uint256(uint160(teleBTC)));
-        tokens[1] = bytes32(uint256(uint160(intermediaryTokenMapping[request.tokenIDs[1]])));
+        tokens[1] = bytes32(uint256(uint160(_deprecatedIntermediaryTokenMapping[request.tokenIDs[1]])));
         tokens[2] = request.outputToken;
 
         uint256[3] memory amounts;
@@ -1022,7 +1022,7 @@ contract CcExchangeRouterLogic is
         bytes8 _destinationTokenID, 
         address _intermediaryToken
     ) private {
-        intermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
+        _deprecatedIntermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
     }
 
     /// @notice Internal setter for output token decimals

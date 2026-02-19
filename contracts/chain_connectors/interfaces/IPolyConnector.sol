@@ -6,11 +6,6 @@ import "@teleportdao/btc-evm-bridge/contracts/types/ScriptTypesEnum.sol";
 interface IPolyConnector {
     // Structs
 
-    struct SwapAndUnwrapUniversalData {
-        bytes32[] pathFromInputToIntermediaryOnSourceChain;
-        uint256 intermediaryTokenAmount;
-    }
-
     struct UserScript {
         bytes userScript;
         ScriptTypes scriptType;

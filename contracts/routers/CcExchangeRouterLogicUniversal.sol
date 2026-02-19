@@ -4,6 +4,7 @@ pragma solidity >=0.8.0 <=0.8.4;
 import "./CcExchangeRouterStorage.sol";
 import "./CcExchangeRouterStorageV2.sol";
 import "./interfaces/IBurnRouter.sol";
+import "./interfaces/ICcExchangeRouterUniversal.sol";
 import "../dex_connectors/interfaces/IDexConnector.sol";
 import "../erc20/interfaces/ITeleBTC.sol";
 import "../erc20/WETH.sol";
@@ -19,7 +20,8 @@ contract CcExchangeRouterLogicUniversal is
     CcExchangeRouterStorage,
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
-    CcExchangeRouterStorageV2
+    CcExchangeRouterStorageV2,
+    ICcExchangeRouterUniversal
 {
     using BytesLib for bytes;
 
@@ -261,6 +263,30 @@ contract CcExchangeRouterLogicUniversal is
         _setInputTokenDecimalsOnDestinationChain(_inputToken, _decimalsOnDestinationChain);
     }
 
+    // --- Stubs for ICcExchangeRouter functions not used in Universal ---
+
+    function fillTxV2(
+        bytes32, bytes32, address, bytes32, uint, uint, uint, uint, bytes memory
+    ) external payable override {}
+
+    function wrapAndSwapV2(
+        TxAndProof memory, bytes calldata, address[] memory
+    ) external payable override returns(bool) {}
+
+    function setIntermediaryTokenMapping(
+        bytes8, address
+    ) external override {}
+
+    function setDynamicLockerFee(
+        uint, bytes32, uint[] calldata, uint[] calldata, uint[] calldata
+    ) external override {}
+
+    function setFeeTierBoundaries(uint[] calldata) external override {}
+
+    function getEffectiveLockerFee(
+        uint, bytes32, uint, uint
+    ) external view override returns (uint) {}
+
     /// @notice Check if a request has been processed
     /// @dev It prevents re-submitting a processed request
     /// @param _txId The transaction ID of request on Bitcoin
@@ -396,7 +422,7 @@ contract CcExchangeRouterLogicUniversal is
             if (filler != address(0)) { // Request has been filled
                 // Send TeleBTC to filler who filled the request
                 _sendTeleBtcToFillerUniversal(
-                    SendTeleBtcToFillerUniversalArgs({
+                    ICcExchangeRouterUniversal.SendTeleBtcToFillerUniversalArgs({
                         filler: filler,
                         txId: txId,
                         lockerLockingScript: _lockerLockingScript,
@@ -523,7 +549,7 @@ contract CcExchangeRouterLogicUniversal is
         }
 
         _processFillUniversal(
-            FillUniversalArgs({
+            ICcExchangeRouterUniversal.FillUniversalArgs({
                 txId: _txId,
                 recipient: _recipient,
                 intermediaryToken: _intermediaryToken,
@@ -541,7 +567,7 @@ contract CcExchangeRouterLogicUniversal is
     }
 
     function _processFillUniversal(
-        FillUniversalArgs memory args
+        ICcExchangeRouterUniversal.FillUniversalArgs memory args
     ) private {
         if (args.destRealChainId == chainId) { // Requests that belongs to the current chain
             if (args.intermediaryToken == wrappedNativeToken) {
@@ -587,7 +613,7 @@ contract CcExchangeRouterLogicUniversal is
                 "ExchangeRouter: no allowance"
             );
             _sendTokenToOtherChainUniversal(
-                ICcExchangeRouter.SendTokenToOtherChainArguments(
+                ICcExchangeRouterUniversal.SendTokenToOtherChainArguments(
                     args.txId,
                     args.destRealChainId,
                     args.intermediaryToken,
@@ -688,7 +714,7 @@ contract CcExchangeRouterLogicUniversal is
     }
 
     function _sendTeleBtcToFillerUniversal(
-        SendTeleBtcToFillerUniversalArgs memory args
+        ICcExchangeRouterUniversal.SendTeleBtcToFillerUniversalArgs memory args
     ) private {
         // Send fees to the teleporter, treasury, third party, and locker
         _sendFees(args.txId, args.lockerLockingScript);
@@ -767,7 +793,7 @@ emit FillerRefunded(args.filler, args.txId, extendedRequest.remainedInputAmount)
 
     /// @notice Send tokens to "any" chain using Across
     function _sendTokenToOtherChainUniversal(
-        ICcExchangeRouter.SendTokenToOtherChainArguments memory arguments,
+        ICcExchangeRouterUniversal.SendTokenToOtherChainArguments memory arguments,
         bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
         uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
     ) private {
@@ -866,7 +892,7 @@ address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
         uint256 _destRealChainId
     ) private {
             (bool result, uint256[] memory amounts) = _swapUniversal(
-            ICcExchangeRouter.swapArgumentsUniversal(
+            ICcExchangeRouterUniversal.swapArgumentsUniversal(
                 _destRealChainId,
                 _lockerLockingScript,
                 ccExchangeRequestsV2[_txId],
@@ -893,7 +919,7 @@ address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
             
             if (_destRealChainId != chainId) {
                 _sendTokenToOtherChainUniversal(
-                    ICcExchangeRouter.SendTokenToOtherChainArguments(
+                    ICcExchangeRouterUniversal.SendTokenToOtherChainArguments(
                             _txId,
                             _destRealChainId,
                             _pathFromTeleBtcToIntermediary[_pathFromTeleBtcToIntermediary.length - 1],
@@ -920,11 +946,11 @@ address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
 
     /// @notice Swap TeleBTC for the output token
     function _swapUniversal(
-        ICcExchangeRouter.swapArgumentsUniversal memory swapArguments
+        ICcExchangeRouterUniversal.swapArgumentsUniversal memory swapArguments
     ) private returns (bool result, uint256[] memory amounts) {
         (result, amounts) = CcExchangeRouterLibExtensionUniversal.swapUniversal(
             swapArguments,
-            ICcExchangeRouter.SwapUniversalData(
+            ICcExchangeRouterUniversal.SwapUniversalData(
                 teleBTC,
                 wrappedNativeToken,
                 chainId,
