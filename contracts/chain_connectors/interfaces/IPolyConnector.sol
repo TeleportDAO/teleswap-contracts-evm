@@ -46,18 +46,22 @@ interface IPolyConnector {
         UserScript userScript;
     }
 
-    struct exchangeForBtcArgumentsV2 {
+    struct exchangeForBtcArgumentsUniversal {
         uint256 uniqueCounter;
         uint256 chainId;
         bytes32 refundAddress;
         address exchangeConnector;
         uint256 outputAmount;
         bool isInputFixed;
-        address[] path;
+        SwapAndUnwrapUniversalPaths paths;
         UserAndLockerScript scripts;
         uint256 thirdParty;
     }
 
+    struct SwapAndUnwrapUniversalPaths {
+        address[] _pathFromInputToIntermediaryOnSourceChain;
+        address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
+    }
 
     // Events
 
@@ -83,7 +87,7 @@ interface IPolyConnector {
         uint256 thirdPartyId
     );
 
-    event NewSwapAndUnwrapV2(
+    event NewSwapAndUnwrapUniversal(
         uint256 uniqueCounter,
         uint256 chainId,
         address exchangeConnector,
@@ -111,7 +115,7 @@ interface IPolyConnector {
         uint256 thirdPartyId
     );
 
-    event FailedSwapAndUnwrapV2(
+    event FailedSwapAndUnwrapUniversal(
         uint256 uniqueCounter,
         uint256 chainId,
         address exchangeConnector,
@@ -140,6 +144,17 @@ interface IPolyConnector {
         uint256 amount,
         int64 relayerFeePercentage,
         bytes32 refundAddress
+    );
+
+    event WithdrewFundsToSourceChainUniversal(
+        uint256 uniqueCounter,
+        uint256 chainId,
+        address token,
+        uint256 amount,
+        int64 relayerFeePercentage,
+        bytes32 refundAddress,
+        bytes32[] pathFromIntermediaryToInputOnSourceChain,
+        uint256[] amountsFromIntermediaryToInputOnSourceChain
     );
 
     event NewSwapAndUnwrapRune(
@@ -178,6 +193,14 @@ interface IPolyConnector {
     event BurnRouterUpdated(address oldBurnRouter, address newBurnRouter);
 
     event LockersProxyUpdated(address oldLockersProxy, address newLockersProxy);
+
+    event MsgSent(
+        uint256 uniqueCounter,
+        bytes data,
+        address sourceChainInputToken,
+        uint256 amount,
+        int64 bridgePercentageFee
+    );
 
     // Read-only functions
 
@@ -220,6 +243,14 @@ interface IPolyConnector {
         bytes32 _destinationToken
     ) external;
 
+    function setBridgeConnectorMapping(
+        uint256 _destinationChainId,
+        bytes32 _bridgeConnector
+    ) external;
+
+    function setCurrChainId(uint256 _currChainId) external;
+
+
     function withdrawFundsToSourceChain(
         bytes memory _message,
         uint8 _v,
@@ -239,5 +270,16 @@ interface IPolyConnector {
         uint256 _uniqueCounter,
         address _token,
         int64 _relayerFeePercentage
+    ) external;
+
+    function swapBackAndRefundBTCByAdmin(
+        bytes32 _bitcoinTxId,
+        address _token, // intermediary token on this chain (polygon)
+        bytes32 _refundAddress,
+        address _exchangeConnector,
+        uint256 _minOutputAmount,
+        UserAndLockerScript calldata _userAndLockerScript,
+        address[] calldata _path,
+        uint256[] calldata _amounts
     ) external;
 }

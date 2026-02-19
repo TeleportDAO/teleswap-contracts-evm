@@ -13,6 +13,10 @@ abstract contract PolyConnectorStorage is IPolyConnector {
         bytes userScript;
         ScriptTypes scriptType;
     }
+    struct SwapAndUnwrapUniversalData {
+        bytes32[] pathFromInputToIntermediaryOnSourceChain;
+        uint256 intermediaryTokenAmount;
+    }
 
     address public constant ETH_ADDR =
         0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;

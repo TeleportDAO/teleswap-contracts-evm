@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 // import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import "./EthConnectorStorage.sol";
 import "./interfaces/IEthConnector.sol";
+import "../dex_connectors/interfaces/IDexConnector.sol";
 
 contract EthConnectorLogic is
     IEthConnector,
@@ -111,6 +112,20 @@ contract EthConnectorLogic is
         });
     }
 
+    /// @notice Setter for Exchange Connector
+    function setExchangeConnector(
+        address _exchangeConnector
+    ) external override onlyOwner nonZeroAddress(_exchangeConnector) {
+        exchangeConnector = _exchangeConnector;
+    }
+
+    /// @notice Setter for Gas Limit
+    function setGasLimit(
+        uint256 _gasLimit
+    ) external override onlyOwner {
+        gasLimit = _gasLimit;
+    }
+
     /// @notice Approve token for spender
     function approveToken(
         address _token,
@@ -121,12 +136,12 @@ contract EthConnectorLogic is
     }
 
     /// @notice Request exchanging token for BTC
-    /// @dev To find teleBTCAmount, _relayerFeePercentage should be reduced from the inputTokenAmount
+    /// @dev To find teleBTCAmount, _bridgePercentageFee should be reduced from the inputTokenAmount
     /// @param _token Address of input token (on the current chain)
     /// @param _exchangeConnector Address of exchange connector to be used
     /// @param _amounts [inputTokenAmount, teleBTCAmount]
     /// @param _path of exchanging inputToken to teleBTC (these are Polygon token addresses, so _path[0] != _token)
-    /// @param _relayerFeePercentage Fee percentage for relayer
+    /// @param _bridgePercentageFee Fee percentage for relayer
     /// @param _thirdParty Id of third party
     function swapAndUnwrap(
         address _token,
@@ -135,10 +150,10 @@ contract EthConnectorLogic is
         bool _isInputFixed,
         address[] calldata _path,
         UserAndLockerScript calldata _userAndLockerScript,
-        int64 _relayerFeePercentage,
+        int64 _bridgePercentageFee,
         uint256 _thirdParty
     ) external payable override nonReentrant {
-        _validateTransfer(_token, _amounts[0]);
+        _checkMessageValue(_token, _amounts[0]);
 
         bytes memory message = abi.encode(
             "swapAndUnwrap",
@@ -153,13 +168,14 @@ contract EthConnectorLogic is
             _thirdParty
         );
 
-        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
+        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _bridgePercentageFee);
         _sendMsgUsingAcross(
             _exchangeConnector,
             _token,
             _amounts[0],
             message,
-            _relayerFeePercentage
+            _bridgePercentageFee,
+            false
         );
     }
 
@@ -170,11 +186,11 @@ contract EthConnectorLogic is
         bool _isInputFixed,
         address[] calldata _path,
         UserAndLockerScript calldata _userAndLockerScript,
-        int64 _relayerFeePercentage,
+        int64 _bridgePercentageFee,
         uint256 _thirdParty,
         address _refundAddress
     ) external payable override nonReentrant {
-        _validateTransfer(_token, _amounts[0]);
+        _checkMessageValue(_token, _amounts[0]);
 
         bytes memory message = abi.encode(
             "swapAndUnwrap",
@@ -189,9 +205,9 @@ contract EthConnectorLogic is
             _thirdParty
         );
 
-        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
+        emit MsgSent(uniqueCounter, message, _token, _amounts[0], _bridgePercentageFee);
 
-        // if (_relayerFeePercentage == 0) {
+        // if (_bridgePercentageFee == 0) {
         //     // Here we are using Stargate to send the message
         //     _sendMsgUsingStargate(
         //         _token,
@@ -206,9 +222,78 @@ contract EthConnectorLogic is
                 _token,
                 _amounts[0],
                 message,
-                _relayerFeePercentage
+                _bridgePercentageFee,
+                false
             );
         // }
+    }
+
+    /// @notice Request exchanging token for BTC using universal route
+    /// @param _arguments Struct containing swap arguments
+    /// @param _exchangeConnector Address of exchange connector to be used on the intermediary chain
+    /// @param _isInputFixed Whether the input token amount is fixed
+    /// @param _userAndLockerScript User and locker script
+    /// @param _thirdParty Third party ID
+    /// @param _refundAddress Address to receive the input token in case of failure (user's address)
+    function swapAndUnwrapUniversal(
+        SwapAndUnwrapUniversalArguments calldata _arguments,
+        address _exchangeConnector,
+        bool _isInputFixed,
+        UserAndLockerScript calldata _userAndLockerScript,
+        uint256 _thirdParty,
+        address _refundAddress
+    ) external override payable nonReentrant {
+        _checkMessageValue(
+            _arguments._pathFromInputToIntermediaryOnSourceChain[0], // Input token on source chain
+            _arguments._amountsFromInputToIntermediaryOnSourceChain[0] // Input token amount on source chain
+        );
+
+        address intermediaryToken = _arguments._pathFromInputToIntermediaryOnSourceChain[
+            _arguments._pathFromInputToIntermediaryOnSourceChain.length - 1
+        ];
+
+        // Swap input token to intermediary token on source chain
+        uint256 intermediaryTokenAmount = _swapInputTokenToIntermediaryTokenOnSourceChain(
+            _arguments._pathFromInputToIntermediaryOnSourceChain,
+            _arguments._amountsFromInputToIntermediaryOnSourceChain
+        );
+
+        SwapAndUnwrapUniversalPaths memory paths = SwapAndUnwrapUniversalPaths({
+            _pathFromInputToIntermediaryOnSourceChain: _arguments._pathFromInputToIntermediaryOnSourceChain,
+            _pathFromIntermediaryToOutputOnIntermediaryChain: _arguments._pathFromIntermediaryToOutputOnIntermediaryChain
+        });
+
+        // Send message to intermediary chain to swap intermediary token to TeleBTC
+        bytes memory message = abi.encode(
+            "swapAndUnwrapUniversal",
+            uniqueCounter,
+            currChainId,
+            _refundAddress,
+            _exchangeConnector,
+            _arguments._minOutputAmount,
+            _isInputFixed,
+            paths,
+            _userAndLockerScript,
+            _thirdParty
+        );
+
+        emit MsgSent(
+            uniqueCounter, 
+            message, 
+            _arguments._pathFromInputToIntermediaryOnSourceChain[0], 
+            _arguments._amountsFromInputToIntermediaryOnSourceChain[0], 
+            _arguments._bridgePercentageFee
+        );
+
+        // Here we are using Across to send the message
+        _sendMsgUsingAcross(
+            _exchangeConnector,
+            intermediaryToken,
+            intermediaryTokenAmount,
+            message,
+            _arguments._bridgePercentageFee,
+            true
+        );
     }
 
     /// @notice Request exchanging token for RUNE
@@ -220,10 +305,10 @@ contract EthConnectorLogic is
         uint256 _internalId,
         address[] calldata _path,
         UserScript calldata _userScript,
-        int64 _relayerFeePercentage,
+        int64 _bridgePercentageFee,
         uint256 _thirdParty
     ) external payable override nonReentrant {
-        _validateTransfer(_token, _amounts[0]);
+        _checkMessageValue(_token, _amounts[0]);
 
         bytes memory message = abi.encode(
             "swapAndUnwrapRune",
@@ -238,18 +323,363 @@ contract EthConnectorLogic is
             _thirdParty
         );
 
-        emit MsgSentRune(uniqueCounter, message, _token, _amounts[0], _relayerFeePercentage);
+        emit MsgSentRune(uniqueCounter, message, _token, _amounts[0], _bridgePercentageFee);
         _sendMsgUsingAcross(
             _exchangeConnector,
             _token,
             _amounts[0],
             message,
-            _relayerFeePercentage
+            _bridgePercentageFee,
+            false
         );
     }
 
-    /// @notice Internal function to validate ETH/token transfer
-    function _validateTransfer(address _token, uint256 _amount) private view {
+    /// @notice Process requests coming from Ethereum (using Across V3)
+    function handleV3AcrossMessage(
+        address _tokenSent,
+        uint256 _amount,
+        address,
+        bytes memory _message
+    ) external override nonReentrant {
+        // To avoid gas limit issues
+        require(gasleft() >= gasLimit, "EthConnectorLogic: low gas");
+
+        // Check the msg origin
+        require(msg.sender == across, "EthConnectorLogic: not across");
+
+        // Extract purpose, uniqueCounter and chainId
+        (
+            string memory purpose, 
+            uint256 uniqueCounter, // bitcoinTxId for wrapAndSwapUniversal
+            uint256 chainId // current chain id
+        ) = abi.decode(_message, (string, uint256, uint256));
+        
+        emit MsgReceived(purpose, uniqueCounter, chainId, _message);
+
+        if (_isEqualString(purpose, "swapBackAndRefund")) {
+            // Received swap back and refund request from source chain, as a result of failed swap and unwrap on intermediary chain to swap back intermediary token to input token on source chain and refund to user
+            _swapBackAndRefund(_amount, _message, _tokenSent);
+        } else if (_isEqualString(purpose, "wrapAndSwapUniversal")) {
+            // Received wrap and swap request from source chain, to swap intermediary token to input token on source chain
+            _wrapAndSwapUniversal(_amount, _message, _tokenSent);
+        }
+    }
+
+    /// @notice Called by admin to swap failed wrap and swap request to teleBTC and refund BTC to user
+    /// @dev When a wrap and swap fails on this chain, admin can call this to send a cross-chain message
+    ///      to the intermediary chain (eg. polygon) to swap the intermediary token to TeleBTC and unwrap to BTC
+    /// @param _args Struct containing all function arguments
+    function swapBackAndRefundBTCByAdmin(
+        SwapBackAndRefundBTCArguments calldata _args
+    ) external override nonReentrant {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "EthConnector: not authorized"
+        );
+
+        // Get the amount from failed wrap and swap requests
+        uint256 _amount = failedWrapAndSwapReqs[_args.targetAddress][_args.intermediaryChainId][_args.bitcoinTxId][_args.tokenSent]; 
+        
+
+        require(_amount == _args.amounts[0], "EthConnector: invalid amount");
+        
+        require(
+            IERC20(_args.tokenSent).balanceOf(address(this)) >= _amount,
+            "EthConnector: low balance"
+        );
+
+        require(_args.path[0] == _args.tokenSent, "EthConnector: invalid path");
+
+        // Update withheld amount
+        delete failedWrapAndSwapReqs[_args.targetAddress][_args.intermediaryChainId][_args.bitcoinTxId][_args.tokenSent];
+
+        require(_amount > 0, "EthConnector: already withdrawn");
+
+        SwapAndUnwrapUniversalPaths memory paths = SwapAndUnwrapUniversalPaths({
+            _pathFromInputToIntermediaryOnSourceChain: new address[](0),
+            _pathFromIntermediaryToOutputOnIntermediaryChain: _args.path
+        });
+        // Create message to send to intermediary chain (polygon) to swap and unwrap to BTC
+        bytes memory message = abi.encode(
+            "swapBackAndRefundBTC",
+            uint256(_args.bitcoinTxId),
+            _args.intermediaryChainId,
+            bytes32(uint256(uint160(_args.targetAddress))), // Convert address to bytes32
+            _args.exchangeConnector,
+            _args.minOutputAmount,
+            true, // isInputFixed
+            paths,
+            _args.userAndLockerScript,
+            0 // _thirdParty
+        );
+
+        emit SwappedBackAndRefundedBTCUniversal(
+            uint256(_args.bitcoinTxId),
+            _args.intermediaryChainId,
+            _args.tokenSent,
+            _amount,
+            _args.bridgePercentageFee,
+            _args.targetAddress,
+            _args.path,
+            _args.amounts
+        );
+
+        // Send message to intermediary chain to swap intermediary token to TeleBTC and unwrap to BTC
+        _sendMsgUsingAcross(
+            _args.exchangeConnector,
+            _args.tokenSent,
+            _amount,
+            message,
+            _args.bridgePercentageFee,
+            true // tokens already in contract
+        );
+    }
+
+    /// @notice Allows admin to swap failed swap back and refund requests and send input token to user
+    /// @dev When swap fails in _swapBackAndRefund, the intermediary token amount is saved in failedSwapAndUnwrapRefundReqs.
+    ///      This function allows admin to swap the intermediary token back to input token and refund it to the user.
+    /// @param _uniqueCounter Unique counter from the original swap and unwrap universal request
+    /// @param _refundAddress Address to receive the input token (user's address)
+    /// @param _inputToken Input token address that the user originally sent
+    /// @param _pathFromIntermediaryToInputOnSourceChain Swap path from intermediary token to input token on source chain
+    /// @param _amountsFromIntermediaryToInputOnSourceChain Swap amounts [intermediaryTokenAmount, inputTokenAmount]
+    function refundFailedSwapAndUnwrapUniversal(
+        uint256 _uniqueCounter,
+        address _refundAddress,
+        address _inputToken,
+        address[] calldata _pathFromIntermediaryToInputOnSourceChain,
+        uint256[] calldata _amountsFromIntermediaryToInputOnSourceChain
+    ) external override nonReentrant {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "EthConnector: not authorized"
+        );
+
+        address intermediaryToken = _pathFromIntermediaryToInputOnSourceChain[0];
+
+        uint256 storedAmount = failedSwapAndUnwrapRefundReqs[_refundAddress][
+            _inputToken
+        ][_uniqueCounter][intermediaryToken];
+
+        require(
+            storedAmount == _amountsFromIntermediaryToInputOnSourceChain[0],
+            "EthConnector: invalid amount"
+        );
+        require(
+            IERC20(intermediaryToken).balanceOf(address(this)) >=
+                _amountsFromIntermediaryToInputOnSourceChain[0],
+            "EthConnector: low balance"
+        );
+
+        // Delete the mapping entry
+        delete failedSwapAndUnwrapRefundReqs[_refundAddress][_inputToken][
+            _uniqueCounter
+        ][intermediaryToken];
+
+        // Swap intermediary token to input token on source chain
+        uint256 inputTokenAmount = _swapTokens(
+            _pathFromIntermediaryToInputOnSourceChain,
+            _amountsFromIntermediaryToInputOnSourceChain
+        );
+
+        require(inputTokenAmount > 0, "EthConnector: swap failed");
+
+        emit RefundedFailedSwapAndUnwrapUniversal(
+            _uniqueCounter,
+            _refundAddress,
+            _inputToken,
+            inputTokenAmount,
+            _pathFromIntermediaryToInputOnSourceChain,
+            _amountsFromIntermediaryToInputOnSourceChain
+        );
+
+        // Transfer input token to user
+        IERC20(_inputToken).safeTransfer(_refundAddress, inputTokenAmount);
+    }
+
+    /// @notice Checks if two strings are equal
+    function _isEqualString(
+        string memory _a,
+        string memory _b
+    ) internal pure returns (bool) {
+        return
+            keccak256(abi.encodePacked(_a)) == keccak256(abi.encodePacked(_b));
+    }
+
+    function _wrapAndSwapUniversal(
+        uint256 _amount,
+        bytes memory _message,
+        address _tokenSent
+    ) internal {
+        wrapAndSwapForDestTokenArguments memory arguments = _decodeWrapAndSwapReq(_message);
+
+        require(
+            arguments.pathFromIntermediaryToDestTokenOnDestChain[0] == _tokenSent,
+            "EthConnectorLogic: invalid path"
+        );
+
+        require(
+            arguments.amountsFromIntermediaryToDestTokenOnDestChain[0] == _amount,
+            "EthConnectorLogic: invalid amount"
+        );
+
+        require(
+            arguments.destinationChainId == currChainId,
+            "EthConnectorLogic: invalid destination chain"
+        );
+
+        address destToken = arguments.pathFromIntermediaryToDestTokenOnDestChain[
+            arguments.pathFromIntermediaryToDestTokenOnDestChain.length - 1
+        ];
+
+        // Swap intermediary token to input token on source chain
+        uint256 destTokenAmount = _swapTokens(
+            arguments.pathFromIntermediaryToDestTokenOnDestChain,
+            arguments.amountsFromIntermediaryToDestTokenOnDestChain
+        );
+
+        if (destTokenAmount > 0) {
+            emit WrappedAndSwappedToDestChain(
+                arguments.bitcoinTxId,
+                arguments.destinationChainId,
+                arguments.intermediaryChainId,
+                arguments.targetAddress,
+                destTokenAmount,
+                arguments.pathFromIntermediaryToDestTokenOnDestChain,
+                arguments.amountsFromIntermediaryToDestTokenOnDestChain
+            );
+
+            IERC20(destToken).safeTransfer(
+                arguments.targetAddress,
+                destTokenAmount
+            );
+        } else {
+            // Save wrap and swap info so admin can refund BTC to user in future
+            failedWrapAndSwapReqs[arguments.targetAddress][arguments.intermediaryChainId][
+                arguments.bitcoinTxId
+            ][_tokenSent] = _amount;
+
+            emit FailedWrapAndSwapToDestChain(
+                arguments.bitcoinTxId,
+                arguments.destinationChainId,
+                arguments.intermediaryChainId,
+                arguments.targetAddress,
+                destTokenAmount,
+                arguments.pathFromIntermediaryToDestTokenOnDestChain,
+                arguments.amountsFromIntermediaryToDestTokenOnDestChain
+            );
+        }
+    }
+
+    /// @notice Helper for exchanging token for the source token on the source chain
+    function _swapBackAndRefund(
+        uint256 _amount,
+        bytes memory _message,
+        address _tokenSent
+    ) internal {
+        exchangeForSourceTokenArguments memory arguments = _decodeRefundReq(_message);
+
+        require(
+            arguments.pathFromIntermediaryToInputOnSourceChain[0] == _tokenSent,
+            "EthConnectorLogic: invalid path"
+        );
+
+        require(
+            arguments.amountsFromIntermediaryToInputOnSourceChain[0] == _amount,
+            "EthConnectorLogic: invalid amount"
+        );
+
+        address inputToken = arguments.pathFromIntermediaryToInputOnSourceChain[
+            arguments.pathFromIntermediaryToInputOnSourceChain.length - 1
+        ];
+
+        // Swap intermediary token to input token on source chain
+        uint256 inputTokenAmount = _swapTokens(
+            arguments.pathFromIntermediaryToInputOnSourceChain,
+            arguments.amountsFromIntermediaryToInputOnSourceChain
+        );
+
+        if (inputTokenAmount > 0) {
+            IERC20(inputToken).safeTransfer(
+                arguments.refundAddress,
+                inputTokenAmount
+            );
+
+            emit SwappedBackAndRefundedToSourceChain(
+                arguments.uniqueCounter,
+                arguments.chainId,
+                arguments.refundAddress,
+                inputTokenAmount,
+                arguments.pathFromIntermediaryToInputOnSourceChain,
+                arguments.amountsFromIntermediaryToInputOnSourceChain
+            );
+        } else {
+            // Save token amount so user can withdraw it in future
+            failedSwapAndUnwrapRefundReqs[arguments.refundAddress][inputToken][
+                arguments.uniqueCounter
+            ][_tokenSent] = _amount;
+
+            emit FailedSwapBackAndRefundToSourceChain(
+                arguments.uniqueCounter,
+                arguments.chainId,
+                arguments.refundAddress,
+                inputToken,
+                _tokenSent,
+                _amount
+            );
+        }
+    }
+
+    function _decodeWrapAndSwapReq(
+        bytes memory _message
+    ) private pure returns (wrapAndSwapForDestTokenArguments memory arguments) {
+        (
+            , // string "wrapAndSwapUniversal"
+            arguments.bitcoinTxId,
+            arguments.destinationChainId,
+            arguments.intermediaryChainId,
+            arguments.targetAddress,
+            arguments.pathFromIntermediaryToDestTokenOnDestChain,
+            arguments.amountsFromIntermediaryToDestTokenOnDestChain
+        ) = abi.decode(
+            _message,
+            (
+                string,
+                bytes32,
+                uint256,
+                uint256,
+                address,
+                address[],
+                uint256[]
+            )
+        );
+    }
+
+    function _decodeRefundReq(
+        bytes memory _message
+    ) private pure returns (exchangeForSourceTokenArguments memory arguments) {
+        (
+            , // string "swapBackAndRefund"
+            arguments.uniqueCounter, // the same as the initial request
+            arguments.chainId, // the current chain id (as in the original request)
+            arguments.refundAddress, // the user address which originated the swap and unwrap request
+            arguments.pathFromIntermediaryToInputOnSourceChain,
+            arguments.amountsFromIntermediaryToInputOnSourceChain
+        ) = abi.decode(
+            _message,
+            (
+                string,
+                uint256,
+                uint256,
+                address,
+                address[],
+                uint256[]
+            )
+        );
+    }
+
+    /// @notice Internal function to check ETH value is correct
+    function _checkMessageValue(address _token, uint256 _amount) private view {
         if (msg.value == _amount) {
             require(_token == ETH_ADDR || _token == wrappedNativeToken, "EthConnectorLogic: wrong value");
         } else {
@@ -258,58 +688,149 @@ contract EthConnectorLogic is
     }
 
     /// @notice Send tokens and message using Across bridge
+    /// @param _exchangeConnector Address of exchange connector to be used on the intermediary chain
+    /// @param _token Address of the intermediary token to be sent
+    /// @param _amount Amount of intermediary token to be sent
+    /// @param _message Message to be sent
+    /// @param _bridgePercentageFee Bridge percentage fee
+    /// @param _tokensAlreadyInContract If true, tokens are already in contract (e.g., after swap). If false, transfer from user.
     function _sendMsgUsingAcross(
         address _exchangeConnector,
         address _token,
         uint256 _amount,
         bytes memory _message,
-        int64 _relayerFeePercentage
+        int64 _bridgePercentageFee,
+        bool _tokensAlreadyInContract
     ) internal {
         uniqueCounter++;
+
+        // Cache to reduce stack usage
+        BridgeConnectorData storage connectorData = bridgeConnectorMapping[_exchangeConnector];
+        uint256 targetChainId = connectorData.targetChainId;
 
         if (msg.value > 0) { // Token is ETH
             _token = wrappedNativeToken;
         } else {
-            // Transfer tokens from user to contract
-            IERC20(_token).safeTransferFrom(
-                _msgSender(),
-                address(this),
-                _amount
-            );
+            if (!_tokensAlreadyInContract) {
+                IERC20(_token).safeTransferFrom(
+                    _msgSender(),
+                    address(this),
+                    _amount
+                );
+            }
             IERC20(_token).safeApprove(across, _amount);
         }
 
-        uint256 inputAmount = _amount;
-        if (outputTokenDecimalsOnDestinationChain[bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId]][bridgeConnectorMapping[_exchangeConnector].targetChainId] != 0) {
-            inputAmount = _amount * 10 ** (18 - outputTokenDecimalsOnDestinationChain[bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId]][bridgeConnectorMapping[_exchangeConnector].targetChainId]);
+        address outputToken = bridgeTokenMapping[_token][targetChainId];
+        uint256 outputAmount = _amount;
+        if (outputTokenDecimalsOnDestinationChain[outputToken][targetChainId] != 0) {
+            outputAmount = _amount * 10 ** (18 - outputTokenDecimalsOnDestinationChain[outputToken][targetChainId]);
         }
-        uint256 outputAmount = inputAmount * (1e18 - uint256(uint64(_relayerFeePercentage))) / 1e18;
+        outputAmount = outputAmount * (1e18 - uint256(uint64(_bridgePercentageFee))) / 1e18;
 
-        // Call across for transferring token and msg
+        _executeAcrossDeposit(
+            connectorData.targetChainConnectorProxy,
+            _token,
+            outputToken,
+            _amount,
+            outputAmount,
+            targetChainId,
+            _message
+        );
+    }
+
+    /// @notice Execute Across deposit call
+    function _executeAcrossDeposit(
+        address _recipient,
+        address _inputToken,
+        address _outputToken,
+        uint256 _inputAmount,
+        uint256 _outputAmount,
+        uint256 _destChainId,
+        bytes memory _message
+    ) private {
         bytes memory callData = abi.encodeWithSignature(
             "depositV3(address,address,address,address,uint256,uint256,uint256,address,uint32,uint32,uint32,bytes)",
             acrossAdmin, // depositor
-            bridgeConnectorMapping[_exchangeConnector].targetChainConnectorProxy, // recipient
-            _token, // inputToken
-            bridgeTokenMapping[_token][bridgeConnectorMapping[_exchangeConnector].targetChainId], // outputToken (note: for address(0), fillers will replace this with the destination chain equivalent of the input token)
-            _amount, // inputAmount
-            outputAmount, // outputAmount
-            bridgeConnectorMapping[_exchangeConnector].targetChainId, // destinationChainId
-            address(0), // exclusiveRelayer (none for now)
+            _recipient, // recipient
+            _inputToken, // inputToken
+            _outputToken, // outputToken
+            _inputAmount, // inputAmount
+            _outputAmount, // outputAmount
+            _destChainId, // destinationChainId
+            address(0), // exclusiveRelayer
             uint32(block.timestamp), // quoteTimestamp
-            uint32(block.timestamp + 4 hours), // fillDeadline (4 hours from now)
+            uint32(block.timestamp + 4 hours), // fillDeadline
             0, // exclusivityDeadline
             _message // message
         );
 
         // Append integrator identifier
-        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083"); // delimiter (1dc0de) + integratorID (0x0083)
+        bytes memory finalCallData = abi.encodePacked(callData, hex"1dc0de0083");
 
         Address.functionCallWithValue(
             across,
             finalCallData,
             msg.value
         );
+    }
+
+    function _swapTokens(
+        address[] memory _pathFromInputTokenToOutputToken,
+        uint256[] memory _amountsFromInputTokenToOutputToken
+    ) internal returns (uint256 _outputTokenAmount) {
+        address inputToken = _pathFromInputTokenToOutputToken[0];
+
+        // Approve exchange connector to spend intermediary tokens
+        IERC20(inputToken).safeApprove(exchangeConnector, _amountsFromInputTokenToOutputToken[0]);
+
+        (bool success, uint256[] memory amounts) = IDexConnector(exchangeConnector).swap(
+            _amountsFromInputTokenToOutputToken[0], // Input token amount
+            _amountsFromInputTokenToOutputToken[1], // Output token amount
+            _pathFromInputTokenToOutputToken,
+            address(this),
+            block.timestamp,
+            true
+        );
+
+        if (success) {
+            _outputTokenAmount = amounts[amounts.length - 1];
+        } else {
+            // Funds are already in the contract, so we return 0 so that we can save the failed swap in contract's state
+            _outputTokenAmount = 0;
+        }
+    }
+
+    function _swapInputTokenToIntermediaryTokenOnSourceChain(
+        address[] calldata _pathFromInputToIntermediaryOnSourceChain,
+        uint256[2] calldata _amountsFromInputToIntermediaryOnSourceChain
+    ) internal returns (uint256 _intermediaryTokenAmount) {
+        address inputToken = _pathFromInputToIntermediaryOnSourceChain[0];
+        // Transfer tokens from user to contract
+        IERC20(inputToken).safeTransferFrom(
+            _msgSender(),
+            address(this),
+            _amountsFromInputToIntermediaryOnSourceChain[0]
+        );
+
+        // Approve exchange connector to spend intermediary tokens
+        IERC20(inputToken).safeApprove(exchangeConnector, _amountsFromInputToIntermediaryOnSourceChain[0]);
+        
+        (bool success, uint256[] memory amounts) = IDexConnector(exchangeConnector).swap(
+            _amountsFromInputToIntermediaryOnSourceChain[0], // Input token amount on source chain
+            _amountsFromInputToIntermediaryOnSourceChain[1], // Intermediary token amount on source chain
+            _pathFromInputToIntermediaryOnSourceChain,
+            address(this),
+            block.timestamp,
+            true
+        );
+
+        if (success) {
+            _intermediaryTokenAmount = amounts[amounts.length - 1];
+        } else {
+            // Reverting is better than returning 0, as it reverts the swap and unwrap transaction and prevents the input tokens from being locked in the contract
+            revert("EthConnectorLogic: swap failed");
+        }
     }
 
     // function _sendMsgUsingStargate(
