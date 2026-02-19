@@ -256,4 +256,59 @@ interface IBurnRouter {
         uint[] memory _indexesAndBlockNumbers
         // ^ [inputIndex, inputTxIndex, outputTxIndex, inputTxBlockNumber, outputTxBlockNumber]
     ) external payable;
+
+    // Dynamic fee events
+
+    event DynamicLockerFeeSet(
+        uint indexed chainId,
+        bytes32 indexed token,
+        uint[] thirdPartyIds,
+        uint[] tierIndexes,
+        uint[] fees
+    );
+
+    event FeeTierBoundariesSet(uint[] boundaries);
+
+    // Dynamic fee functions
+
+    function setDynamicLockerFee(
+        uint _sourceChainId,
+        bytes32 _sourceToken,
+        uint[] calldata _thirdPartyIds,
+        uint[] calldata _tierIndexes,
+        uint[] calldata _fees
+    ) external;
+
+    function setFeeTierBoundaries(uint[] calldata _boundaries) external;
+
+    function getEffectiveLockerFee(
+        uint _sourceChainId,
+        bytes32 _sourceToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) external view returns (uint);
+
+    // function unwrapWithDynamicFee(
+    //     uint256 _amount,
+    //     bytes memory _userScript,
+    //     ScriptTypes _scriptType,
+    //     bytes calldata _lockerLockingScript,
+    //     uint256 _thirdParty,
+    //     uint _sourceChainId,
+    //     bytes32 _sourceToken
+    // ) external returns (uint256 burntAmount);
+
+    function swapAndUnwrapWithDynamicFee(
+        address _exchangeConnector,
+        uint256[] memory _amounts,
+        bool _isFixedToken,
+        address[] calldata _path,
+        uint256 _deadline,
+        bytes memory _userScript,
+        ScriptTypes _scriptType,
+        bytes memory _lockerLockingScript,
+        uint256 _thirdParty,
+        uint _sourceChainId,
+        bytes32 _sourceToken
+    ) external payable returns (uint256);
 }

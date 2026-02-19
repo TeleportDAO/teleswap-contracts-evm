@@ -7,6 +7,8 @@ import "../lockersManager/interfaces/ILockersManager.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "../routers/BurnRouterStorage.sol";
+import "../erc20/interfaces/IWETH.sol";
+import "../dex_connectors/interfaces/IDexConnector.sol";
 
 library BurnRouterLib {
     /// @notice Checks if all outputs of the transaction used to pay a cc burn request
@@ -385,6 +387,59 @@ library BurnRouterLib {
                 }
             }
         }
+    }
+
+    /// @notice Exchanges input token for teleBTC
+    /// @dev Moved from BurnRouterLogic to reduce contract size
+    function exchange(
+        address _teleBTC,
+        address _wrappedNativeToken,
+        address _exchangeConnector,
+        uint256[] memory _amounts,
+        bool _isFixedToken,
+        address[] memory _path,
+        uint256 _deadline
+    ) external returns (uint256) {
+        require(
+            _path[_path.length - 1] == _teleBTC,
+            "BurnRouterLogic: invalid path"
+        );
+        require(_amounts.length == 2, "BurnRouterLogic: wrong amounts");
+
+        if (msg.value != 0) {
+            require(
+                msg.value == _amounts[0],
+                "BurnRouterLogic: invalid amount"
+            );
+            require(
+                _wrappedNativeToken == _path[0],
+                "BurnRouterLogic: invalid path"
+            );
+            // Mint wrapped native token
+            IWETH(_wrappedNativeToken).deposit{value: msg.value}();
+        } else {
+            // Transfer user input token to contract
+            IWETH(_path[0]).transferFrom(
+                msg.sender,
+                address(this),
+                _amounts[0]
+            );
+        }
+
+        // Give approval to exchange connector
+        IWETH(_path[0]).approve(_exchangeConnector, _amounts[0]);
+        (bool result, uint256[] memory amounts) = IDexConnector(
+            _exchangeConnector
+        ).swap(
+                _amounts[0],
+                _amounts[1],
+                _path,
+                address(this),
+                _deadline,
+                _isFixedToken
+            );
+        require(result, "BurnRouterLogic: exchange failed");
+        return amounts[amounts.length - 1]; // Amount of exchanged teleBTC
     }
 
     /// @notice Prepares data for slashing the malicious locker

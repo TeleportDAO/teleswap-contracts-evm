@@ -91,7 +91,7 @@ function _getLockerPercentageFee(uint destChainId, bytes32 destToken, uint third
 //   bridgeTokenMappingUniversal[_tokenSent][arguments.chainId] in PolyConnector.
 //   NOT the intermediary chain ERC20 address.
 //   - bytes32(0) when called via old functions (defaults to lockerPercentageFee)
-//   - actual source token when called via new unwrapWithDynamicFee / swapAndUnwrapWithDynamicFee
+//   - actual source token when called via new swapAndUnwrapWithDynamicFee
 function _getLockerPercentageFee(uint sourceChainId, bytes32 sourceToken, uint thirdPartyId, uint amount)
     internal view returns (uint)
 {
@@ -314,11 +314,10 @@ The `_getLockerPercentageFee` function checks `fee > 0 ? fee : lockerPercentageF
 
 ### Events
 
-Both routers emit events for all fee configuration changes (for off-chain monitoring and audit trails):
+Both routers emit events for fee configuration changes (for off-chain monitoring and audit trails):
 
 ```solidity
 event DynamicLockerFeeSet(uint indexed chainId, bytes32 indexed token, uint[] thirdPartyIds, uint[] tierIndexes, uint[] fees);
-event DynamicLockerFeeRemoved(uint indexed chainId, bytes32 indexed token, uint[] thirdPartyIds, uint[] tierIndexes);
 event FeeTierBoundariesSet(uint[] boundaries);
 ```
 
@@ -338,13 +337,6 @@ function setDynamicLockerFee(
 ) external onlyOwnerOrAdmin;
 
 function setFeeTierBoundaries(uint[] calldata _boundaries) external onlyOwnerOrAdmin;
-
-function removeDynamicLockerFee(
-    uint _destChainId,
-    bytes32 _destToken,
-    uint[] calldata _thirdPartyIds,
-    uint[] calldata _tierIndexes
-) external onlyOwnerOrAdmin;
 
 /// @notice View: get effective locker fee for given wrap params
 function getEffectiveLockerFee(
@@ -370,13 +362,6 @@ function setDynamicLockerFee(
 
 function setFeeTierBoundaries(uint[] calldata _boundaries) external onlyOwnerOrAdmin;
 
-function removeDynamicLockerFee(
-    uint _sourceChainId,
-    bytes32 _sourceToken,
-    uint[] calldata _thirdPartyIds,
-    uint[] calldata _tierIndexes
-) external onlyOwnerOrAdmin;
-
 /// @notice View: get effective locker fee for given unwrap params
 function getEffectiveLockerFee(
     uint _sourceChainId,
@@ -384,18 +369,6 @@ function getEffectiveLockerFee(
     uint _thirdPartyId,
     uint _amount
 ) external view returns (uint);
-
-/// @notice New entry point: unwrap with dynamic fee context
-/// Existing unwrap() remains unchanged and uses default lockerPercentageFee
-function unwrapWithDynamicFee(
-    uint256 _amount,
-    bytes memory _userScript,
-    ScriptTypes _scriptType,
-    bytes calldata _lockerLockingScript,
-    uint256 _thirdParty,
-    uint _sourceChainId,
-    bytes32 _sourceToken
-) external returns (uint256 burntAmount);
 
 /// @notice New entry point: swapAndUnwrap with dynamic fee context
 /// Existing swapAndUnwrap() remains unchanged and uses default lockerPercentageFee
@@ -413,6 +386,8 @@ function swapAndUnwrapWithDynamicFee(
     bytes32 _sourceToken
 ) external payable returns (uint256);
 ```
+
+> **Note:** `unwrapWithDynamicFee` was considered but removed from BurnRouter to keep the interface minimal. Dynamic fee unwraps are handled via `swapAndUnwrapWithDynamicFee` (called by PolyConnector). Direct `unwrap()` callers use the default `lockerPercentageFee`, or admin can override via `dynamicLockerFee[0][bytes32(0)][thirdParty][tier]`. To remove a dynamic fee, admin can call `setDynamicLockerFee` with a fee of 0 (which resets to default).
 
 ### Non-Breaking Change Strategy
 
@@ -436,14 +411,11 @@ BurnRouter (unwrap):
   └── swapAndUnwrap(connector, amounts, isFixed, path, deadline, script, scriptType, lockerScript, thirdParty)
         └── same: defaults to lockerPercentageFee ✓
 
-  NEW functions ADDED:
-  ├── unwrapWithDynamicFee(..., sourceChainId, sourceToken)
-  │     └── internally calls _unwrap(..., sourceChainId, sourceToken)
-  │         └── _getLockerPercentageFee(sourceChainId, sourceToken, thirdParty, amount)
-  │             └── uses dynamic fee if set, else default ✓
-  │
+  NEW function ADDED:
   └── swapAndUnwrapWithDynamicFee(..., sourceChainId, sourceToken)
-        └── same: uses dynamic fee if set, else default ✓
+        └── internally calls _unwrap(..., sourceChainId, sourceToken)
+            └── _getLockerPercentageFee(sourceChainId, sourceToken, thirdParty, amount)
+                └── uses dynamic fee if set, else default ✓
 
 PolyConnector:
   Updated _swapAndUnwrap() AND _swapAndUnwrapSolana() to call
@@ -463,7 +435,6 @@ PolyConnector:
 | BurnRouterLogic | `_getFees` (internal) | Add `sourceChainId` + `sourceToken` params; replace `lockerPercentageFee` with `_getLockerPercentageFee(...)` |
 | BurnRouterLogic | `unwrap` (external) | **Signature unchanged** — calls `_unwrap` with `sourceChainId=0, sourceToken=bytes32(0)`. Behavior unchanged by default; admin _can_ override by setting `dynamicLockerFee[0][bytes32(0)][thirdParty][tier]`. |
 | BurnRouterLogic | `swapAndUnwrap` (external) | **Signature unchanged** — same as `unwrap`: defaults to `lockerPercentageFee` unless admin explicitly sets fee at key `(0, bytes32(0), ...)`. |
-| BurnRouterLogic | **NEW** `unwrapWithDynamicFee` | New function — same as `unwrap` but passes caller-provided `sourceChainId` + `sourceToken` |
 | BurnRouterLogic | **NEW** `swapAndUnwrapWithDynamicFee` | New function — same as `swapAndUnwrap` but passes caller-provided `sourceChainId` + `sourceToken` |
 | PolyConnectorLogic | `_swapAndUnwrap` (internal) | Call `swapAndUnwrapWithDynamicFee` instead of `swapAndUnwrap`, passing `arguments.chainId` + `bridgeTokenMappingUniversal[_tokenSent][arguments.chainId]` |
 | PolyConnectorLogic | `_swapAndUnwrapSolana` (internal) | Same change as `_swapAndUnwrap` — call `swapAndUnwrapWithDynamicFee` instead of `swapAndUnwrap`, passing `arguments.chainId` + `bridgeTokenMappingUniversal[_tokenSent][arguments.chainId]` |
@@ -493,7 +464,7 @@ Both routers use `bytes32` for the token dimension, resolved from **existing bri
 
 **How `sourceToken` is provided in BurnRouter:**
 - **Old functions** (`unwrap`, `swapAndUnwrap`): not available → defaults to `bytes32(0)` → falls back to `lockerPercentageFee`
-- **New functions** (`unwrapWithDynamicFee`, `swapAndUnwrapWithDynamicFee`): caller passes `sourceToken` explicitly
+- **New function** (`swapAndUnwrapWithDynamicFee`): caller passes `sourceToken` explicitly
 - **PolyConnector**: resolves via `bridgeTokenMappingUniversal[_tokenSent][arguments.chainId]` (added in this branch for universal router, reused here)
 
 ### PolyConnector `bridgeTokenMappingUniversal` Setup
@@ -595,7 +566,7 @@ test/dynamic-fee/
 | Fee > MAX_PERCENTAGE_FEE | Set fee to 10001 | Reverts |
 | Empty boundaries | No boundaries set | tierIndex always 0, single-tier mode |
 | Old `unwrap()` still works | No dynamic fee set | Uses `lockerPercentageFee` (backward compat) |
-| `unwrapWithDynamicFee` with sourceChainId=0 | Direct call, fee set for key (0, bytes32(0), thirdParty, tier) | Uses dynamic fee |
+| Direct `unwrap()` with fee override | Admin sets fee at key (0, bytes32(0), thirdParty, tier) | Uses dynamic fee for direct callers |
 | `swapAndUnwrapWithDynamicFee` via PolyConnector | sourceChainId=1, sourceToken=USDT_ON_ETH | Uses fee for sourceChainId=1 |
 | Old `swapAndUnwrap()` after upgrade | No change to caller | Still uses `lockerPercentageFee` |
 | `_swapAndUnwrapSolana` via PolyConnector | Solana unwrap with sourceChainId + sourceToken | Uses dynamic fee (same as `_swapAndUnwrap` path) |
@@ -624,16 +595,16 @@ test/dynamic-fee/
 ### Phase 2: Core Implementation [pending]
 - [ ] Add storage variables to new storage version contracts
 - [ ] Implement `_getLockerPercentageFee()` and `_getTierIndex()` helper functions
-- [ ] Add batch setters (`setDynamicLockerFee`, `setFeeTierBoundaries`, `removeDynamicLockerFee`) with `onlyOwnerOrAdmin` access (CcExchange: `acrossAdmin`, Burn: `bitcoinFeeOracle`)
+- [ ] Add batch setters (`setDynamicLockerFee`, `setFeeTierBoundaries`) with `onlyOwnerOrAdmin` access (CcExchange: `acrossAdmin`, Burn: `bitcoinFeeOracle`)
 - [ ] Add `getEffectiveLockerFee` view function
 - [ ] Modify `_mintAndCalculateFees` in CcExchangeRouterLogic (internal only, no interface change)
-- [ ] Add `unwrapWithDynamicFee` and `swapAndUnwrapWithDynamicFee` to BurnRouterLogic
+- [ ] Add `swapAndUnwrapWithDynamicFee` to BurnRouterLogic
 - [ ] Modify `_unwrap` and `_getFees` internals to accept and use fee context
 - [ ] Keep old `unwrap` and `swapAndUnwrap` unchanged (pass default context)
 - [ ] Update PolyConnectorLogic `_swapAndUnwrap` to call new BurnRouter functions (using `bridgeTokenMappingUniversal`)
 - [ ] Update PolyConnectorLogic `_swapAndUnwrapSolana` to call new BurnRouter functions (same change as `_swapAndUnwrap`)
 - [ ] Add `setBridgeTokenMappingUniversal` to PolyConnectorLogic (after `setBridgeTokenMapping`) and IPolyConnector
-- [ ] Add events (`DynamicLockerFeeSet`, `DynamicLockerFeeRemoved`, `FeeTierBoundariesSet`) to both routers
+- [ ] Add events (`DynamicLockerFeeSet`, `FeeTierBoundariesSet`) to both routers
 - [ ] Update interfaces (add new, don't modify existing)
 
 ### Phase 3: Testing [pending]
@@ -674,7 +645,7 @@ test/dynamic-fee/
 
 - **CcExchangeRouter**: Zero interface changes. Token resolved internally via `bridgeTokenIDMapping[tokenIDs[1]][destRealChainId]` (already available). Only internal `_mintAndCalculateFees` logic changes. Fully transparent upgrade.
 
-- **BurnRouter**: Old `unwrap()` and `swapAndUnwrap()` are **untouched**. They keep the same function selectors. Existing callers (frontend, PolyConnector, integrators) continue to work and get `lockerPercentageFee` as before. New callers opt into dynamic fees by calling `unwrapWithDynamicFee()` / `swapAndUnwrapWithDynamicFee()`.
+- **BurnRouter**: Old `unwrap()` and `swapAndUnwrap()` are **untouched**. They keep the same function selectors. Existing callers (frontend, PolyConnector, integrators) continue to work and get `lockerPercentageFee` as before. New callers opt into dynamic fees by calling `swapAndUnwrapWithDynamicFee()` (used by PolyConnector for cross-chain unwraps).
 
 - **PolyConnector**: Internal `_swapAndUnwrap` and `_swapAndUnwrapSolana` updated to call the new BurnRouter function. PolyConnector is a proxy — implementation swap is transparent. Its external interface (`handleV3AcrossMessage`) is unchanged. Source token resolved via `bridgeTokenMappingUniversal` (added in this branch for universal router, reused here). Admin must populate the mapping via `setBridgeTokenMappingUniversal()` for all supported token/chain combinations before enabling dynamic fees.
 
@@ -689,4 +660,6 @@ test/dynamic-fee/
 | 2026-02-18 | 0.5.0 | bytes32 sourceToken via bridgeTokenMappingUniversal (reuses mapping added in this branch for universal router), added universal router vars to PolyConnectorStorage |
 | 2026-02-18 | 0.6.0 | Unified bytes32 token type in both routers — CcExchangeRouter uses bridgeTokenIDMapping, BurnRouter uses bridgeTokenMappingUniversal. Identical mapping shapes. |
 | 2026-02-18 | 0.7.0 | Review fixes: added `_swapAndUnwrapSolana` to PolyConnector changes, renamed `_getLockerFee` → `_getLockerPercentageFee`, added deployment order (BurnRouter before PolyConnector), added admin events, added `setBridgeTokenMappingUniversal` setter, clarified old function behavior overridability, fixed "no new storage" inconsistency. |
-| 2026-02-18 | 0.8.0 | Batch setter: `setDynamicLockerFee` now accepts arrays `(thirdPartyIds[], tierIndexes[], fees[])` for one `(chainId, token)` pair. Reuses existing admin roles (`acrossAdmin` for CcExchange, `bitcoinFeeOracle` for Burn) — no new storage. Updated `removeDynamicLockerFee` to batch arrays too. |
+| 2026-02-18 | 0.8.0 | Batch setter: `setDynamicLockerFee` now accepts arrays `(thirdPartyIds[], tierIndexes[], fees[])` for one `(chainId, token)` pair. Reuses existing admin roles (`acrossAdmin` for CcExchange, `bitcoinFeeOracle` for Burn) — no new storage. |
+| 2026-02-18 | 0.9.0 | Removed `unwrapWithDynamicFee` from BurnRouter. BurnRouter dynamic fees are accessed only via `swapAndUnwrapWithDynamicFee` (called by PolyConnector). |
+| 2026-02-18 | 0.10.0 | Removed `removeDynamicLockerFee` and `DynamicLockerFeeRemoved` event from all routers. To reset a dynamic fee, admin sets it to 0 via `setDynamicLockerFee` (which triggers fallback to default). |

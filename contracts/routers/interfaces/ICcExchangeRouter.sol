@@ -439,4 +439,35 @@ interface ICcExchangeRouter {
         bytes calldata _lockerLockingScript,
         address[] memory _path
     ) external payable returns(bool);
+
+    // Dynamic fee events
+
+    event DynamicLockerFeeSet(
+        uint indexed chainId,
+        bytes32 indexed token,
+        uint[] thirdPartyIds,
+        uint[] tierIndexes,
+        uint[] fees
+    );
+
+    event FeeTierBoundariesSet(uint[] boundaries);
+
+    // Dynamic fee functions
+
+    function setDynamicLockerFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint[] calldata _thirdPartyIds,
+        uint[] calldata _tierIndexes,
+        uint[] calldata _fees
+    ) external;
+
+    function setFeeTierBoundaries(uint[] calldata _boundaries) external;
+
+    function getEffectiveLockerFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) external view returns (uint);
 }

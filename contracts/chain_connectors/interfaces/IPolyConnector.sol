@@ -6,6 +6,11 @@ import "@teleportdao/btc-evm-bridge/contracts/types/ScriptTypesEnum.sol";
 interface IPolyConnector {
     // Structs
 
+    struct SwapAndUnwrapUniversalData {
+        bytes32[] pathFromInputToIntermediaryOnSourceChain;
+        uint256 intermediaryTokenAmount;
+    }
+
     struct UserScript {
         bytes userScript;
         ScriptTypes scriptType;
@@ -52,6 +57,7 @@ interface IPolyConnector {
         UserAndLockerScript scripts;
         uint256 thirdParty;
     }
+
 
     // Events
 
@@ -206,6 +212,12 @@ interface IPolyConnector {
         address _sourceToken,
         uint256 _destinationChainId,
         address _destinationToken
+    ) external;
+
+    function setBridgeTokenMappingUniversal(
+        address _sourceToken,
+        uint256 _destinationChainId,
+        bytes32 _destinationToken
     ) external;
 
     function withdrawFundsToSourceChain(

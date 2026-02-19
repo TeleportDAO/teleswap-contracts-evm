@@ -806,8 +806,14 @@ contract CcExchangeRouterLogic is
             (inputAmount *
                 thirdPartyFee[extendedCcExchangeRequests[_txId].thirdParty]) /
             MAX_PERCENTAGE_FEE;
+        uint256 _effectiveLockerFee = _getLockerPercentageFee(
+            getRealChainId(extendedCcExchangeRequests[_txId].destAssignedChainId),
+            ccExchangeRequestsV2[_txId].outputToken,
+            extendedCcExchangeRequests[_txId].thirdParty,
+            inputAmount
+        );
         extendedCcExchangeRequests[_txId].lockerFee =
-            (inputAmount * lockerPercentageFee) /
+            (inputAmount * _effectiveLockerFee) /
             MAX_PERCENTAGE_FEE;
 
         extendedCcExchangeRequests[_txId].remainedInputAmount =
@@ -1025,6 +1031,88 @@ contract CcExchangeRouterLogic is
         uint256 _decimalsOnDestinationChain
     ) private {
         inputTokenDecimalsOnDestinationChain[_inputToken] = _decimalsOnDestinationChain;
+    }
+
+    // ========================
+    // Dynamic Fee Functions
+    // ========================
+
+    /// @notice Batch-set dynamic fees for one (chainId, token) pair across multiple
+    ///         thirdParty/tier combos. Arrays must be equal length.
+    /// @dev Callable by owner OR acrossAdmin.
+    function setDynamicLockerFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint[] calldata _thirdPartyIds,
+        uint[] calldata _tierIndexes,
+        uint[] calldata _fees
+    ) external override {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "ExchangeRouter: not authorized"
+        );
+        require(
+            _thirdPartyIds.length == _tierIndexes.length &&
+            _tierIndexes.length == _fees.length,
+            "ExchangeRouter: array length mismatch"
+        );
+        for (uint i = 0; i < _fees.length; i++) {
+            require(
+                _fees[i] <= MAX_PERCENTAGE_FEE,
+                "ExchangeRouter: fee out of range"
+            );
+            dynamicLockerFee[_destChainId][_destToken][_thirdPartyIds[i]][_tierIndexes[i]] = _fees[i];
+        }
+        emit DynamicLockerFeeSet(_destChainId, _destToken, _thirdPartyIds, _tierIndexes, _fees);
+    }
+
+    /// @notice Set the global tier boundaries for amount-based fee tiers
+    /// @dev Replaces the entire array. Boundaries must be sorted ascending.
+    function setFeeTierBoundaries(
+        uint[] calldata _boundaries
+    ) external override {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "ExchangeRouter: not authorized"
+        );
+        for (uint i = 1; i < _boundaries.length; i++) {
+            require(
+                _boundaries[i] > _boundaries[i - 1],
+                "ExchangeRouter: boundaries not sorted"
+            );
+        }
+        feeTierBoundaries = _boundaries;
+        emit FeeTierBoundariesSet(_boundaries);
+    }
+
+    /// @notice View: get effective locker fee for given wrap params
+    function getEffectiveLockerFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) external view override returns (uint) {
+        return _getLockerPercentageFee(_destChainId, _destToken, _thirdPartyId, _amount);
+    }
+
+    /// @notice Internal: determine effective locker percentage fee
+    function _getLockerPercentageFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) internal view returns (uint) {
+        uint tierIndex = _getTierIndex(_amount);
+        uint fee = dynamicLockerFee[_destChainId][_destToken][_thirdPartyId][tierIndex];
+        return fee > 0 ? fee : lockerPercentageFee;
+    }
+
+    /// @notice Internal: find tier index for a given amount
+    function _getTierIndex(uint _amount) internal view returns (uint) {
+        for (uint i = 0; i < feeTierBoundaries.length; i++) {
+            if (_amount < feeTierBoundaries[i]) return i;
+        }
+        return feeTierBoundaries.length;
     }
 
     /// @notice Internal function to convert token decimals between chains

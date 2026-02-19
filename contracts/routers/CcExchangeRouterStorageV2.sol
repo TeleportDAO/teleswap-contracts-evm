@@ -86,4 +86,13 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     mapping(address => uint256) public inputTokenDecimalsOnDestinationChain; // input token's address on the current chain => decimals on the destination chain (added for USDT and USDC which have different decimals on the BNB chain)
 
     address public newLogicContract; // Address of the extension logic contract for fallback delegation
+
+    /// @dev Dynamic locker fee for wrap direction
+    /// destChainId => destToken => thirdPartyId => tierIndex => fee percentage
+    /// destToken is bytes32 — resolved via bridgeTokenIDMapping[tokenIDs[1]][destRealChainId]
+    /// Fee of 0 means "not set, use default lockerPercentageFee"
+    mapping(uint => mapping(bytes32 => mapping(uint => mapping(uint => uint)))) public dynamicLockerFee;
+
+    /// @dev Sorted upper bounds for amount tiers (exclusive). Empty = single tier.
+    uint[] public feeTierBoundaries;
 }
