@@ -13,6 +13,10 @@ abstract contract PolyConnectorStorage is IPolyConnector {
         bytes userScript;
         ScriptTypes scriptType;
     }
+    struct SwapAndUnwrapUniversalData {
+        bytes32[] pathFromInputToIntermediaryOnSourceChain;
+        uint256 intermediaryTokenAmount;
+    }
 
     address public constant ETH_ADDR =
         0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -58,4 +62,30 @@ abstract contract PolyConnectorStorage is IPolyConnector {
     // Mapping to track processed requests to prevent double-fill from Across
     // chainId => uniqueCounter => processed
     mapping(uint256 => mapping(uint256 => bool)) public processedRequests;
+
+    // --- New variables for universal router ---
+    mapping(
+        bytes32 => mapping(
+            uint256 => mapping(
+                uint256 => mapping(
+                    address => SwapAndUnwrapUniversalData
+                )
+            )
+        )
+    ) public failedSwapAndUnwrapReqs;
+    // ^ Mapping from [refundAddress][chainId][reqId][intermediaryToken] to SwapAndUnwrapUniversalPathsData
+
+    mapping(
+        bytes32 => mapping(
+            uint256 => mapping(
+                bytes32 => mapping(
+                    address => uint256
+                )
+            )
+        )
+    ) public failedWrapAndSwapRefundReqs;
+    // ^ Mapping from [refundAddress][chainId][bitcoinTxId][token] to amount
+
+    mapping(address => mapping(uint256 => bytes32)) public bridgeTokenMappingUniversal; // ^ Mapping from [source token][destination chain id] to destination token
+    mapping(uint256 => bytes32) public bridgeConnectorMapping; // ^ Mapping from [destination chain id] to bridge connector address
 }

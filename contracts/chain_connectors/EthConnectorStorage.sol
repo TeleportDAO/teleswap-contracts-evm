@@ -11,7 +11,7 @@ abstract contract EthConnectorStorage is IEthConnector {
 
     address public across; // Across bridge
     address public targetChainConnectorProxy;
-    address public emptyAddress;
+    address public exchangeConnector;
     uint public targetChainId;
     address public wrappedNativeToken;
     uint public uniqueCounter;
@@ -21,5 +21,8 @@ abstract contract EthConnectorStorage is IEthConnector {
     mapping(address => mapping(uint => address)) public bridgeTokenMapping;
     address public stargate;
     mapping(address => BridgeConnectorData) public bridgeConnectorMapping; // exchangeConnector => BridgeConnectorData
-    mapping(address => mapping(uint256 => uint256)) public outputTokenDecimalsOnDestinationChain; // output token's address on the destination chain => destination chain ID => decimals on the destination chain (added for USDT and USDC which have different decimals on the BNB chain)
+mapping(address => mapping(uint256 => uint256)) public outputTokenDecimalsOnDestinationChain; // output token's address on the destination chain => destination chain ID => decimals on the destination chain (added for USDT and USDC which have different decimals on the BNB chain)
+    uint256 public gasLimit;
+    mapping(address => mapping(address => mapping(uint256 => mapping(address => uint256)))) public failedSwapAndUnwrapRefundReqs; // [refundAddress][inputToken][uniqueCounter][intermediaryToken] => intermediaryTokenAmount
+    mapping(address => mapping(uint256 => mapping(bytes32 => mapping(address => uint256)))) public failedWrapAndSwapReqs; // [targetAddress][intermediaryChainId][bitcoinTxId][intermediaryToken] => intermediaryTokenAmount
 }
