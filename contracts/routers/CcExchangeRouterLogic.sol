@@ -234,14 +234,36 @@ contract CcExchangeRouterLogic is
         _setBridgeTokenIDMapping(_tokenID, _destinationChainId, _destinationToken);
     }
 
-    /// @notice Setter for intermediary token mapping
+    /// @notice Setter for old intermediary token mapping
     /// @param _destinationTokenID Destination token ID (8 bytes)
     /// @param _intermediaryToken Intermediary token address on the current chain
-    function setIntermediaryTokenMapping(
-        bytes8 _destinationTokenID, 
+    function setOldIntermediaryTokenMapping(
+        bytes8 _destinationTokenID,
         address _intermediaryToken
     ) external override onlyOwner {
-        _setIntermediaryTokenMapping(_destinationTokenID, _intermediaryToken);
+        _setOldIntermediaryTokenMapping(_destinationTokenID, _intermediaryToken);
+    }
+
+    /// @notice Setter for new intermediary token mapping (per chain)
+    /// @param _outputTokenID Output token ID (8 bytes)
+    /// @param _chainId Chain ID where the intermediary token is located
+    /// @param _intermediaryToken Intermediary token address on the specified chain
+    function setNewIntermediaryTokenMapping(
+        bytes8 _outputTokenID,
+        uint256 _chainId,
+        bytes32 _intermediaryToken
+    ) external override onlyOwner {
+        _setNewIntermediaryTokenMapping(_outputTokenID, _chainId, _intermediaryToken);
+    }
+
+    /// @notice Setter for destination connector proxy mapping
+    /// @param _destRealChainId Destination chain id
+    /// @param _destConnectorProxy Destination chain connector contract proxy address
+    function setDestConnectorProxyMapping(
+        uint256 _destRealChainId,
+        bytes32 _destConnectorProxy
+    ) external override onlyOwner {
+        _setDestConnectorProxyMapping(_destRealChainId, _destConnectorProxy);
     }
 
     /// @notice Setter for output token decimals
@@ -314,7 +336,7 @@ contract CcExchangeRouterLogic is
         // Check if the provided path is valid
         require(
             teleBTC == _path[0] &&
-            _deprecatedIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]] == _path[_path.length - 1],
+            oldIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]] == _path[_path.length - 1],
             "ExchangeRouter: invalid path"
         );
 
@@ -349,7 +371,7 @@ contract CcExchangeRouterLogic is
             */
             address filler =
                 fillerAddressV2[txId][request.recipientAddress]
-                    [_deprecatedIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
+                    [oldIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
                     [request.outputAmount]
                     [destRealChainId]
                     [extendedCcExchangeRequests[txId].bridgePercentageFee];
@@ -403,7 +425,7 @@ contract CcExchangeRouterLogic is
         );
 
         require(
-            _intermediaryToken == _deprecatedIntermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
+            _intermediaryToken == oldIntermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
             "ExchangeRouter: invalid intermediary token"
         );
 
@@ -596,7 +618,7 @@ contract CcExchangeRouterLogic is
 
         bytes32[3] memory tokens;
         tokens[0] = bytes32(uint256(uint160(teleBTC)));
-        tokens[1] = bytes32(uint256(uint160(_deprecatedIntermediaryTokenMapping[request.tokenIDs[1]])));
+        tokens[1] = bytes32(uint256(uint160(oldIntermediaryTokenMapping[request.tokenIDs[1]])));
         tokens[2] = request.outputToken;
 
         uint256[3] memory amounts;
@@ -1015,14 +1037,28 @@ contract CcExchangeRouterLogic is
         bridgeTokenIDMapping[_tokenID][_destinationChainId] = _destinationToken;
     }
 
-    /// @notice Internal setter for intermediary token mapping
+    /// @notice Internal setter for old intermediary token mapping
     /// @param _destinationTokenID Destination token ID (8 bytes)
     /// @param _intermediaryToken Intermediary token address on the current chain
-    function _setIntermediaryTokenMapping(
-        bytes8 _destinationTokenID, 
+    function _setOldIntermediaryTokenMapping(
+        bytes8 _destinationTokenID,
         address _intermediaryToken
     ) private {
-        _deprecatedIntermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
+        oldIntermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
+    }
+
+    /// @notice Internal setter for new intermediary token mapping
+    function _setNewIntermediaryTokenMapping(
+        bytes8 _outputTokenID,
+        uint256 _chainId,
+        bytes32 _intermediaryToken
+    ) private {
+        newIntermediaryTokenMapping[_outputTokenID][_chainId] = _intermediaryToken;
+    }
+
+    /// @notice Internal setter for dest connector proxy mapping
+    function _setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) private {
+        destConnectorProxyMapping[_destRealChainId] = _destConnectorProxy;
     }
 
     /// @notice Internal setter for output token decimals

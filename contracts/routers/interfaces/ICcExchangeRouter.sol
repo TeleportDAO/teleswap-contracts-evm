@@ -429,10 +429,18 @@ interface ICcExchangeRouter {
         bytes32 _destinationToken
     ) external;
 
-    function setIntermediaryTokenMapping(
+    function setOldIntermediaryTokenMapping(
         bytes8 _destinationTokenID,
         address _intermediaryToken
     ) external;
+
+    function setNewIntermediaryTokenMapping(
+        bytes8 _outputTokenID,
+        uint256 _chainId,
+        bytes32 _intermediaryToken
+    ) external;
+
+    function setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) external;
 
     function wrapAndSwapV2(
         TxAndProof memory _txAndProof,
