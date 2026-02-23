@@ -3,7 +3,7 @@ pragma solidity >=0.8.0 <=0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "../routers/interfaces/ICcExchangeRouter.sol";
+import "../routers/interfaces/ICcExchangeRouterUniversal.sol";
 import "../dex_connectors/interfaces/IDexConnector.sol";
 import "../erc20/interfaces/ITeleBTC.sol";
 import "../erc20/WETH.sol";
@@ -50,8 +50,8 @@ library CcExchangeRouterLibExtensionUniversal {
 
     /// @notice Swap TeleBTC for the output token
     function swapUniversal(
-        ICcExchangeRouter.swapArgumentsUniversal memory swapArguments,
-        ICcExchangeRouter.SwapUniversalData memory _swapUniversalData
+        ICcExchangeRouterUniversal.swapArgumentsUniversal memory swapArguments,
+        ICcExchangeRouterUniversal.SwapUniversalData memory _swapUniversalData
     ) external returns (bool result, uint256[] memory amounts) {
         // Give allowance to exchange connector for swapping
         ITeleBTC(_swapUniversalData.teleBTC).approve(
@@ -89,9 +89,9 @@ library CcExchangeRouterLibExtensionUniversal {
 
     /// @notice Handle successful swap logic
     function _handleSuccessfulSwap(
-        ICcExchangeRouter.swapArgumentsUniversal memory swapArguments,
+        ICcExchangeRouterUniversal.swapArgumentsUniversal memory swapArguments,
         uint256[] memory amounts,
-        ICcExchangeRouter.SwapUniversalData memory _swapUniversalData
+        ICcExchangeRouterUniversal.SwapUniversalData memory _swapUniversalData
     ) private {
         // Send tokens to user if on current chain
         if (swapArguments.destRealChainId == _swapUniversalData.currentChainId) {
@@ -149,8 +149,8 @@ library CcExchangeRouterLibExtensionUniversal {
 
     /// @notice Handle failed swap logic
     function _handleFailedSwap(
-        ICcExchangeRouter.swapArgumentsUniversal memory swapArguments,
-        ICcExchangeRouter.SwapUniversalData memory _swapUniversalData
+        ICcExchangeRouterUniversal.swapArgumentsUniversal memory swapArguments,
+        ICcExchangeRouterUniversal.SwapUniversalData memory _swapUniversalData
     ) private {
         uint256[5] memory fees = [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)];
         

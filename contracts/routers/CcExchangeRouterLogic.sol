@@ -234,14 +234,36 @@ contract CcExchangeRouterLogic is
         _setBridgeTokenIDMapping(_tokenID, _destinationChainId, _destinationToken);
     }
 
-    /// @notice Setter for intermediary token mapping
+    /// @notice Setter for old intermediary token mapping
     /// @param _destinationTokenID Destination token ID (8 bytes)
     /// @param _intermediaryToken Intermediary token address on the current chain
-    function setIntermediaryTokenMapping(
-        bytes8 _destinationTokenID, 
+    function setOldIntermediaryTokenMapping(
+        bytes8 _destinationTokenID,
         address _intermediaryToken
     ) external override onlyOwner {
-        _setIntermediaryTokenMapping(_destinationTokenID, _intermediaryToken);
+        _setOldIntermediaryTokenMapping(_destinationTokenID, _intermediaryToken);
+    }
+
+    /// @notice Setter for new intermediary token mapping (per chain)
+    /// @param _outputTokenID Output token ID (8 bytes)
+    /// @param _chainId Chain ID where the intermediary token is located
+    /// @param _intermediaryToken Intermediary token address on the specified chain
+    function setNewIntermediaryTokenMapping(
+        bytes8 _outputTokenID,
+        uint256 _chainId,
+        bytes32 _intermediaryToken
+    ) external override onlyOwner {
+        _setNewIntermediaryTokenMapping(_outputTokenID, _chainId, _intermediaryToken);
+    }
+
+    /// @notice Setter for destination connector proxy mapping
+    /// @param _destRealChainId Destination chain id
+    /// @param _destConnectorProxy Destination chain connector contract proxy address
+    function setDestConnectorProxyMapping(
+        uint256 _destRealChainId,
+        bytes32 _destConnectorProxy
+    ) external override onlyOwner {
+        _setDestConnectorProxyMapping(_destRealChainId, _destConnectorProxy);
     }
 
     /// @notice Setter for output token decimals
@@ -314,7 +336,7 @@ contract CcExchangeRouterLogic is
         // Check if the provided path is valid
         require(
             teleBTC == _path[0] &&
-            intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]] == _path[_path.length - 1],
+            oldIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]] == _path[_path.length - 1],
             "ExchangeRouter: invalid path"
         );
 
@@ -349,7 +371,7 @@ contract CcExchangeRouterLogic is
             */
             address filler =
                 fillerAddressV2[txId][request.recipientAddress]
-                    [intermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
+                    [oldIntermediaryTokenMapping[ccExchangeRequestsV2[txId].tokenIDs[1]]]
                     [request.outputAmount]
                     [destRealChainId]
                     [extendedCcExchangeRequests[txId].bridgePercentageFee];
@@ -403,7 +425,7 @@ contract CcExchangeRouterLogic is
         );
 
         require(
-            _intermediaryToken == intermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
+            _intermediaryToken == oldIntermediaryTokenMapping[bytes8(uint64(uint256(_outputToken)))],
             "ExchangeRouter: invalid intermediary token"
         );
 
@@ -596,7 +618,7 @@ contract CcExchangeRouterLogic is
 
         bytes32[3] memory tokens;
         tokens[0] = bytes32(uint256(uint160(teleBTC)));
-        tokens[1] = bytes32(uint256(uint160(intermediaryTokenMapping[request.tokenIDs[1]])));
+        tokens[1] = bytes32(uint256(uint160(oldIntermediaryTokenMapping[request.tokenIDs[1]])));
         tokens[2] = request.outputToken;
 
         uint256[3] memory amounts;
@@ -806,8 +828,14 @@ contract CcExchangeRouterLogic is
             (inputAmount *
                 thirdPartyFee[extendedCcExchangeRequests[_txId].thirdParty]) /
             MAX_PERCENTAGE_FEE;
+        uint256 _effectiveLockerFee = _getLockerPercentageFee(
+            getRealChainId(extendedCcExchangeRequests[_txId].destAssignedChainId),
+            ccExchangeRequestsV2[_txId].outputToken,
+            extendedCcExchangeRequests[_txId].thirdParty,
+            inputAmount
+        );
         extendedCcExchangeRequests[_txId].lockerFee =
-            (inputAmount * lockerPercentageFee) /
+            (inputAmount * _effectiveLockerFee) /
             MAX_PERCENTAGE_FEE;
 
         extendedCcExchangeRequests[_txId].remainedInputAmount =
@@ -1009,14 +1037,28 @@ contract CcExchangeRouterLogic is
         bridgeTokenIDMapping[_tokenID][_destinationChainId] = _destinationToken;
     }
 
-    /// @notice Internal setter for intermediary token mapping
+    /// @notice Internal setter for old intermediary token mapping
     /// @param _destinationTokenID Destination token ID (8 bytes)
     /// @param _intermediaryToken Intermediary token address on the current chain
-    function _setIntermediaryTokenMapping(
-        bytes8 _destinationTokenID, 
+    function _setOldIntermediaryTokenMapping(
+        bytes8 _destinationTokenID,
         address _intermediaryToken
     ) private {
-        intermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
+        oldIntermediaryTokenMapping[_destinationTokenID] = _intermediaryToken;
+    }
+
+    /// @notice Internal setter for new intermediary token mapping
+    function _setNewIntermediaryTokenMapping(
+        bytes8 _outputTokenID,
+        uint256 _chainId,
+        bytes32 _intermediaryToken
+    ) private {
+        newIntermediaryTokenMapping[_outputTokenID][_chainId] = _intermediaryToken;
+    }
+
+    /// @notice Internal setter for dest connector proxy mapping
+    function _setDestConnectorProxyMapping(uint256 _destRealChainId, bytes32 _destConnectorProxy) private {
+        destConnectorProxyMapping[_destRealChainId] = _destConnectorProxy;
     }
 
     /// @notice Internal setter for output token decimals
@@ -1025,6 +1067,88 @@ contract CcExchangeRouterLogic is
         uint256 _decimalsOnDestinationChain
     ) private {
         inputTokenDecimalsOnDestinationChain[_inputToken] = _decimalsOnDestinationChain;
+    }
+
+    // ========================
+    // Dynamic Fee Functions
+    // ========================
+
+    /// @notice Batch-set dynamic fees for one (chainId, token) pair across multiple
+    ///         thirdParty/tier combos. Arrays must be equal length.
+    /// @dev Callable by owner OR acrossAdmin.
+    function setDynamicLockerFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint[] calldata _thirdPartyIds,
+        uint[] calldata _tierIndexes,
+        uint[] calldata _fees
+    ) external override {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "ExchangeRouter: not authorized"
+        );
+        require(
+            _thirdPartyIds.length == _tierIndexes.length &&
+            _tierIndexes.length == _fees.length,
+            "ExchangeRouter: array length mismatch"
+        );
+        for (uint i = 0; i < _fees.length; i++) {
+            require(
+                _fees[i] <= MAX_PERCENTAGE_FEE,
+                "ExchangeRouter: fee out of range"
+            );
+            dynamicLockerFee[_destChainId][_destToken][_thirdPartyIds[i]][_tierIndexes[i]] = _fees[i];
+        }
+        emit DynamicLockerFeeSet(_destChainId, _destToken, _thirdPartyIds, _tierIndexes, _fees);
+    }
+
+    /// @notice Set the global tier boundaries for amount-based fee tiers
+    /// @dev Replaces the entire array. Boundaries must be sorted ascending.
+    function setFeeTierBoundaries(
+        uint[] calldata _boundaries
+    ) external override {
+        require(
+            msg.sender == acrossAdmin || msg.sender == owner(),
+            "ExchangeRouter: not authorized"
+        );
+        for (uint i = 1; i < _boundaries.length; i++) {
+            require(
+                _boundaries[i] > _boundaries[i - 1],
+                "ExchangeRouter: boundaries not sorted"
+            );
+        }
+        feeTierBoundaries = _boundaries;
+        emit FeeTierBoundariesSet(_boundaries);
+    }
+
+    /// @notice View: get effective locker fee for given wrap params
+    function getEffectiveLockerFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) external view override returns (uint) {
+        return _getLockerPercentageFee(_destChainId, _destToken, _thirdPartyId, _amount);
+    }
+
+    /// @notice Internal: determine effective locker percentage fee
+    function _getLockerPercentageFee(
+        uint _destChainId,
+        bytes32 _destToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) internal view returns (uint) {
+        uint tierIndex = _getTierIndex(_amount);
+        uint fee = dynamicLockerFee[_destChainId][_destToken][_thirdPartyId][tierIndex];
+        return fee > 0 ? fee : lockerPercentageFee;
+    }
+
+    /// @notice Internal: find tier index for a given amount
+    function _getTierIndex(uint _amount) internal view returns (uint) {
+        for (uint i = 0; i < feeTierBoundaries.length; i++) {
+            if (_amount < feeTierBoundaries[i]) return i;
+        }
+        return feeTierBoundaries.length;
     }
 
     /// @notice Internal function to convert token decimals between chains

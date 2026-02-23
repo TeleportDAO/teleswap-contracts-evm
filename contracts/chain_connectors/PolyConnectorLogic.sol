@@ -113,7 +113,7 @@ contract PolyConnectorLogic is
     /// @notice Setter for bridge token mapping universal
     /// @param _sourceToken Address of the token on the current chain
     /// @param _destinationChainId The ID of the destination chain
-    /// @param _destinationToken Address of the token on the target chain
+    /// @param _destinationToken Address of the token on the target chain (bytes32)
     function setBridgeTokenMappingUniversal(
         address _sourceToken,
         uint256 _destinationChainId,
@@ -137,6 +137,7 @@ contract PolyConnectorLogic is
     function setCurrChainId(uint256 _chainId) external override onlyOwner {
         chainId = _chainId;
     }
+
 
     /// @notice Process requests coming from Ethereum (using Across V3)
     function handleV3AcrossMessage(
@@ -431,10 +432,13 @@ contract PolyConnectorLogic is
         amounts[0] = _amount;
         amounts[1] = arguments.outputAmount;
 
+        // Resolve source token for dynamic fee lookup
+        bytes32 sourceToken = bridgeTokenMappingUniversal[_tokenSent][arguments.chainId];
+
         IERC20(_tokenSent).approve(burnRouterProxy, _amount);
 
         try
-            IBurnRouter(burnRouterProxy).swapAndUnwrap(
+            IBurnRouter(burnRouterProxy).swapAndUnwrapWithDynamicFee(
                 arguments.exchangeConnector,
                 amounts,
                 arguments.isInputFixed,
@@ -443,7 +447,9 @@ contract PolyConnectorLogic is
                 arguments.scripts.userScript,
                 arguments.scripts.scriptType,
                 arguments.scripts.lockerLockingScript,
-                arguments.thirdParty
+                arguments.thirdParty,
+                arguments.chainId,
+                sourceToken
             )
         {
             address lockerTargetAddress = ILockersManager(lockersProxy)
@@ -515,10 +521,13 @@ contract PolyConnectorLogic is
         amounts[0] = _amount;
         amounts[1] = arguments.outputAmount;
 
+        // Resolve source token for dynamic fee lookup
+        bytes32 sourceToken = bridgeTokenMappingUniversal[_tokenSent][arguments.chainId];
+
         IERC20(_tokenSent).approve(burnRouterProxy, _amount);
 
         try
-            IBurnRouter(burnRouterProxy).swapAndUnwrap(
+            IBurnRouter(burnRouterProxy).swapAndUnwrapWithDynamicFee(
                 arguments.exchangeConnector,
                 amounts,
                 arguments.isInputFixed,
@@ -527,7 +536,9 @@ contract PolyConnectorLogic is
                 arguments.scripts.userScript,
                 arguments.scripts.scriptType,
                 arguments.scripts.lockerLockingScript,
-                arguments.thirdParty
+                arguments.thirdParty,
+                arguments.chainId,
+                sourceToken
             )
         {
             address lockerTargetAddress = ILockersManager(lockersProxy)

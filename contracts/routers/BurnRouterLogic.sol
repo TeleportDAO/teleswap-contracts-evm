@@ -3,7 +3,6 @@ pragma solidity >=0.8.0 <=0.8.4;
 
 import "../erc20/interfaces/IWETH.sol";
 import "../lockersManager/interfaces/ILockersManager.sol";
-import "../dex_connectors/interfaces/IDexConnector.sol";
 import "./BurnRouterLib.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -297,9 +296,41 @@ contract BurnRouterLogic is
             _userScript,
             _scriptType,
             _lockerLockingScript,
-            thirdParty
+            thirdParty,
+            0,
+            bytes32(0)
         );
     }
+
+    // /// @notice New entry point: unwrap with dynamic fee context
+    // /// @dev Existing unwrap() remains unchanged and uses default lockerPercentageFee
+    // function unwrapWithDynamicFee(
+    //     uint256 _amount,
+    //     bytes memory _userScript,
+    //     ScriptTypes _scriptType,
+    //     bytes calldata _lockerLockingScript,
+    //     uint256 _thirdParty,
+    //     uint _sourceChainId,
+    //     bytes32 _sourceToken
+    // ) external override nonReentrant returns (uint256 burntAmount) {
+    //     require(
+    //         IWETH(teleBTC).transferFrom(_msgSender(), address(this), _amount),
+    //         "BurnRouterLogic: transferFrom failed"
+    //     );
+
+    //     burntAmount = _unwrap(
+    //         teleBTC,
+    //         _amount,
+    //         0,
+    //         _amount,
+    //         _userScript,
+    //         _scriptType,
+    //         _lockerLockingScript,
+    //         _thirdParty,
+    //         _sourceChainId,
+    //         _sourceToken
+    //     );
+    // }
 
     /// @notice Exchanges input token for teleBTC then burns it
     /// @dev After exchanging, rest of the process is similar to ccBurn
@@ -321,7 +352,7 @@ contract BurnRouterLogic is
         bytes calldata _lockerLockingScript,
         uint256 thirdParty
     ) external payable override nonReentrant returns (uint256) {
-        uint256 _exchangedTeleBTC = _exchange(
+        uint256 _exchangedTeleBTC = _doExchange(
             _exchangeConnector,
             _amounts,
             _isFixedToken,
@@ -338,7 +369,47 @@ contract BurnRouterLogic is
                 _userScript,
                 _scriptType,
                 _lockerLockingScript,
-                thirdParty
+                thirdParty,
+                0,
+                bytes32(0)
+            );
+    }
+
+    /// @notice New entry point: swapAndUnwrap with dynamic fee context
+    /// @dev Existing swapAndUnwrap() remains unchanged and uses default lockerPercentageFee
+    function swapAndUnwrapWithDynamicFee(
+        address _exchangeConnector,
+        uint256[] memory _amounts,
+        bool _isFixedToken,
+        address[] calldata _path,
+        uint256 _deadline,
+        bytes memory _userScript,
+        ScriptTypes _scriptType,
+        bytes memory _lockerLockingScript,
+        uint256 _thirdParty,
+        uint _sourceChainId,
+        bytes32 _sourceToken
+    ) external payable override nonReentrant returns (uint256) {
+        uint256 _exchangedTeleBTC = _doExchange(
+            _exchangeConnector,
+            _amounts,
+            _isFixedToken,
+            _path,
+            _deadline
+        );
+
+        return
+            _swapAndUnwrap(
+                _amounts[0],
+                _path[0],
+                _amounts[1],
+                _exchangedTeleBTC,
+                _userScript,
+                _scriptType,
+                _lockerLockingScript,
+                _thirdParty,
+                _sourceChainId,
+                _sourceToken
             );
     }
 
@@ -545,8 +616,10 @@ contract BurnRouterLogic is
         uint256 _exchangedTeleBTC,
         bytes memory _userScript,
         ScriptTypes _scriptType,
-        bytes calldata _lockerLockingScript,
-        uint256 thirdParty
+        bytes memory _lockerLockingScript,
+        uint256 thirdParty,
+        uint256 _sourceChainId,
+        bytes32 _sourceToken
     ) private returns (uint256) {
         uint256 burntAmount = _unwrap(
             _inputToken,
@@ -556,7 +629,9 @@ contract BurnRouterLogic is
             _userScript,
             _scriptType,
             _lockerLockingScript,
-            thirdParty
+            thirdParty,
+            _sourceChainId,
+            _sourceToken
         );
 
         return burntAmount;
@@ -571,8 +646,10 @@ contract BurnRouterLogic is
         uint256 _amount,
         bytes memory _userScript,
         ScriptTypes _scriptType,
-        bytes calldata _lockerLockingScript,
-        uint256 thirdParty
+        bytes memory _lockerLockingScript,
+        uint256 thirdParty,
+        uint256 _sourceChainId,
+        bytes32 _sourceToken
     ) private returns (uint256 remainingAmount) {
         // Checks validity of user script
         BurnRouterLib.checkScriptTypeAndLocker(
@@ -581,14 +658,16 @@ contract BurnRouterLogic is
             lockers,
             _lockerLockingScript
         );
-        
+
         // Get fees and remaining amount
         uint256[4] memory fees;
         (fees, remainingAmount) = _getFees(
-            _amount, 
-            _requestedMinOutputAmount, 
-            _lockerLockingScript, 
-            thirdParty
+            _amount,
+            _requestedMinOutputAmount,
+            _lockerLockingScript,
+            thirdParty,
+            _sourceChainId,
+            _sourceToken
         );
 
         // Burns remaining TeleBTC
@@ -630,56 +709,23 @@ contract BurnRouterLogic is
         );
     }
 
-    /// @notice Exchanges input token for teleBTC
-    /// @dev Reverts if exchange fails
-    /// @return Amount of exchanged teleBTC
-    function _exchange(
+    /// @notice Wrapper to isolate storage reads from caller stack
+    function _doExchange(
         address _exchangeConnector,
-        uint256[] calldata _amounts,
+        uint256[] memory _amounts,
         bool _isFixedToken,
-        address[] calldata _path,
+        address[] memory _path,
         uint256 _deadline
     ) private returns (uint256) {
-        require(
-            _path[_path.length - 1] == teleBTC,
-            "BurnRouterLogic: invalid path"
+        return BurnRouterLib.exchange(
+            teleBTC,
+            wrappedNativeToken,
+            _exchangeConnector,
+            _amounts,
+            _isFixedToken,
+            _path,
+            _deadline
         );
-        require(_amounts.length == 2, "BurnRouterLogic: wrong amounts");
-
-        if (msg.value != 0) {
-            require(
-                msg.value == _amounts[0],
-                "BurnRouterLogic: invalid amount"
-            );
-            require(
-                wrappedNativeToken == _path[0],
-                "BurnRouterLogic: invalid path"
-            );
-            // Mint wrapped native token
-            IWETH(wrappedNativeToken).deposit{value: msg.value}();
-        } else {
-            // Transfer user input token to contract
-            IWETH(_path[0]).transferFrom(
-                _msgSender(),
-                address(this),
-                _amounts[0]
-            );
-        }
-
-        // Give approval to exchange connector
-        IWETH(_path[0]).approve(_exchangeConnector, _amounts[0]);
-        (bool result, uint256[] memory amounts) = IDexConnector(
-            _exchangeConnector
-        ).swap(
-                _amounts[0],
-                _amounts[1],
-                _path,
-                address(this),
-                _deadline,
-                _isFixedToken
-            );
-        require(result, "BurnRouterLogic: exchange failed");
-        return amounts[amounts.length - 1]; // Amount of exchanged teleBTC
     }
 
     /// @notice Slashes the malicious locker
@@ -805,7 +851,9 @@ contract BurnRouterLogic is
         uint256 _amount,
         uint256 _requestedMinOutputAmount,
         bytes memory _lockerLockingScript,
-        uint256 _thirdParty
+        uint256 _thirdParty,
+        uint256 _sourceChainId,
+        bytes32 _sourceToken
     )
         private
         returns (
@@ -818,7 +866,10 @@ contract BurnRouterLogic is
         uint256 _thirdPartyFee =
             (_amount * thirdPartyFee[_thirdParty]) /
             MAX_PERCENTAGE_FEE;
-        uint256 _lockerFee = (_amount * lockerPercentageFee) / MAX_PERCENTAGE_FEE;
+        uint256 _effectiveLockerFee = _getLockerPercentageFee(
+            _sourceChainId, _sourceToken, _thirdParty, _amount
+        );
+        uint256 _lockerFee = (_amount * _effectiveLockerFee) / MAX_PERCENTAGE_FEE;
 
         remainingAmount = _amount - _protocolFee - _thirdPartyFee - _lockerFee - bitcoinFee;
 
@@ -886,5 +937,87 @@ contract BurnRouterLogic is
                 );
             }
         }
+    }
+
+    // ========================
+    // Dynamic Fee Functions
+    // ========================
+
+    /// @notice Batch-set dynamic fees for one (chainId, token) pair across multiple
+    ///         thirdParty/tier combos. Arrays must be equal length.
+    /// @dev Callable by owner OR bitcoinFeeOracle.
+    function setDynamicLockerFee(
+        uint _sourceChainId,
+        bytes32 _sourceToken,
+        uint[] calldata _thirdPartyIds,
+        uint[] calldata _tierIndexes,
+        uint[] calldata _fees
+    ) external override {
+        require(
+            msg.sender == bitcoinFeeOracle || msg.sender == owner(),
+            "BurnRouterLogic: not authorized"
+        );
+        require(
+            _thirdPartyIds.length == _tierIndexes.length &&
+            _tierIndexes.length == _fees.length,
+            "BurnRouterLogic: array length mismatch"
+        );
+        for (uint i = 0; i < _fees.length; i++) {
+            require(
+                _fees[i] <= MAX_PERCENTAGE_FEE,
+                "BurnRouterLogic: fee out of range"
+            );
+            dynamicLockerFee[_sourceChainId][_sourceToken][_thirdPartyIds[i]][_tierIndexes[i]] = _fees[i];
+        }
+        emit DynamicLockerFeeSet(_sourceChainId, _sourceToken, _thirdPartyIds, _tierIndexes, _fees);
+    }
+
+    /// @notice Set the global tier boundaries for amount-based fee tiers
+    /// @dev Replaces the entire array. Boundaries must be sorted ascending.
+    function setFeeTierBoundaries(
+        uint[] calldata _boundaries
+    ) external override {
+        require(
+            msg.sender == bitcoinFeeOracle || msg.sender == owner(),
+            "BurnRouterLogic: not authorized"
+        );
+        for (uint i = 1; i < _boundaries.length; i++) {
+            require(
+                _boundaries[i] > _boundaries[i - 1],
+                "BurnRouterLogic: boundaries not sorted"
+            );
+        }
+        feeTierBoundaries = _boundaries;
+        emit FeeTierBoundariesSet(_boundaries);
+    }
+
+    /// @notice View: get effective locker fee for given unwrap params
+    function getEffectiveLockerFee(
+        uint _sourceChainId,
+        bytes32 _sourceToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) external view override returns (uint) {
+        return _getLockerPercentageFee(_sourceChainId, _sourceToken, _thirdPartyId, _amount);
+    }
+
+    /// @notice Internal: determine effective locker percentage fee
+    function _getLockerPercentageFee(
+        uint _sourceChainId,
+        bytes32 _sourceToken,
+        uint _thirdPartyId,
+        uint _amount
+    ) internal view returns (uint) {
+        uint tierIndex = _getTierIndex(_amount);
+        uint fee = dynamicLockerFee[_sourceChainId][_sourceToken][_thirdPartyId][tierIndex];
+        return fee > 0 ? fee : lockerPercentageFee;
+    }
+
+    /// @notice Internal: find tier index for a given amount
+    function _getTierIndex(uint _amount) internal view returns (uint) {
+        for (uint i = 0; i < feeTierBoundaries.length; i++) {
+            if (_amount < feeTierBoundaries[i]) return i;
+        }
+        return feeTierBoundaries.length;
     }
 }
