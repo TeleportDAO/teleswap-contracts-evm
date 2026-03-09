@@ -13,6 +13,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
     if (network.name == "bob") {
         dexConnectorLogic = await deployments.get("iZiSwapConnector");
+    } else if (network.name == "base") {
+        dexConnectorLogic = await deployments.get("UniswapV3ConnectorV2");
     } else {
         dexConnectorLogic = await deployments.get("UniswapV3Connector");
     }

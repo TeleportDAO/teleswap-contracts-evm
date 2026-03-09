@@ -4,5 +4,7 @@
 	"source_chain_id": 10,
 	"target_chain_id": 137,
 	"wrapped_native_token": "0x4200000000000000000000000000000000000006",
-	"across": "0x6f26Bf09B1C792e3228e5467807a900A503c0281"
+	"across": "0x6f26Bf09B1C792e3228e5467807a900A503c0281",
+	"uniswap_v3_swap_router": "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+	"uniswap_v3_quoter": "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6"
 }

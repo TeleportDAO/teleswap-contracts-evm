@@ -17,13 +17,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
     if (network.name == "bob") {
         name = "iZiSwapConnector";
-        dexConnectorLogic = await deployments.get("iZiSwapConnector");   
+        dexConnectorLogic = await deployments.get("iZiSwapConnector");
         dexConnectorLogicFactory = await ethers.getContractFactory(
             "iZiSwapConnector"
         );
+    } else if (network.name == "base") {
+        name = "UniswapV3ConnectorV2";
+        dexConnectorLogic = await deployments.get("UniswapV3ConnectorV2");
+        dexConnectorLogicFactory = await ethers.getContractFactory(
+            "UniswapV3ConnectorV2"
+        );
     } else {
         name = "UniswapV3Connector";
-        dexConnectorLogic = await deployments.get("UniswapV3Connector");   
+        dexConnectorLogic = await deployments.get("UniswapV3Connector");
         dexConnectorLogicFactory = await ethers.getContractFactory(
             "UniswapV3Connector"
         );

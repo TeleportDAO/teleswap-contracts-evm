@@ -9,10 +9,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
     if (
         network.name == "hardhat" ||
-        (network.name != "bob" &&
-        network.name != "base")
+        network.name == "base"
     ) {
-        const deployedContract = await deploy("UniswapV3Connector", {
+        const deployedContract = await deploy("UniswapV3ConnectorV2", {
             from: deployer,
             log: true,
             skipIfAlreadyDeployed: true,
@@ -27,7 +26,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
             await verify(
                 deployedContract.address,
                 [],
-                "contracts/dex_connectors/UniswapV3Connector.sol:UniswapV3Connector"
+                "contracts/dex_connectors/UniswapV3ConnectorV2.sol:UniswapV3ConnectorV2"
             );
         }
     }
