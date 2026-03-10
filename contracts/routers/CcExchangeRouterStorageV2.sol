@@ -90,7 +90,19 @@ abstract contract CcExchangeRouterStorageV2 is ICcExchangeRouter {
     // --- New variables for universal router (feature branch) ---
     mapping(uint256 => bytes32) public destConnectorProxyMapping; // destination real chain id => destination chain connector proxy address
 
-    mapping(bytes8 => mapping(uint256 => bytes32)) public newIntermediaryTokenMapping; // output token ID => chain ID => intermediary token address on this chain ID
+    /// @dev Maps an output token ID to a chain ID to the intermediary token address on that chain.
+    /// This mapping serves two purposes and must be set for BOTH the source and destination chains:
+    ///   1. On the source chain (this chain): determines which intermediary token to swap INTO
+    ///      before bridging.
+    ///   2. On the destination chain: determines which intermediary token the user will receive
+    ///      after bridging, before the final swap to the output token.
+    ///
+    /// Example — user wants cbBTC on Base, routed through Polygon:
+    ///   - On Polygon (source):  newIntermediaryTokenMapping[cbBTC_ID][polygonChainId] = WETH
+    ///     (swap user's input token to WETH on Polygon, then bridge WETH)
+    ///   - On Base (destination): newIntermediaryTokenMapping[cbBTC_ID][baseChainId] = ETH
+    ///     (receive ETH on Base after bridge, then swap ETH to cbBTC)
+    mapping(bytes8 => mapping(uint256 => bytes32)) public newIntermediaryTokenMapping;
 
     /// @dev Dynamic locker fee for wrap direction
     /// destChainId => destToken => thirdPartyId => tierIndex => fee percentage

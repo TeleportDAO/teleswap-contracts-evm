@@ -1286,7 +1286,7 @@ describe("EthConnector", async () => {
                         "uint256",
                         "address",
                         "address[]",
-                        "uint256[]",
+                        "uint256",
                     ],
                     [
                         "wrapAndSwapUniversal",
@@ -1295,7 +1295,7 @@ describe("EthConnector", async () => {
                         intermediaryChainId, // intermediaryChainId
                         signer1Address, // targetAddress
                         [intermediaryToken.address, destinationToken.address], // pathFromIntermediaryToDestTokenOnDestChain
-                        [intermediaryTokenAmount, destinationTokenAmount], // amountsFromIntermediaryToDestTokenOnDestChain
+                        destinationTokenAmount, // minOutputAmount
                     ]
                 );
 
@@ -1327,8 +1327,7 @@ describe("EthConnector", async () => {
                     intermediaryChainId, // intermediaryChainId
                     signer1Address, // targetAddress
                     destinationTokenAmount, // actual amount of destination token sent to user
-                    [intermediaryToken.address, destinationToken.address], // path from intermediary token to destination token
-                    [intermediaryTokenAmount, destinationTokenAmount] // amounts from intermediary token to destination token
+                    [intermediaryToken.address, destinationToken.address] // path from intermediary token to destination token
                 );
 
             const finalDestinationTokenBalance =
@@ -1373,7 +1372,7 @@ describe("EthConnector", async () => {
                         "uint256",
                         "address",
                         "address[]",
-                        "uint256[]",
+                        "uint256",
                     ],
                     [
                         "wrapAndSwapUniversal",
@@ -1382,7 +1381,7 @@ describe("EthConnector", async () => {
                         intermediaryChainId, // intermediaryChainId
                         signer1Address, // targetAddress
                         [intermediaryToken.address, destinationToken.address], // pathFromIntermediaryToDestTokenOnDestChain
-                        [intermediaryTokenAmount, destinationTokenAmount], // amountsFromIntermediaryToDestTokenOnDestChain
+                        destinationTokenAmount, // minOutputAmount
                     ]
                 );
 
@@ -1414,8 +1413,7 @@ describe("EthConnector", async () => {
                     intermediaryChainId, // intermediaryChainId
                     signer1Address, // targetAddress
                     0, // actual amount of destination token sent to user
-                    [intermediaryToken.address, destinationToken.address], // path from intermediary token to destination token
-                    [intermediaryTokenAmount, destinationTokenAmount] // amounts from intermediary token to destination token
+                    [intermediaryToken.address, destinationToken.address] // path from intermediary token to destination token
                 );
 
             const finalDestinationTokenBalance =
@@ -1460,7 +1458,7 @@ describe("EthConnector", async () => {
                         "uint256",
                         "address",
                         "address[]",
-                        "uint256[]",
+                        "uint256",
                     ],
                     [
                         "wrapAndSwapUniversal",
@@ -1469,7 +1467,7 @@ describe("EthConnector", async () => {
                         intermediaryChainId, // intermediaryChainId
                         signer1Address, // targetAddress
                         [intermediaryToken.address, destinationToken.address], // pathFromIntermediaryToDestTokenOnDestChain
-                        [intermediaryTokenAmount, destinationTokenAmount], // amountsFromIntermediaryToDestTokenOnDestChain
+                        destinationTokenAmount, // minOutputAmount
                     ]
                 );
 
@@ -1501,8 +1499,7 @@ describe("EthConnector", async () => {
                     intermediaryChainId, // intermediaryChainId
                     signer1Address, // targetAddress
                     0, // actual amount of destination token sent to user
-                    [intermediaryToken.address, destinationToken.address], // path from intermediary token to destination token
-                    [intermediaryTokenAmount, destinationTokenAmount] // amounts from intermediary token to destination token
+                    [intermediaryToken.address, destinationToken.address] // path from intermediary token to destination token
                 );
 
             const finalDestinationTokenBalance =

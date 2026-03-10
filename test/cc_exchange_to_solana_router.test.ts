@@ -971,7 +971,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -1015,7 +1014,6 @@ describe("CcExchangeRouter", async function () {
                         0, // thirdPartyId
                     ],
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
-                    [],
                     []
                 );
 
@@ -1109,7 +1107,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -1153,7 +1150,6 @@ describe("CcExchangeRouter", async function () {
                         0, // thirdPartyId
                     ],
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
-                    [],
                     []
                 );
 

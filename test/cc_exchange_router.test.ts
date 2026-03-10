@@ -932,7 +932,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -976,7 +975,6 @@ describe("CcExchangeRouter", async function () {
                         0, // thirdPartyId
                     ],
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
-                    [],
                     []
                 );
 
@@ -1042,7 +1040,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.be.revertedWith("ExchangeRouter: invalid sender");
@@ -1080,7 +1077,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [ONE_ADDRESS, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.be.revertedWith("ExchangeRouter: invalid path");
@@ -1118,7 +1114,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, ONE_ADDRESS],
-                    [],
                     []
                 )
             ).to.be.revertedWith("ExchangeRouter: invalid path");
@@ -1201,7 +1196,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, weth.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -1247,7 +1241,6 @@ describe("CcExchangeRouter", async function () {
                         0, // thirdPartyId
                     ],
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
-                    [],
                     []
                 );
 
@@ -1313,7 +1306,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -1358,7 +1350,6 @@ describe("CcExchangeRouter", async function () {
                         0,
                     ],
                     [0, 0, 0, 0, 0],
-                    [],
                     []
                 )
                 .and.not.emit(ccExchangeRouter, "NewWrapAndSwapUniversal");
@@ -1431,7 +1422,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, ONE_ADDRESS],
-                    [],
                     []
                 )
             )
@@ -1472,7 +1462,6 @@ describe("CcExchangeRouter", async function () {
                         0,
                     ],
                     [0, 0, 0, 0, 0],
-                    [],
                     []
                 );
 
@@ -1537,7 +1526,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, ZERO_ADDRESS],
-                    [],
                     []
                 )
             )
@@ -1578,7 +1566,6 @@ describe("CcExchangeRouter", async function () {
                         0,
                     ],
                     [0, 0, 0, 0, 0],
-                    [],
                     []
                 )
                 .and.not.emit(ccExchangeRouter, "NewWrapAndSwapUniversal");
@@ -1633,7 +1620,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouter: invalid appId");
@@ -1674,7 +1660,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouterLib: zero input");
@@ -1713,7 +1698,6 @@ describe("CcExchangeRouter", async function () {
                     CC_EXCHANGE_REQUESTS.normalCCExchangeV2_fixedInput
                         .desiredRecipient,
                     [teleBTC.address, ZERO_ADDRESS],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouter: not locker");
@@ -1761,7 +1745,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouterLib: wrong fee");
@@ -1805,7 +1788,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouter: invalid chain id");
@@ -1841,7 +1823,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouter: old request");
@@ -1883,7 +1864,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouter: non-zero locktime");
@@ -1923,7 +1903,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouter: not finalized");
@@ -1963,7 +1942,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouterLib: low fee");
@@ -2019,7 +1997,6 @@ describe("CcExchangeRouter", async function () {
                 },
                 LOCKER1_LOCKING_SCRIPT,
                 [teleBTC.address, exchangeToken.address],
-                [],
                 []
             );
 
@@ -2046,7 +2023,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             ).to.revertedWith("ExchangeRouterLib: already used");
@@ -2638,8 +2614,7 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [], // path from intermediary to dest token on dest chain
-                    [] // amounts from intermediary to dest token on dest chain
+                    [] // path from intermediary to dest token on dest chain
                 )
             )
                 .to.emit(ccExchangeRouter, "NewWrapAndSwapUniversal")
@@ -2680,8 +2655,7 @@ describe("CcExchangeRouter", async function () {
                         0, // thirdPartyId
                     ],
                     [teleporterFee, lockerFee, protocolFee, 0, bridgeFee], // fees
-                    [], // path from intermediary to dest token on dest chain
-                    [] // amounts from intermediary to dest token on dest chain
+                    [] // path from intermediary to dest token on dest chain
                 );
 
             await checksWhenExchangeSucceed(
@@ -2745,8 +2719,7 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [], // path from intermediary to dest token on dest chain
-                    [] // amounts from intermediary to dest token on dest chain
+                    [] // path from intermediary to dest token on dest chain
                 )
             ).to.be.revertedWith("ExchangeRouter: invalid chain id");
         });
@@ -2810,8 +2783,7 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, deployerAddress],
-                    [], // path from intermediary to dest token on dest chain
-                    [] // amounts from intermediary to dest token on dest chain
+                    [] // path from intermediary to dest token on dest chain
                 )
             )
                 .to.emit(ccExchangeRouter, "FailedWrapAndSwapUniversal")
@@ -2852,8 +2824,7 @@ describe("CcExchangeRouter", async function () {
                         0,
                     ],
                     [0, 0, 0, 0, 0],
-                    [], // path from intermediary to dest token on dest chain
-                    [] // amounts from intermediary to dest token on dest chain
+                    [] // path from intermediary to dest token on dest chain
                 );
         });
 
@@ -2915,8 +2886,7 @@ describe("CcExchangeRouter", async function () {
                 },
                 LOCKER1_LOCKING_SCRIPT,
                 [teleBTC.address, deployerAddress],
-                [], // path from intermediary to dest token on dest chain
-                [] // amounts from intermediary to dest token on dest chain
+                [] // path from intermediary to dest token on dest chain
             );
 
             let burntAmount =
@@ -3002,7 +2972,6 @@ describe("CcExchangeRouter", async function () {
                 },
                 LOCKER1_LOCKING_SCRIPT,
                 [teleBTC.address, deployerAddress],
-                [],
                 []
             );
 
@@ -3149,8 +3118,7 @@ describe("CcExchangeRouter", async function () {
                             outputTokenOnDestChain.address,
                             32
                         ),
-                    ], // path from intermediary to dest token on dest chain
-                    [availableIntermediaryAmount, minDestTokenAmount] // amounts: [intermediary token input on dest chain, output token amount on dest chain]
+                    ] // path from intermediary to dest token on dest chain
                 )
             )
                 .to.emit(ccExchangeRouter, "NewWrapAndSwapUniversal")
@@ -3209,8 +3177,7 @@ describe("CcExchangeRouter", async function () {
                         ethers.utils
                             .hexZeroPad(outputTokenOnDestChain.address, 32)
                             .toLowerCase(),
-                    ], // path from intermediary to dest token on dest chain
-                    [availableIntermediaryAmount, minDestTokenAmount] // amounts from intermediary to dest token on dest chain
+                    ] // path from intermediary to dest token on dest chain
                 );
 
             await checksWhenExchangeSucceed(
@@ -3314,8 +3281,7 @@ describe("CcExchangeRouter", async function () {
                     [
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
-                    ], // path from intermediary to dest token on dest chain
-                    [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
+                    ] // path from intermediary to dest token on dest chain
                 )
             ).to.be.revertedWith(
                 "ExchangeRouter: destination connector proxy not set"
@@ -3362,8 +3328,7 @@ describe("CcExchangeRouter", async function () {
                     [
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
-                    ], // path from intermediary to dest token on dest chain
-                    [10000, 10000] // amounts from intermediary to dest token on dest chain
+                    ] // path from intermediary to dest token on dest chain
                 )
             ).to.be.revertedWith("ExchangeRouter: invalid chain id");
         });
@@ -3458,8 +3423,7 @@ describe("CcExchangeRouter", async function () {
                     [
                         ethers.utils.hexZeroPad(exchangeToken.address, 32),
                         ethers.utils.hexZeroPad(deployerAddress, 32),
-                    ], // path from intermediary to dest token on dest chain
-                    [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
+                    ] // path from intermediary to dest token on dest chain
                 )
             )
                 .to.emit(ccExchangeRouter, "FailedWrapAndSwapUniversal")
@@ -3507,8 +3471,7 @@ describe("CcExchangeRouter", async function () {
                         ethers.utils
                             .hexZeroPad(deployerAddress, 32)
                             .toLowerCase(),
-                    ], // path from intermediary to dest token on dest chain
-                    [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
+                    ] // path from intermediary to dest token on dest chain
                 );
         });
 
@@ -3601,8 +3564,7 @@ describe("CcExchangeRouter", async function () {
                 [
                     ethers.utils.hexZeroPad(exchangeToken.address, 32),
                     ethers.utils.hexZeroPad(deployerAddress, 32),
-                ], // path from intermediary to dest token on dest chain
-                [availableIntermediaryAmount, minIntermediaryTokenAmount] // amounts from intermediary to dest token on dest chain
+                ] // path from intermediary to dest token on dest chain
             );
 
             let burntAmount =
@@ -3698,8 +3660,7 @@ describe("CcExchangeRouter", async function () {
                 [
                     ethers.utils.hexZeroPad(exchangeToken.address, 32),
                     ethers.utils.hexZeroPad(deployerAddress, 32),
-                ], // path from intermediary to dest token on dest chain
-                [10000, 10000] // amounts from intermediary to dest token on dest chain
+                ] // path from intermediary to dest token on dest chain
             );
 
             await ccExchangeRouter.refundByOwnerOrAdmin(
@@ -4045,7 +4006,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -4095,7 +4055,6 @@ describe("CcExchangeRouter", async function () {
                         thirdPartyFee,
                         bridgeFee,
                     ],
-                    [],
                     []
                 );
 
@@ -4187,7 +4146,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -4237,7 +4195,6 @@ describe("CcExchangeRouter", async function () {
                         thirdPartyFee,
                         bridgeFee,
                     ],
-                    [],
                     []
                 );
 
@@ -4327,7 +4284,6 @@ describe("CcExchangeRouter", async function () {
                     },
                     LOCKER1_LOCKING_SCRIPT,
                     [teleBTC.address, exchangeToken.address],
-                    [],
                     []
                 )
             )
@@ -4377,7 +4333,6 @@ describe("CcExchangeRouter", async function () {
                         thirdPartyFee,
                         bridgeFee,
                     ],
-                    [],
                     []
                 );
 

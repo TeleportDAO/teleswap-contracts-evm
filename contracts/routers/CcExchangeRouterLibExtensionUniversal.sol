@@ -30,8 +30,7 @@ library CcExchangeRouterLibExtensionUniversal {
         bytes32 bitcoinTxId,
         uint256[3] protocolIds, // [destinationChainId, appId, thirdPartyId]
         uint[5] fees,
-        bytes32[] pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain
     );
 
     event FailedWrapAndSwapUniversal(
@@ -44,8 +43,7 @@ library CcExchangeRouterLibExtensionUniversal {
         bytes32 bitcoinTxId,
         uint256[3] protocolIds, // [destinationChainId, appId, thirdPartyId]
         uint[5] fees,
-        bytes32[] pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
+        bytes32[] pathFromIntermediaryToDestTokenOnDestChain
     );
 
     /// @notice Swap TeleBTC for the output token
@@ -142,8 +140,7 @@ library CcExchangeRouterLibExtensionUniversal {
                 swapArguments._extendedCcExchangeRequest.thirdParty
             ],
             fees,
-            swapArguments._pathFromIntermediaryToDestTokenOnDestChain,
-            swapArguments._amountsFromIntermediaryToDestTokenOnDestChain
+            swapArguments._pathFromIntermediaryToDestTokenOnDestChain
         );
     }
 
@@ -176,8 +173,7 @@ library CcExchangeRouterLibExtensionUniversal {
                 swapArguments._extendedCcExchangeRequest.thirdParty
             ],
             fees,
-            swapArguments._pathFromIntermediaryToDestTokenOnDestChain,
-            swapArguments._amountsFromIntermediaryToDestTokenOnDestChain
+            swapArguments._pathFromIntermediaryToDestTokenOnDestChain
         );
     }
 }

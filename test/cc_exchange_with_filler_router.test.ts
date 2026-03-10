@@ -810,7 +810,6 @@ describe("CcExchangeRouter", async () => {
                 bridgePercentageFee: bridgePercentageFee,
                 lockerLockingScript: LOCKER1_LOCKING_SCRIPT,
                 pathFromIntermediaryToDestTokenOnDestChain: [],
-                amountsFromIntermediaryToDestTokenOnDestChain: [],
             };
         }
 
@@ -859,7 +858,6 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                         LOCKER1_LOCKING_SCRIPT,
-                        [],
                         []
                     )
             )
@@ -877,8 +875,7 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                     ], // amountArgs: [fillAmount, finalAmount, userRequestedAmount, destinationChainId, bridgePercentageFee]
-                    [], // pathFromIntermediaryToDestTokenOnDestChain
-                    [] // amountsFromIntermediaryToDestTokenOnDestChain
+                    [] // pathFromIntermediaryToDestTokenOnDestChain
                 );
         });
 
@@ -942,12 +939,6 @@ describe("CcExchangeRouter", async () => {
                     .toLowerCase(),
             ];
 
-            // Amounts for each step in the path (same amount for both steps in this case)
-            let amountsFromIntermediaryToDestTokenOnDestChain = [
-                finalAmount,
-                finalAmount,
-            ];
-
             await exchangeToken.transfer(fillerAddress, fillAmount);
             await exchangeToken
                 .connect(filler)
@@ -965,8 +956,7 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                         LOCKER1_LOCKING_SCRIPT,
-                        pathFromIntermediaryToDestTokenOnDestChain,
-                        amountsFromIntermediaryToDestTokenOnDestChain
+                        pathFromIntermediaryToDestTokenOnDestChain
                     )
             )
                 .to.emit(ccExchangeRouter, "RequestFilledUniversal")
@@ -983,8 +973,7 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                     ], // amountArgs: [fillAmount, finalAmount, userRequestedAmount, destinationChainId, bridgePercentageFee]
-                    pathFromIntermediaryToDestTokenOnDestChain, // pathFromIntermediaryToDestTokenOnDestChain
-                    amountsFromIntermediaryToDestTokenOnDestChain // amountsFromIntermediaryToDestTokenOnDestChain
+                    pathFromIntermediaryToDestTokenOnDestChain // pathFromIntermediaryToDestTokenOnDestChain
                 );
         });
 
@@ -1046,7 +1035,6 @@ describe("CcExchangeRouter", async () => {
                     destRealChainId,
                     bridgePercentageFee,
                     LOCKER1_LOCKING_SCRIPT,
-                    [],
                     []
                 )
             )
@@ -1064,7 +1052,6 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                     ],
-                    [],
                     []
                 );
 
@@ -1121,7 +1108,6 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                         LOCKER1_LOCKING_SCRIPT,
-                        [],
                         []
                     )
             ).to.emit(ccExchangeRouter, "RequestFilledUniversal");
@@ -1140,7 +1126,6 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                         LOCKER1_LOCKING_SCRIPT,
-                        [],
                         []
                     )
             ).to.be.revertedWith("ExchangeRouter: already filled");
@@ -1193,7 +1178,6 @@ describe("CcExchangeRouter", async () => {
                         destRealChainId,
                         bridgePercentageFee,
                         LOCKER1_LOCKING_SCRIPT,
-                        [],
                         []
                     )
             ).to.be.revertedWith("ExchangeRouter: insufficient fill amount");

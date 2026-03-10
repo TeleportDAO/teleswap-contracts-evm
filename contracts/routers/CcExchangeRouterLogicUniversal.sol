@@ -304,14 +304,12 @@ contract CcExchangeRouterLogicUniversal is
     /// @param _lockerLockingScript Script hash of Locker that user has sent BTC to it
     /// @param _pathFromTeleBtcToIntermediary (Optional) Exchange path from teleBTC to the intermediary token
     /// @param _pathFromIntermediaryToDestTokenOnDestChain (Optional) Exchange path from the intermediary token to the output token on the destination chain. If it is not provided, it means that this is a regular request and does not need a swap on the destination chain.
-    /// @param _amountsFromIntermediaryToDestTokenOnDestChain (Optional) Amounts of the intermediary token to be swapped to the output token on the destination chain
-    /// @dev if _pathFromIntermediaryToDestTokenOnDestChain and _amountsFromIntermediaryToDestTokenOnDestChain are not provided, it means that this is a regular request and does not need a swap on the destination chain.
+    /// @dev if _pathFromIntermediaryToDestTokenOnDestChain is not provided, it means that this is a regular request and does not need a swap on the destination chain.
     function wrapAndSwapUniversal(
         TxAndProof memory _txAndProof,
         bytes calldata _lockerLockingScript,
         address[] memory _pathFromTeleBtcToIntermediary,
-        bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
+        bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain
     ) external payable virtual override nonReentrant returns (bool) {
         // Basic checks
         require(
@@ -383,17 +381,6 @@ contract CcExchangeRouterLogicUniversal is
                 ccExchangeRequestsV2[txId].outputToken == _pathFromIntermediaryToDestTokenOnDestChain[_pathFromIntermediaryToDestTokenOnDestChain.length - 1],
                 "ExchangeRouter: invalid dest output token"
             );
-
-            uint256 availableIntermediaryAmount = request.minIntermediaryTokenAmount * (1e18 - extendedCcExchangeRequests[txId].bridgePercentageFee) / 1e18;
-            require(
-                availableIntermediaryAmount <= _amountsFromIntermediaryToDestTokenOnDestChain[0],
-                "ExchangeRouter: invalid dest intermediary amount"
-            );
-
-            require(
-                request.outputAmount <= _amountsFromIntermediaryToDestTokenOnDestChain[1],
-                "ExchangeRouter: invalid dest output amount"
-            );
         }
 
         if (request.speed == 1) { // Handle fast request
@@ -415,9 +402,7 @@ contract CcExchangeRouterLogicUniversal is
                         filler: filler,
                         txId: txId,
                         lockerLockingScript: _lockerLockingScript,
-                        destinationChainId: destRealChainId,
-                        pathFromIntermediaryToDestTokenOnDestChain: _pathFromIntermediaryToDestTokenOnDestChain,
-                        amountsFromIntermediaryToDestTokenOnDestChain: _amountsFromIntermediaryToDestTokenOnDestChain
+                        destinationChainId: destRealChainId
                     })
                 );
                 return true;
@@ -430,7 +415,6 @@ contract CcExchangeRouterLogicUniversal is
             txId,
             _pathFromTeleBtcToIntermediary,
             _pathFromIntermediaryToDestTokenOnDestChain,
-            _amountsFromIntermediaryToDestTokenOnDestChain,
             extendedCcExchangeRequests[txId].bridgePercentageFee,
             destRealChainId
         );
@@ -448,7 +432,6 @@ contract CcExchangeRouterLogicUniversal is
     /// @param _bridgePercentageFee Bridge percentage fee
     /// @param _lockerLockingScript Script hash of Locker that user has sent BTC to it
     /// @param _pathFromIntermediaryToDestTokenOnDestChain Path from intermediary token to destination token on destination chain
-    /// @param _amountsFromIntermediaryToDestTokenOnDestChain Amounts from intermediary token to destination token on destination chain
     function fillTxUniversal(
         bytes32 _txId,
         bytes32 _recipient,
@@ -459,8 +442,7 @@ contract CcExchangeRouterLogicUniversal is
         uint _destRealChainId,
         uint _bridgePercentageFee,
         bytes memory _lockerLockingScript,
-        bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
+        bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain
     ) external payable override nonReentrant {
         // Checks that the request has not been processed before normally
         require(
@@ -492,16 +474,6 @@ contract CcExchangeRouterLogicUniversal is
             );
 
             // The final amount here is the final intermediary amount (a swap on the destination chain is required)
-            require(
-                _finalAmount <= _amountsFromIntermediaryToDestTokenOnDestChain[0],
-                "ExchangeRouter: invalid dest intermediary amount"
-            );
-
-            // The output amount that user will receive on the destination chain
-            require(
-                _userRequestedAmount <= _amountsFromIntermediaryToDestTokenOnDestChain[1],
-                "ExchangeRouter: invalid dest output amount"
-            );
         } else {
             // The final amount here is the final output amount that user will receive on the destination chain (no swap on the destination chain)
             require(_userRequestedAmount <= _finalAmount, "ExchangeRouter: insufficient fill amount");
@@ -532,7 +504,7 @@ contract CcExchangeRouterLogicUniversal is
 
         // Record the final amount that user will receive
         if (_pathFromIntermediaryToDestTokenOnDestChain.length > 0) {
-            finalAmount[_txId] = _amountsFromIntermediaryToDestTokenOnDestChain[1];
+            finalAmount[_txId] = _userRequestedAmount;
         } else {
             finalAmount[_txId] = _finalAmount;
         }
@@ -549,8 +521,7 @@ contract CcExchangeRouterLogicUniversal is
                 destRealChainId: _destRealChainId,
                 bridgePercentageFee: _bridgePercentageFee,
                 lockerLockingScript: _lockerLockingScript,
-                pathFromIntermediaryToDestTokenOnDestChain: _pathFromIntermediaryToDestTokenOnDestChain,
-                amountsFromIntermediaryToDestTokenOnDestChain: _amountsFromIntermediaryToDestTokenOnDestChain
+                pathFromIntermediaryToDestTokenOnDestChain: _pathFromIntermediaryToDestTokenOnDestChain
             })
         );
     }
@@ -612,7 +583,7 @@ contract CcExchangeRouterLogicUniversal is
                     args.bridgePercentageFee
                 ),
                 args.pathFromIntermediaryToDestTokenOnDestChain,
-                args.amountsFromIntermediaryToDestTokenOnDestChain
+                args.userRequestedAmount
             );
         }
 
@@ -634,8 +605,7 @@ contract CcExchangeRouterLogicUniversal is
             args.txId,
             inputAndOutputToken,
             amountArgs,
-            args.pathFromIntermediaryToDestTokenOnDestChain,
-            args.amountsFromIntermediaryToDestTokenOnDestChain
+            args.pathFromIntermediaryToDestTokenOnDestChain
         );
     }
 
@@ -784,7 +754,7 @@ emit FillerRefunded(args.filler, args.txId, extendedRequest.remainedInputAmount)
     function _sendTokenToOtherChainUniversal(
         ICcExchangeRouterUniversal.SendTokenToOtherChainArguments memory arguments,
         bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
+        uint256 _minOutputAmountOnDestChain
     ) private {
         IERC20(arguments._intermediaryToken).approve(across, arguments._amount);
         bytes memory callData;
@@ -808,7 +778,7 @@ emit FillerRefunded(args.filler, args.txId, extendedRequest.remainedInputAmount)
                     chainId,
                     arguments._user,
                     _pathFromIntermediaryToDestTokenOnDestChain,
-                    _amountsFromIntermediaryToDestTokenOnDestChain
+                    _minOutputAmountOnDestChain
                 );
             } else {
                 // For other chains, we convert the bytes32 values to addresses to reduce message size
@@ -823,7 +793,7 @@ emit FillerRefunded(args.filler, args.txId, extendedRequest.remainedInputAmount)
                     chainId,
                     address(uint160(uint256(arguments._user))),
                     pathFromIntermediaryToDestTokenOnDestChain,
-                    _amountsFromIntermediaryToDestTokenOnDestChain
+                    _minOutputAmountOnDestChain
                 );
             }
         }
@@ -876,7 +846,6 @@ address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
         bytes32 _txId,
         address[] memory _pathFromTeleBtcToIntermediary,
         bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain,
         uint256 _bridgePercentageFee,
         uint256 _destRealChainId
     ) private {
@@ -889,8 +858,7 @@ address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
                 _txId,
                 _pathFromTeleBtcToIntermediary,
                 _exchangeConnector,
-                _pathFromIntermediaryToDestTokenOnDestChain,
-                _amountsFromIntermediaryToDestTokenOnDestChain
+                _pathFromIntermediaryToDestTokenOnDestChain
             )
         );
 
@@ -918,7 +886,7 @@ address(uint160(uint256(recipient))), // recipient (use only last 20 bytes)
                             _bridgePercentageFee
                         ),
                         _pathFromIntermediaryToDestTokenOnDestChain,
-                        _amountsFromIntermediaryToDestTokenOnDestChain
+                        ccExchangeRequestsV2[_txId].outputAmount
                     );
             }
         } else {

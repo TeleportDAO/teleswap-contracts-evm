@@ -496,7 +496,7 @@ sequenceDiagram
 | #   | Verification                                                   | What It Prevents                      | Status |
 | --- | -------------------------------------------------------------- | ------------------------------------- | ------ |
 | 1   | Path validation (first token = intermediary, last = destToken) | Invalid swap paths, token theft       | Done   |
-| 2   | Amount validation (minOutput checks at each step)              | Excessive slippage, front-running     | Done   |
+| 2   | Amount validation (single `minOutputAmount` decoded from bridge message on dest chain) | Excessive slippage, front-running     | Done   |
 | 3   | Admin-only refund functions                                    | Unauthorized fund withdrawal          | Done   |
 | 4   | Chain ID validation                                            | Cross-chain replay attacks            | Done   |
 | 5   | Connector proxy mapping verification                           | Message delivery to wrong contracts   | Done   |
@@ -555,6 +555,15 @@ struct SwapAndUnwrapUniversalPaths {
     address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
 }
 
+// IEthConnector.sol - Arguments for universal swap and unwrap (Src→BTC flow)
+struct SwapAndUnwrapUniversalArguments {
+    address[] _pathFromInputToIntermediaryOnSourceChain;
+    uint256[2] _amountsFromInputToIntermediaryOnSourceChain;
+    address[] _pathFromIntermediaryToOutputOnIntermediaryChain;
+    uint256 _minOutputAmount;       // Single min output for the intermediary chain swap
+    int64 _bridgePercentageFee;
+}
+
 // EthConnectorStorage.sol - Mappings for failed requests
 mapping(address => mapping(uint256 => mapping(bytes32 => mapping(address => uint256))))
     public failedWrapAndSwapReqs;
@@ -609,8 +618,7 @@ function wrapAndSwapUniversal(
     TxAndProof memory _txAndProof,
     bytes calldata _lockerLockingScript,
     address[] memory _pathFromTeleBtcToIntermediary,
-    bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
-    uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
+    bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain
 ) external payable returns (bool);
 
 function fillTxUniversal(
@@ -623,8 +631,7 @@ function fillTxUniversal(
     uint _destRealChainId,
     uint _bridgePercentageFee,
     bytes memory _lockerLockingScript,
-    bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain,
-    uint256[] memory _amountsFromIntermediaryToDestTokenOnDestChain
+    bytes32[] memory _pathFromIntermediaryToDestTokenOnDestChain
 ) external payable;
 ```
 
@@ -866,3 +873,4 @@ npx hardhat test test/cc_exchange_router.test.ts test/cc_exchange_with_filler_ro
 | 2024-XX-XX | 0.2.0   | Added fast fill support (fillTxUniversal) |
 | 2024-XX-XX | 0.3.0   | Added decimal conversion for USDT/USDC    |
 | 2024-XX-XX | 0.4.0   | Added Solana message encoding support     |
+| 2024-XX-XX | 0.5.0   | Removed `_amountsFromIntermediaryToDestTokenOnDestChain` array from `wrapAndSwapUniversal` and `fillTxUniversal`. Source chain now uses `request.outputAmount` directly as `_minOutputAmountOnDestChain` in the Across bridge message. Dest chain (EthConnector) uses `_amount` from Across as swap input and `minOutputAmount` decoded from the bridge message as the swap min output. |

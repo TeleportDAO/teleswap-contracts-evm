@@ -519,11 +519,6 @@ contract EthConnectorLogic is
         );
 
         require(
-            arguments.amountsFromIntermediaryToDestTokenOnDestChain[0] == _amount,
-            "EthConnectorLogic: invalid amount"
-        );
-
-        require(
             arguments.destinationChainId == currChainId,
             "EthConnectorLogic: invalid destination chain"
         );
@@ -532,10 +527,15 @@ contract EthConnectorLogic is
             arguments.pathFromIntermediaryToDestTokenOnDestChain.length - 1
         ];
 
-        // Swap intermediary token to input token on source chain
+        // Construct swap amounts: use actual bridged amount as input, user's min output from message
+        uint256[] memory swapAmounts = new uint256[](2);
+        swapAmounts[0] = _amount;
+        swapAmounts[1] = arguments.minOutputAmount;
+
+        // Swap intermediary token to dest token on destination chain
         uint256 destTokenAmount = _swapTokens(
             arguments.pathFromIntermediaryToDestTokenOnDestChain,
-            arguments.amountsFromIntermediaryToDestTokenOnDestChain
+            swapAmounts
         );
 
         if (destTokenAmount > 0) {
@@ -545,8 +545,7 @@ contract EthConnectorLogic is
                 arguments.intermediaryChainId,
                 arguments.targetAddress,
                 destTokenAmount,
-                arguments.pathFromIntermediaryToDestTokenOnDestChain,
-                arguments.amountsFromIntermediaryToDestTokenOnDestChain
+                arguments.pathFromIntermediaryToDestTokenOnDestChain
             );
 
             IERC20(destToken).safeTransfer(
@@ -565,8 +564,7 @@ contract EthConnectorLogic is
                 arguments.intermediaryChainId,
                 arguments.targetAddress,
                 destTokenAmount,
-                arguments.pathFromIntermediaryToDestTokenOnDestChain,
-                arguments.amountsFromIntermediaryToDestTokenOnDestChain
+                arguments.pathFromIntermediaryToDestTokenOnDestChain
             );
         }
     }
@@ -640,7 +638,7 @@ contract EthConnectorLogic is
             arguments.intermediaryChainId,
             arguments.targetAddress,
             arguments.pathFromIntermediaryToDestTokenOnDestChain,
-            arguments.amountsFromIntermediaryToDestTokenOnDestChain
+            arguments.minOutputAmount
         ) = abi.decode(
             _message,
             (
@@ -650,7 +648,7 @@ contract EthConnectorLogic is
                 uint256,
                 address,
                 address[],
-                uint256[]
+                uint256
             )
         );
     }

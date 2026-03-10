@@ -58,7 +58,7 @@ interface IEthConnector {
         address targetAddress;
         uint256 destTokenAmount;
         address[] pathFromIntermediaryToDestTokenOnDestChain;
-        uint256[] amountsFromIntermediaryToDestTokenOnDestChain;
+        uint256 minOutputAmount;
     }
 
     struct SwapBackAndRefundBTCArguments {
@@ -147,8 +147,7 @@ interface IEthConnector {
         uint256 intermediaryChainId,
         address targetAddress,
         uint256 destTokenAmount,
-        address[] pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
+        address[] pathFromIntermediaryToDestTokenOnDestChain
     );
 
     event FailedWrapAndSwapToDestChain(
@@ -157,8 +156,7 @@ interface IEthConnector {
         uint256 intermediaryChainId,
         address targetAddress,
         uint256 destTokenAmount,
-        address[] pathFromIntermediaryToDestTokenOnDestChain,
-        uint256[] amountsFromIntermediaryToDestTokenOnDestChain
+        address[] pathFromIntermediaryToDestTokenOnDestChain
     );
 
     event RefundedFailedSwapAndUnwrapUniversal(
