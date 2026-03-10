@@ -16,7 +16,6 @@
  *   LOCKER_LOCKING_SCRIPT              - Hex-encoded locker locking script
  *   PATH_TELEBTC_TO_INTERMEDIARY       - Comma-separated addresses: teleBTC,WETH (swap path on Polygon)
  *   PATH_INTERMEDIARY_TO_DEST          - Comma-separated bytes32: WETH_Base,cbBTC_Base (swap path on dest chain, empty if no dest swap)
- *   AMOUNTS_INTERMEDIARY_TO_DEST       - Comma-separated amounts for dest chain swap (empty if no dest swap)
  */
 
 const hre = require("hardhat");
@@ -171,16 +170,9 @@ async function main() {
         pathIntermediaryToDest = pathIntermediaryToDestStr.split(",").map(s => s.trim());
     }
 
-    let amountsIntermediaryToDest = [];
-    const amountsIntermediaryToDestStr = process.env.AMOUNTS_INTERMEDIARY_TO_DEST;
-    if (amountsIntermediaryToDestStr && amountsIntermediaryToDestStr.trim() !== "") {
-        amountsIntermediaryToDest = amountsIntermediaryToDestStr.split(",").map(s => s.trim());
-    }
-
     console.log(`\nPaths:`);
     console.log(`  TeleBTC->Intermediary: [${pathTeleBtcToIntermediary.join(", ")}]`);
     console.log(`  Intermediary->Dest:    [${pathIntermediaryToDest.join(", ")}]`);
-    console.log(`  Amounts on dest:       [${amountsIntermediaryToDest.join(", ")}]`);
 
     // ═══════════════════════════════════════════════════════════════════
     // Fetch Bitcoin tx and merkle proof from mempool.space
@@ -279,6 +271,20 @@ async function main() {
     console.log(`  intermediateNodes: ${(intermediateNodes.length - 2) / 2} bytes`);
 
     // ═══════════════════════════════════════════════════════════════════
+    // Query relay fee
+    // ═══════════════════════════════════════════════════════════════════
+    const relayAddress = await router.relay();
+    console.log(`\nRelay: ${relayAddress}`);
+
+    const relay = await ethers.getContractAt(
+        ["function getBlockHeaderFee(uint256 blockNumber, uint256 index) view returns (uint256)"],
+        relayAddress,
+        signer
+    );
+    const relayFee = await relay.getBlockHeaderFee(txAndProof.blockNumber, 0);
+    console.log(`  Relay fee: ${ethers.utils.formatEther(relayFee)} MATIC`);
+
+    // ═══════════════════════════════════════════════════════════════════
     // Estimate gas
     // ═══════════════════════════════════════════════════════════════════
     console.log("\nEstimating gas...");
@@ -289,22 +295,18 @@ async function main() {
         return ethers.utils.hexZeroPad(addr, 32);
     });
 
-    const amountsBigNumber = amountsIntermediaryToDest.map(function (a) {
-        return ethers.BigNumber.from(a);
-    });
-
     try {
         const gasEstimate = await router.estimateGas.wrapAndSwapUniversal(
             txAndProof,
             lockerLockingScript,
             pathTeleBtcToIntermediary,
             pathBytes32,
-            amountsBigNumber,
+            { value: relayFee },
         );
         console.log(`  Estimated gas: ${gasEstimate.toString()}`);
     } catch (error) {
         console.error(`\nGas estimation failed: ${error.message}`);
-        console.error("Check: locker script, paths, amounts, chain mappings, token mappings");
+        console.error("Check: locker script, paths, chain mappings, token mappings");
 
         // Try to get more info
         try {
@@ -313,7 +315,7 @@ async function main() {
                 lockerLockingScript,
                 pathTeleBtcToIntermediary,
                 pathBytes32,
-                amountsBigNumber,
+                { value: relayFee },
             );
         } catch (staticError) {
             console.error(`Static call error: ${staticError.message}`);
@@ -355,8 +357,7 @@ async function main() {
         lockerLockingScript,
         pathTeleBtcToIntermediary,
         pathBytes32,
-        amountsBigNumber,
-        { gasLimit: 2000000 }
+        { gasLimit: 2000000, value: relayFee }
     );
 
     console.log(`  TX Hash: ${tx.hash}`);

@@ -38,3 +38,6 @@ circuits/zkproof
 zkproof/claims
 zkproof/deposits
 zkproof/lockers
+
+# Data
+data
